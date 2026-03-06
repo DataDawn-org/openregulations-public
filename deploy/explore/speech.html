@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congressional Record — OpenRegs Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .page-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 3rem 4rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 2rem;
+            transition: color 0.3s;
+        }
+
+        .back-link:hover { color: var(--dawn-gold); }
+
+        .speech-header {
+            margin-bottom: 2rem;
+        }
+
+        .speech-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            font-weight: 400;
+            color: var(--text-primary);
+            line-height: 1.3;
+            margin-bottom: 1rem;
+        }
+
+        .meta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .meta-tag {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .chamber-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .chamber-senate { background: rgba(59,130,246,0.15); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+        .chamber-house { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        .chamber-ext { background: rgba(168,85,247,0.15); color: #d8b4fe; border: 1px solid rgba(168,85,247,0.3); }
+
+        .section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--dawn-gold);
+            margin-bottom: 1rem;
+        }
+
+        .speaker-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .speaker-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .speaker-name {
+            color: var(--dawn-light);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .speaker-name:hover { color: var(--dawn-gold); text-decoration: underline; }
+
+        .party-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 600;
+            width: 1.4rem;
+            height: 1.4rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .party-badge.dem { background: rgba(59,130,246,0.2); color: #93c5fd; }
+        .party-badge.rep { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .party-badge.ind { background: rgba(168,85,247,0.2); color: #d8b4fe; }
+
+        .speaker-detail {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .full-text-container {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .bill-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .bill-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            padding: 0.3rem 0.7rem;
+            border-radius: 4px;
+            background: rgba(245,158,11,0.1);
+            border: 1px solid rgba(245,158,11,0.25);
+            color: var(--dawn-light);
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .bill-chip:hover { background: rgba(245,158,11,0.2); }
+
+        .ext-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .ext-link {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 0.3rem 0.7rem;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        .ext-link:hover { color: var(--dawn-gold); border-color: rgba(251,191,36,0.3); }
+
+        .same-day-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .same-day-item {
+            padding: 0.6rem 0.8rem;
+            background: var(--surface);
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .same-day-item:hover { background: var(--surface-hover); }
+
+        .same-day-item a {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 0.88rem;
+        }
+
+        .same-day-item a:hover { color: var(--dawn-light); }
+
+        .same-day-meta {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--dawn-gold);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .error-state .error-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--dawn-rose);
+        }
+
+        .error-state p {
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .error-state .error-detail {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        footer {
+            text-align: center;
+            padding: 3rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        footer a { color: var(--dawn-gold); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .page-container { padding: 1.5rem; }
+            .section { padding: 1rem; }
+            .full-text-container { font-size: 0.75rem; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="page-container" id="content">
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <div>Loading speech...</div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+
+        function esc(str) {
+            if (str == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function sqlEsc(s) { return String(s).replace(/'/g, "''"); }
+
+        function chamberBadge(chamber) {
+            const c = (chamber || '').toLowerCase();
+            if (c === 'senate') return '<span class="chamber-badge chamber-senate">Senate</span>';
+            if (c === 'house') return '<span class="chamber-badge chamber-house">House</span>';
+            return '<span class="chamber-badge chamber-ext">' + esc(chamber || 'Unknown') + '</span>';
+        }
+
+        function partyBadge(party) {
+            const p = (party || '').charAt(0).toUpperCase();
+            if (p === 'D') return '<span class="party-badge dem">D</span>';
+            if (p === 'R') return '<span class="party-badge rep">R</span>';
+            if (p === 'I') return '<span class="party-badge ind">I</span>';
+            return '<span class="party-badge" style="background:var(--surface);color:var(--text-muted);">' + esc(p || '?') + '</span>';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            } catch { return dateStr; }
+        }
+
+        async function loadSpeech() {
+            const params = new URLSearchParams(location.search);
+            const granuleId = params.get('id');
+            const content = document.getElementById('content');
+
+            if (!granuleId) {
+                content.innerHTML = `<div class="error-state">
+                    <div class="error-icon">&#9670;</div>
+                    <p>No speech ID provided</p>
+                    <p class="error-detail">Use ?id=GRANULE_ID in the URL</p>
+                </div>`;
+                return;
+            }
+
+            try {
+                const sid = sqlEsc(granuleId);
+
+                const [records, speakers, bills] = await Promise.all([
+                    query(`SELECT granule_id, title, date, chamber, congress, session,
+                                  citation, granule_class, full_text
+                           FROM congressional_record WHERE granule_id = '${sid}' LIMIT 1`),
+                    query(`SELECT speaker_name, bioguide_id, party, state, speaker_role
+                           FROM crec_speakers WHERE granule_id = '${sid}'`),
+                    query(`SELECT bill_id, bill_type, bill_number, congress
+                           FROM crec_bills WHERE granule_id = '${sid}'`)
+                ]);
+
+                if (records.length === 0) {
+                    content.innerHTML = `<div class="error-state">
+                        <div class="error-icon">&#9670;</div>
+                        <p>Speech not found</p>
+                        <p class="error-detail">${esc(granuleId)}</p>
+                    </div>`;
+                    return;
+                }
+
+                const r = records[0];
+                document.title = (r.title || 'Speech') + ' — OpenRegs Explorer';
+
+                let html = '';
+
+                // Back link
+                html += '<a href="javascript:history.back()" class="back-link">&larr; Back</a>';
+
+                // Header
+                html += '<div class="speech-header">';
+                html += '<h1>' + esc(r.title || 'Untitled') + '</h1>';
+                html += '<div class="meta-row">';
+                html += '<span class="meta-tag">' + esc(formatDate(r.date)) + '</span>';
+                html += chamberBadge(r.chamber);
+                if (r.citation) html += '<span class="meta-tag">' + esc(r.citation) + '</span>';
+                if (r.congress) html += '<span class="meta-tag">Congress ' + esc(r.congress) + (r.session ? ', Session ' + esc(r.session) : '') + '</span>';
+                if (r.granule_class) html += '<span class="meta-tag">' + esc(r.granule_class) + '</span>';
+                html += '</div></div>';
+
+                // Speakers
+                if (speakers.length > 0) {
+                    html += '<div class="section">';
+                    html += '<div class="section-title">Speakers</div>';
+                    html += '<div class="speaker-list">';
+                    speakers.forEach(sp => {
+                        html += '<div class="speaker-item">';
+                        html += partyBadge(sp.party);
+                        if (sp.bioguide_id) {
+                            html += '<a class="speaker-name" href="/explore/member.html?member=' + encodeURIComponent(sp.bioguide_id) + '">' + esc(sp.speaker_name) + '</a>';
+                        } else {
+                            html += '<span class="speaker-name" style="cursor:default;">' + esc(sp.speaker_name) + '</span>';
+                        }
+                        const details = [];
+                        if (sp.state) details.push(sp.state);
+                        if (sp.speaker_role) details.push(sp.speaker_role);
+                        if (details.length > 0) html += '<span class="speaker-detail">' + esc(details.join(' \u00b7 ')) + '</span>';
+                        html += '</div>';
+                    });
+                    html += '</div></div>';
+                }
+
+                // Related bills
+                if (bills.length > 0) {
+                    html += '<div class="section">';
+                    html += '<div class="section-title">Referenced Legislation</div>';
+                    html += '<div class="bill-list">';
+                    bills.forEach(b => {
+                        const label = b.bill_id || ((b.bill_type || '').toUpperCase() + ' ' + (b.bill_number || ''));
+                        html += '<a class="bill-chip" href="/explore/legislation.html?bill=' + encodeURIComponent(b.bill_id || '') + '">' + esc(label) + '</a>';
+                    });
+                    html += '</div></div>';
+                }
+
+                // Full text
+                html += '<div class="section">';
+                html += '<div class="section-title">Full Text</div>';
+                if (r.full_text) {
+                    html += '<div class="full-text-container">' + esc(r.full_text) + '</div>';
+                } else {
+                    html += '<div style="color:var(--text-muted);font-style:italic;">Full text not available for this entry.</div>';
+                }
+                html += '</div>';
+
+                // External links
+                html += '<div class="section">';
+                html += '<div class="section-title">External Links</div>';
+                html += '<div class="ext-links">';
+                html += '<a class="ext-link" href="https://www.govinfo.gov/app/details/' + encodeURIComponent(r.granule_id) + '" target="_blank" rel="noopener">GovInfo &rarr;</a>';
+                html += '<a class="ext-link" href="/openregs/congressional_record/' + encodeURIComponent(r.granule_id) + '" target="_blank" rel="noopener">Raw Record &rarr;</a>';
+                html += '</div></div>';
+
+                // Same-day speeches (load async)
+                html += '<div class="section" id="sameDaySection" style="display:none;">';
+                html += '<div class="section-title">Other speeches this day</div>';
+                html += '<div class="same-day-list" id="sameDayList"></div>';
+                html += '</div>';
+
+                content.innerHTML = html;
+
+                // Load same-day speeches
+                if (r.date) {
+                    loadSameDay(r.date, r.granule_id);
+                }
+
+            } catch (err) {
+                content.innerHTML = `<div class="error-state">
+                    <div class="error-icon">&#9670;</div>
+                    <p>Error loading speech</p>
+                    <p class="error-detail">${esc(err.message)}</p>
+                </div>`;
+            }
+        }
+
+        async function loadSameDay(date, currentId) {
+            try {
+                const rows = await query(`
+                    SELECT granule_id, title, chamber, granule_class
+                    FROM congressional_record
+                    WHERE date = '${sqlEsc(date)}' AND granule_id != '${sqlEsc(currentId)}'
+                    ORDER BY chamber, title
+                    LIMIT 20
+                `);
+                if (rows.length === 0) return;
+
+                const section = document.getElementById('sameDaySection');
+                const list = document.getElementById('sameDayList');
+                let html = '';
+                rows.forEach(s => {
+                    html += '<div class="same-day-item">';
+                    html += '<a href="/explore/speech.html?id=' + encodeURIComponent(s.granule_id) + '">' + esc(s.title || 'Untitled') + '</a>';
+                    html += '<div class="same-day-meta">' + esc(s.chamber || '') + (s.granule_class ? ' \u00b7 ' + esc(s.granule_class) : '') + '</div>';
+                    html += '</div>';
+                });
+                list.innerHTML = html;
+                section.style.display = '';
+            } catch {
+                // Silently skip same-day section on error
+            }
+        }
+
+        loadSpeech();
+    </script>
+</body>
+</html>

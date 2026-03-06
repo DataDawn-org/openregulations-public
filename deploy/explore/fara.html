@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foreign Agents (FARA) — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.85rem 1.5rem;
+            border-radius: 10px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            flex-shrink: 0;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.8rem 1.2rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.3s, border-color 0.3s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+
+        .tab:hover { color: var(--text-secondary); }
+        .tab.active { color: var(--dawn-gold); border-bottom-color: var(--dawn-amber); }
+
+        /* Results */
+        .results {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+        }
+
+        .status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 0.75rem;
+            cursor: pointer;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.25);
+            transform: translateY(-1px);
+        }
+
+        .result-name {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.15rem;
+            font-weight: 400;
+            color: var(--text-primary);
+            margin-bottom: 0.4rem;
+        }
+
+        .result-meta {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.4;
+        }
+
+        .result-stats {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            letter-spacing: 0.03em;
+        }
+
+        .result-stats span { color: var(--dawn-gold); }
+
+        .badge {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            letter-spacing: 0.05em;
+            font-weight: 500;
+            margin-right: 0.4rem;
+        }
+
+        .badge-active { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .badge-terminated { background: rgba(239,68,68,0.15); color: #f87171; }
+        .badge-country { background: rgba(245,158,11,0.15); color: var(--dawn-gold); }
+
+        /* Detail panel */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+        }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            z-index: 101;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .detail-panel.open, .detail-overlay.open { display: block; }
+
+        .detail-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 1rem;
+            transition: color 0.3s;
+        }
+
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.6rem;
+            font-weight: 400;
+            margin-bottom: 0.3rem;
+        }
+
+        .detail-subtitle {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.6rem 1rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+            transition: color 0.3s;
+        }
+
+        .detail-tab:hover { color: var(--text-secondary); }
+        .detail-tab.active { color: var(--dawn-gold); border-bottom-color: var(--dawn-amber); }
+
+        .detail-content { min-height: 200px; }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--dawn-gold);
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .doc-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-amber);
+            text-decoration: none;
+            margin-right: 1.5rem;
+            margin-bottom: 0.5rem;
+            transition: color 0.2s;
+        }
+
+        .doc-link:hover { color: var(--dawn-gold); text-decoration: underline; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+        }
+
+        .detail-item .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.3rem;
+        }
+
+        .detail-item .value {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .detail-item .value.large {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            text-align: left;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            padding: 0.6rem 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td a { color: var(--dawn-amber); text-decoration: none; }
+        td a:hover { text-decoration: underline; }
+
+        .load-more {
+            display: block;
+            width: 100%;
+            padding: 0.8rem;
+            margin-top: 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--dawn-amber);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .load-more:hover { background: var(--surface-hover); }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 3rem 1.5rem 1.5rem; }
+            .search-container { padding: 0 1.5rem; }
+            .tabs { padding: 0 1.5rem; }
+            .results { padding: 1rem 1.5rem; }
+            .detail-grid { grid-template-columns: 1fr; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html" class="active">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Foreign Agents (FARA)</h1>
+        <p>Explore entities registered under the Foreign Agents Registration Act. Search firms, foreign principals, individual agents, and filed documents.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search registrants, countries, or agents..." autofocus>
+            <button class="search-btn" onclick="doSearch()">Search</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="registrants">Registrants</button>
+        <button class="tab" data-tab="countries">By Country</button>
+        <button class="tab" data-tab="agents">Agents</button>
+    </div>
+
+    <div class="results" id="results">
+        <div class="empty-state">Search for a firm, country, or agent name to begin exploring FARA data.</div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" onclick="closeDetail()">&larr; Back to results</button>
+            <div id="detailHeader"></div>
+            <div class="detail-tabs" id="detailTabs"></div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+        let currentTab = 'registrants';
+        let currentDetailTab = 'overview';
+        let currentRegNum = null;
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function truncate(s, n) { return s && s.length > n ? s.substring(0, n) + '...' : (s || ''); }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Query failed: ${resp.status}`);
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        // URL state
+        function getParam(k) { return new URLSearchParams(location.search).get(k); }
+        function setParams(params) {
+            const u = new URLSearchParams(location.search);
+            for (const [k, v] of Object.entries(params)) {
+                if (v === null || v === undefined || v === '') u.delete(k);
+                else u.set(k, v);
+            }
+            history.replaceState(null, '', '?' + u.toString());
+        }
+
+        // Tabs
+        document.querySelectorAll('.tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                currentTab = t.dataset.tab;
+                setParams({ tab: currentTab });
+                doSearch();
+            });
+        });
+
+        // Search
+        document.getElementById('searchInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        async function doSearch() {
+            const q = document.getElementById('searchInput').value.trim();
+            setParams({ q, tab: currentTab });
+
+            if (!q && currentTab !== 'countries') {
+                document.getElementById('results').innerHTML = '<div class="empty-state">Search for a firm, country, or agent name to begin exploring FARA data.</div>';
+                return;
+            }
+
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            try {
+                switch (currentTab) {
+                    case 'registrants': await searchRegistrants(q); break;
+                    case 'countries': await searchCountries(q); break;
+                    case 'agents': await searchAgents(q); break;
+                }
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function searchRegistrants(q) {
+            const rows = await query(`
+                SELECT r.registration_number, r.name, r.business_name,
+                       r.registration_date, r.termination_date, r.city, r.state,
+                       (SELECT COUNT(*) FROM fara_foreign_principals fp WHERE fp.registration_number = r.registration_number) AS principal_count,
+                       (SELECT COUNT(*) FROM fara_short_forms sf WHERE sf.registration_number = r.registration_number) AS agent_count,
+                       (SELECT COUNT(*) FROM fara_registrant_docs rd WHERE rd.registration_number = r.registration_number) AS doc_count
+                FROM fara_registrants r
+                WHERE r.name LIKE '%' || '${q.replace(/'/g, "''")}' || '%'
+                   OR r.business_name LIKE '%' || '${q.replace(/'/g, "''")}' || '%'
+                ORDER BY r.termination_date IS NOT NULL, principal_count DESC
+                LIMIT 50
+            `);
+
+            if (!rows.length) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No registrants found. Try a different search term.</div>';
+                return;
+            }
+
+            let html = `<div class="status">${rows.length} registrant${rows.length !== 1 ? 's' : ''} found</div>`;
+            for (const r of rows) {
+                const active = !r.termination_date;
+                const badge = active
+                    ? '<span class="badge badge-active">ACTIVE</span>'
+                    : '<span class="badge badge-terminated">TERMINATED</span>';
+                const loc = [r.city, r.state].filter(Boolean).join(', ');
+                html += `
+                    <div class="result-card" onclick="openRegistrant('${esc(r.registration_number)}')">
+                        <div class="result-name">${badge} ${esc(r.name || r.business_name)}</div>
+                        <div class="result-meta">${loc ? esc(loc) + ' &middot; ' : ''}Registered ${esc(r.registration_date) || 'unknown'}</div>
+                        <div class="result-stats">
+                            <span>${r.principal_count}</span> foreign principal${r.principal_count !== 1 ? 's' : ''} &middot;
+                            <span>${r.agent_count}</span> agent${r.agent_count !== 1 ? 's' : ''} &middot;
+                            <span>${r.doc_count}</span> document${r.doc_count !== 1 ? 's' : ''}
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('results').innerHTML = html;
+        }
+
+        async function searchCountries(q) {
+            const where = q ? `WHERE fp.country LIKE '%' || '${q.replace(/'/g, "''")}' || '%'` : '';
+            const rows = await query(`
+                SELECT fp.country,
+                       COUNT(DISTINCT fp.registration_number) AS registrant_count,
+                       COUNT(*) AS principal_count,
+                       COUNT(DISTINCT CASE WHEN fp.fp_termination_date IS NULL OR fp.fp_termination_date = '' THEN fp.registration_number END) AS active_count
+                FROM fara_foreign_principals fp
+                ${where}
+                GROUP BY fp.country
+                ORDER BY registrant_count DESC
+                LIMIT 100
+            `);
+
+            if (!rows.length) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No countries found.</div>';
+                return;
+            }
+
+            let html = `<div class="status">${rows.length} countr${rows.length !== 1 ? 'ies' : 'y'} found</div>`;
+            for (const r of rows) {
+                html += `
+                    <div class="result-card" onclick="openCountry('${esc(r.country)}')">
+                        <div class="result-name"><span class="badge badge-country">${esc(r.country)}</span></div>
+                        <div class="result-stats">
+                            <span>${r.registrant_count}</span> registrant${r.registrant_count !== 1 ? 's' : ''} &middot;
+                            <span>${r.principal_count}</span> principal${r.principal_count !== 1 ? 's' : ''} &middot;
+                            <span>${r.active_count}</span> currently active
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('results').innerHTML = html;
+        }
+
+        async function searchAgents(q) {
+            const rows = await query(`
+                SELECT sf.registration_number, sf.registrant_name,
+                       sf.first_name, sf.last_name,
+                       sf.short_form_date, sf.short_form_termination_date,
+                       sf.city, sf.state
+                FROM fara_short_forms sf
+                WHERE sf.last_name LIKE '%' || '${q.replace(/'/g, "''")}' || '%'
+                   OR sf.first_name LIKE '%' || '${q.replace(/'/g, "''")}' || '%'
+                   OR sf.registrant_name LIKE '%' || '${q.replace(/'/g, "''")}' || '%'
+                ORDER BY sf.short_form_termination_date IS NOT NULL, sf.short_form_date DESC
+                LIMIT 50
+            `);
+
+            if (!rows.length) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No agents found. Try a different name.</div>';
+                return;
+            }
+
+            let html = `<div class="status">${rows.length} agent${rows.length !== 1 ? 's' : ''} found</div>`;
+            for (const r of rows) {
+                const active = !r.short_form_termination_date;
+                const badge = active
+                    ? '<span class="badge badge-active">ACTIVE</span>'
+                    : '<span class="badge badge-terminated">TERMINATED</span>';
+                const loc = [r.city, r.state].filter(Boolean).join(', ');
+                html += `
+                    <div class="result-card" onclick="openRegistrant('${esc(r.registration_number)}')">
+                        <div class="result-name">${badge} ${esc(r.first_name)} ${esc(r.last_name)}</div>
+                        <div class="result-meta">Agent for ${esc(r.registrant_name)}${loc ? ' &middot; ' + esc(loc) : ''}</div>
+                        <div class="result-stats">
+                            Registered ${esc(r.short_form_date) || 'unknown'}
+                            ${r.short_form_termination_date ? ' &middot; Terminated ' + esc(r.short_form_termination_date) : ''}
+                        </div>
+                    </div>`;
+            }
+            document.getElementById('results').innerHTML = html;
+        }
+
+        // Detail panel
+        async function openRegistrant(regNum) {
+            currentRegNum = regNum;
+            document.getElementById('detailOverlay').classList.add('open');
+            document.getElementById('detailPanel').classList.add('open');
+            document.getElementById('detailContent').innerHTML = '<div class="status">Loading...</div>';
+            setParams({ detail: regNum });
+
+            try {
+                const [reg] = await query(`
+                    SELECT * FROM fara_registrants WHERE registration_number = '${regNum.replace(/'/g, "''")}'
+                `);
+
+                if (!reg) {
+                    document.getElementById('detailContent').innerHTML = '<div class="status">Registrant not found</div>';
+                    return;
+                }
+
+                const active = !reg.termination_date;
+                const badge = active
+                    ? '<span class="badge badge-active">ACTIVE</span>'
+                    : '<span class="badge badge-terminated">TERMINATED</span>';
+
+                const faraUrl = 'https://efile.fara.gov/ords/fara/production/f?p=171:200:0::NO:RP,200:P200_REG_NUMBER:' + encodeURIComponent(reg.registration_number);
+                document.getElementById('detailHeader').innerHTML = `
+                    <div class="detail-title">${badge} ${esc(reg.name || reg.business_name)}</div>
+                    <div class="detail-subtitle">Registration #${esc(reg.registration_number)}${reg.city ? ' &middot; ' + esc(reg.city) + ', ' + esc(reg.state) : ''} &middot; <a href="${esc(faraUrl)}" target="_blank" rel="noopener" style="color:var(--dawn-amber);text-decoration:none;">View on FARA.gov &rarr;</a></div>
+                `;
+
+                document.getElementById('detailTabs').innerHTML = `
+                    <button class="detail-tab active" onclick="loadDetailTab('overview')">Overview</button>
+                    <button class="detail-tab" onclick="loadDetailTab('principals')">Foreign Principals</button>
+                    <button class="detail-tab" onclick="loadDetailTab('agents')">Agents</button>
+                    <button class="detail-tab" onclick="loadDetailTab('docs')">Documents</button>
+                `;
+
+                currentDetailTab = 'overview';
+                await loadDetailTab('overview');
+            } catch (e) {
+                document.getElementById('detailContent').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function openCountry(country) {
+            document.getElementById('detailOverlay').classList.add('open');
+            document.getElementById('detailPanel').classList.add('open');
+            document.getElementById('detailContent').innerHTML = '<div class="status">Loading...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT fp.registration_number, fp.registrant_name, fp.foreign_principal,
+                           fp.fp_registration_date, fp.fp_termination_date
+                    FROM fara_foreign_principals fp
+                    WHERE fp.country = '${country.replace(/'/g, "''")}'
+                    ORDER BY fp.fp_termination_date IS NULL DESC, fp.fp_registration_date DESC
+                    LIMIT 100
+                `);
+
+                document.getElementById('detailHeader').innerHTML = `
+                    <div class="detail-title"><span class="badge badge-country">${esc(country)}</span></div>
+                    <div class="detail-subtitle">${rows.length} foreign principal relationship${rows.length !== 1 ? 's' : ''}</div>
+                `;
+                document.getElementById('detailTabs').innerHTML = '';
+
+                let html = '<table><thead><tr><th>Status</th><th>Foreign Principal</th><th>Registrant</th><th>Since</th></tr></thead><tbody>';
+                for (const r of rows) {
+                    const active = !r.fp_termination_date;
+                    const badge = active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-terminated">Term.</span>';
+                    html += `<tr style="cursor:pointer" onclick="openRegistrant('${esc(r.registration_number)}')">
+                        <td>${badge}</td>
+                        <td>${esc(r.foreign_principal)}</td>
+                        <td>${esc(r.registrant_name)}</td>
+                        <td>${esc(r.fp_registration_date) || ''}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                document.getElementById('detailContent').innerHTML = html;
+            } catch (e) {
+                document.getElementById('detailContent').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function loadDetailTab(tab) {
+            currentDetailTab = tab;
+            document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.detail-tab').forEach(t => {
+                if (t.textContent.toLowerCase().includes(tab === 'docs' ? 'document' : tab === 'principals' ? 'principal' : tab)) t.classList.add('active');
+            });
+
+            const el = document.getElementById('detailContent');
+            el.innerHTML = '<div class="status">Loading...</div>';
+            const rn = currentRegNum;
+
+            try {
+                switch (tab) {
+                    case 'overview': await loadOverview(rn); break;
+                    case 'principals': await loadPrincipals(rn); break;
+                    case 'agents': await loadAgents(rn); break;
+                    case 'docs': await loadDocs(rn, 0); break;
+                }
+            } catch (e) {
+                el.innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function loadOverview(rn) {
+            const [principals, agents, docs, reg] = await Promise.all([
+                query(`SELECT COUNT(*) AS c, COUNT(CASE WHEN fp_termination_date IS NULL OR fp_termination_date = '' THEN 1 END) AS active FROM fara_foreign_principals WHERE registration_number = '${rn}'`),
+                query(`SELECT COUNT(*) AS c, COUNT(CASE WHEN short_form_termination_date IS NULL OR short_form_termination_date = '' THEN 1 END) AS active FROM fara_short_forms WHERE registration_number = '${rn}'`),
+                query(`SELECT COUNT(*) AS c FROM fara_registrant_docs WHERE registration_number = '${rn}'`),
+                query(`SELECT * FROM fara_registrants WHERE registration_number = '${rn}'`),
+            ]);
+
+            const r = reg[0] || {};
+            const p = principals[0] || {};
+            const a = agents[0] || {};
+            const d = docs[0] || {};
+
+            let html = '<div class="detail-grid">';
+            html += `<div class="detail-item"><div class="label">Foreign Principals</div><div class="value large">${p.c || 0}</div><div class="label" style="margin-top:0.3rem">${p.active || 0} active</div></div>`;
+            html += `<div class="detail-item"><div class="label">Agents (Short Forms)</div><div class="value large">${a.c || 0}</div><div class="label" style="margin-top:0.3rem">${a.active || 0} active</div></div>`;
+            html += `<div class="detail-item"><div class="label">Filed Documents</div><div class="value large">${d.c || 0}</div></div>`;
+            html += `<div class="detail-item"><div class="label">Registration Date</div><div class="value">${esc(r.registration_date) || 'Unknown'}</div>${r.termination_date ? '<div class="label" style="margin-top:0.3rem">Terminated ' + esc(r.termination_date) + '</div>' : ''}</div>`;
+            if (r.address_1) {
+                html += `<div class="detail-item" style="grid-column: span 2"><div class="label">Address</div><div class="value">${esc(r.address_1)}${r.address_2 ? ', ' + esc(r.address_2) : ''}, ${esc(r.city)}, ${esc(r.state)} ${esc(r.zip)}</div></div>`;
+            }
+            html += '</div>';
+
+            // Cross-links
+            const regName = r.name || r.business_name || '';
+            html += '<div class="section-title">Explore Connections</div>';
+            html += '<div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:0.5rem">';
+            html += `<a href="/explore/entity.html?q=${encodeURIComponent(regName)}" class="doc-link">Entity Explorer &rarr;</a>`;
+            html += `<a href="/explore/lobbying.html?q=${encodeURIComponent(regName)}" class="doc-link">Lobbying Explorer &rarr;</a>`;
+            html += `<a href="/explore/regulation.html?q=${encodeURIComponent(regName)}" class="doc-link">Regulation Explorer &rarr;</a>`;
+            html += `<a href="https://data.datadawn.org/explore/bmf.html?q=${encodeURIComponent(regName)}" target="_blank" rel="noopener" class="doc-link">BMF Explorer &rarr;</a>`;
+            html += `<a href="/openregs/fara_registrants/${encodeURIComponent(rn)}" target="_blank" rel="noopener" class="doc-link">Raw Record &rarr;</a>`;
+            html += '</div>';
+
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        async function loadPrincipals(rn) {
+            const rows = await query(`
+                SELECT foreign_principal, country, fp_registration_date, fp_termination_date
+                FROM fara_foreign_principals
+                WHERE registration_number = '${rn}'
+                ORDER BY fp_termination_date IS NULL DESC, fp_registration_date DESC
+            `);
+
+            if (!rows.length) {
+                document.getElementById('detailContent').innerHTML = '<div class="empty-state">No foreign principals found.</div>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Status</th><th>Foreign Principal</th><th>Country</th><th>Since</th></tr></thead><tbody>';
+            for (const r of rows) {
+                const active = !r.fp_termination_date;
+                const badge = active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-terminated">Term.</span>';
+                html += `<tr>
+                    <td>${badge}</td>
+                    <td>${esc(r.foreign_principal)}</td>
+                    <td><span class="badge badge-country">${esc(r.country)}</span></td>
+                    <td>${esc(r.fp_registration_date) || ''}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        async function loadAgents(rn) {
+            const rows = await query(`
+                SELECT first_name, last_name, short_form_date, short_form_termination_date, city, state
+                FROM fara_short_forms
+                WHERE registration_number = '${rn}'
+                ORDER BY short_form_termination_date IS NULL DESC, short_form_date DESC
+            `);
+
+            if (!rows.length) {
+                document.getElementById('detailContent').innerHTML = '<div class="empty-state">No agents found.</div>';
+                return;
+            }
+
+            let html = '<table><thead><tr><th>Status</th><th>Name</th><th>Location</th><th>Since</th></tr></thead><tbody>';
+            for (const r of rows) {
+                const active = !r.short_form_termination_date;
+                const badge = active ? '<span class="badge badge-active">Active</span>' : '<span class="badge badge-terminated">Term.</span>';
+                const loc = [r.city, r.state].filter(Boolean).join(', ');
+                html += `<tr>
+                    <td>${badge}</td>
+                    <td>${esc(r.first_name)} ${esc(r.last_name)}</td>
+                    <td>${esc(loc)}</td>
+                    <td>${esc(r.short_form_date) || ''}</td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        async function loadDocs(rn, offset) {
+            const rows = await query(`
+                SELECT document_type, date_stamped, short_form_name,
+                       foreign_principal_name, foreign_principal_country, url
+                FROM fara_registrant_docs
+                WHERE registration_number = '${rn}'
+                ORDER BY date_stamped DESC
+                LIMIT 50 OFFSET ${offset}
+            `);
+
+            const el = document.getElementById('detailContent');
+
+            if (!rows.length && offset === 0) {
+                el.innerHTML = '<div class="empty-state">No documents found.</div>';
+                return;
+            }
+
+            let html = offset === 0 ? '<table><thead><tr><th>Date</th><th>Type</th><th>Related To</th><th>Link</th></tr></thead><tbody>' : '';
+            for (const r of rows) {
+                const related = r.short_form_name || r.foreign_principal_name || '';
+                const country = r.foreign_principal_country ? ` (${r.foreign_principal_country})` : '';
+                html += `<tr>
+                    <td>${esc(r.date_stamped) || ''}</td>
+                    <td>${esc(r.document_type)}</td>
+                    <td>${esc(related)}${esc(country)}</td>
+                    <td>${r.url ? '<a href="' + esc(r.url) + '" target="_blank">View PDF</a>' : ''}</td>
+                </tr>`;
+            }
+
+            if (offset === 0) {
+                html += '</tbody></table>';
+                if (rows.length === 50) {
+                    html += `<button class="load-more" onclick="loadMoreDocs(${offset + 50})">Load more documents</button>`;
+                }
+                el.innerHTML = html;
+            } else {
+                // Append to existing table
+                const tbody = el.querySelector('tbody');
+                if (tbody) tbody.insertAdjacentHTML('beforeend', html);
+                el.querySelector('.load-more')?.remove();
+                if (rows.length === 50) {
+                    el.insertAdjacentHTML('beforeend', `<button class="load-more" onclick="loadMoreDocs(${offset + 50})">Load more documents</button>`);
+                }
+            }
+        }
+
+        function loadMoreDocs(offset) {
+            loadDocs(currentRegNum, offset);
+        }
+
+        function closeDetail() {
+            document.getElementById('detailOverlay').classList.remove('open');
+            document.getElementById('detailPanel').classList.remove('open');
+            setParams({ detail: null });
+        }
+
+        // Init from URL state
+        (function init() {
+            const q = getParam('q');
+            const tab = getParam('tab');
+            const detail = getParam('detail');
+
+            if (tab) {
+                currentTab = tab;
+                document.querySelectorAll('.tab').forEach(t => {
+                    t.classList.toggle('active', t.dataset.tab === tab);
+                });
+            }
+
+            if (q) {
+                document.getElementById('searchInput').value = q;
+                doSearch();
+            } else if (currentTab === 'countries') {
+                doSearch();
+            }
+
+            if (detail) {
+                openRegistrant(detail);
+            }
+        })();
+    </script>
+</body>
+</html>

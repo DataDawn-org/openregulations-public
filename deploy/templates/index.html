@@ -1,0 +1,160 @@
+{% extends "default:index.html" %}
+
+{% block extra_head %}
+<style>
+  .openregs-hero {
+    background: #1a1a2e;
+    color: #eee;
+    padding: 2rem 1.5rem;
+    margin: -1rem -1rem 1.5rem -1rem;
+    border-radius: 0 0 8px 8px;
+  }
+  .openregs-hero h1 { margin: 0 0 0.5rem 0; font-size: 1.8rem; color: #fff; }
+  .openregs-hero p { margin: 0; color: #ccc; font-size: 1rem; line-height: 1.5; }
+  .openregs-hero a { color: #7ec8e3; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0;
+  }
+  .stat-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+  .stat-card .number {
+    font-size: 1.6rem;
+    font-weight: bold;
+    color: #1a1a2e;
+  }
+  .stat-card .label {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.25rem;
+  }
+
+  .db-section { margin: 1.5rem 0; }
+  .db-section h2 {
+    font-size: 1.2rem;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .query-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.75rem;
+  }
+  .query-card {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 0.75rem;
+    transition: border-color 0.15s;
+  }
+  .query-card:hover { border-color: #7ec8e3; }
+  .query-card a {
+    font-weight: 600;
+    text-decoration: none;
+    color: #1a1a2e;
+  }
+  .query-card a:hover { color: #2980b9; }
+  .query-card .desc {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 0.25rem;
+    line-height: 1.3;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="openregs-hero">
+  <h1>OpenRegs &mdash; Federal Regulatory Data</h1>
+  <p>
+    Public regulatory data from the Federal Register and Regulations.gov.
+    Rules, proposed rules, dockets, public comments, executive orders,
+    and USDA animal welfare inspections &mdash; all searchable.
+    Built by <a href="https://datadawn.org">DataDawn</a>.
+  </p>
+</div>
+
+<div class="stats-grid">
+  {% for db in databases %}
+    {% for table in db.tables_and_views_truncated %}
+      {% if db.name == "openregs" and table.name == "federal_register" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">Federal Register Documents</div>
+        </div>
+      {% endif %}
+      {% if db.name == "openregs" and table.name == "comments" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">Public Comments</div>
+        </div>
+      {% endif %}
+      {% if db.name == "openregs" and table.name == "dockets" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">Regulatory Dockets</div>
+        </div>
+      {% endif %}
+      {% if db.name == "openregs" and table.name == "presidential_documents" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">Executive Orders & Proclamations</div>
+        </div>
+      {% endif %}
+      {% if db.name == "aphis" and table.name == "facilities" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">APHIS Facilities</div>
+        </div>
+      {% endif %}
+      {% if db.name == "aphis" and table.name == "inspections" %}
+        <div class="stat-card">
+          <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
+          <div class="label">APHIS Inspections</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+</div>
+
+{% for db in databases %}
+<div class="db-section">
+  {% if db.name == "openregs" %}
+    <h2>Regulatory Data <small style="color:#999;font-weight:normal">(Federal Register + Regulations.gov)</small></h2>
+  {% elif db.name == "aphis" %}
+    <h2>USDA Animal Welfare <small style="color:#999;font-weight:normal">(APHIS Inspections)</small></h2>
+  {% else %}
+    <h2>{{ db.name }}</h2>
+  {% endif %}
+
+  <p style="margin-bottom:1rem">
+    <strong>Tables:</strong>
+    {% for table in db.tables_and_views_truncated %}
+      <a href="/{{ db.name }}/{{ table.name }}">{{ table.name }}</a>{% if table.count %} ({{ "{:,}".format(table.count or 0) }}){% endif %}{% if not loop.last %} &middot; {% endif %}
+    {% endfor %}
+  </p>
+
+  {% if db.name in metadata.databases and "queries" in metadata.databases[db.name] %}
+    <div class="query-grid">
+      {% for qname, qdata in metadata.databases[db.name].queries.items() %}
+        <div class="query-card">
+          <a href="/{{ db.name }}/{{ qname }}">{{ qdata.title }}</a>
+          {% if qdata.description %}
+            <div class="desc">{{ qdata.description[:120] }}{% if qdata.description|length > 120 %}&hellip;{% endif %}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endblock %}
