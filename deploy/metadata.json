@@ -1,0 +1,795 @@
+{
+    "title": "OpenRegs \u2014 Federal Regulatory Data",
+    "description_html": "<p>Federal regulatory data from the Federal Register API and Regulations.gov. Includes Federal Register documents, regulatory dockets, documents, and public comments with full-text search.</p><p>Built by <a href=\"https://datadawn.org\">DataDawn</a>.</p>",
+    "license": "Public Domain (U.S. Government data)",
+    "license_url": "https://www.regulations.gov/faq",
+    "source": "Federal Register API & Regulations.gov API",
+    "source_url": "https://www.federalregister.gov/developers/api/v1",
+    "permissions": {
+        "execute-sql": true,
+        "view-instance": true,
+        "view-database": true,
+        "view-table": true,
+        "view-query": true
+    },
+    "plugins": {
+        "datasette-cors": {
+            "allow_all": true
+        }
+    },
+    "databases": {
+        "openregs": {
+            "tables": {
+                "federal_register": {
+                    "label_column": "title",
+                    "description_html": "All Federal Register documents (rules, proposed rules, notices, presidential documents) from 1994 to present. Nearly 1M documents with full-text search.",
+                    "facets": ["type", "pub_year"],
+                    "sort_desc": "publication_date"
+                },
+                "dockets": {
+                    "label_column": "title",
+                    "description_html": "Regulatory dockets from Regulations.gov \u2014 containers for related documents and comments in a rulemaking proceeding.",
+                    "facets": ["agency_id", "docket_type"],
+                    "sort_desc": "last_modified"
+                },
+                "documents": {
+                    "label_column": "title",
+                    "description_html": "Regulatory documents from Regulations.gov including rules, proposed rules, notices, and supporting materials.",
+                    "facets": ["agency_id", "document_type", "posted_year"],
+                    "sort_desc": "posted_date"
+                },
+                "presidential_documents": {
+                    "label_column": "title",
+                    "description_html": "Executive Orders and Proclamations from the Federal Register. Covers EO 12890\u201314389 (1994\u2013present) with signing dates, EO numbers, and links to full text.",
+                    "facets": ["document_type"],
+                    "sort_desc": "signing_date"
+                },
+                "spending_awards": {
+                    "label_column": "recipient_name",
+                    "description_html": "Federal grants and contracts from USAspending.gov for EPA, APHIS, FDA, and FWS. Includes award amounts, recipients, descriptions, and program codes.",
+                    "facets": ["agency", "award_category", "fiscal_year"],
+                    "sort_desc": "award_amount"
+                },
+                "legislation": {
+                    "label_column": "title",
+                    "description_html": "Congressional bills and resolutions from Congress.gov, filtered to policy areas relevant to environmental, health, agriculture, and wildlife regulation.",
+                    "facets": ["congress", "bill_type", "policy_area"],
+                    "sort_desc": "introduced_date"
+                },
+                "legislation_actions": {
+                    "description_html": "Legislative action history for tracked bills \u2014 committee referrals, floor votes, amendments, and presidential signatures.",
+                    "sort_desc": "action_date"
+                },
+                "legislation_subjects": {
+                    "description_html": "CRS legislative subject terms assigned to bills, useful for filtering by topic."
+                },
+                "comments": {
+                    "label_column": "title",
+                    "description_html": "Public comments submitted to federal agencies via Regulations.gov. Over 2.4M comments with submitter names and types.",
+                    "facets": ["agency_id", "submitter_type", "posted_year"],
+                    "sort_desc": "posted_date"
+                },
+                "agencies": {
+                    "label_column": "name",
+                    "description_html": "Federal agencies from the Federal Register, including parent-child relationships."
+                },
+                "agency_map": {
+                    "description_html": "Maps Regulations.gov agency codes (EPA, FDA, etc.) to Federal Register agency records."
+                },
+                "fr_regs_crossref": {
+                    "description_html": "Cross-reference linking Federal Register document numbers to Regulations.gov document IDs."
+                },
+                "docket_stats": {
+                    "description_html": "Pre-computed view: comment and document counts per docket with date ranges.",
+                    "sort_desc": "comment_count"
+                },
+                "comments_by_year": {
+                    "description_html": "Pre-computed view: annual comment volume per agency with submitter type breakdown."
+                },
+                "fr_by_year": {
+                    "description_html": "Pre-computed view: Federal Register document counts by year and type."
+                },
+                "top_dockets": {
+                    "description_html": "Pre-computed view: dockets ranked by comment volume with submitter breakdown.",
+                    "sort_desc": "comment_count"
+                },
+                "regulatory_pipeline": {
+                    "description_html": "Pre-computed view: rulemakings with both proposed and final rules, showing the timeline from proposal to finalization."
+                },
+                "comments_monthly": {
+                    "description_html": "Pre-computed view: monthly comment volume per agency."
+                },
+                "agency_overview": {
+                    "description_html": "Pre-computed view: summary statistics per agency including docket, document, and comment counts."
+                },
+                "top_submitters": {
+                    "description_html": "Pre-computed view: organizations submitting 5+ comments, ranked by volume.",
+                    "sort_desc": "comment_count"
+                },
+                "cfr_sections": {
+                    "label_column": "section_heading",
+                    "description_html": "Current Code of Federal Regulations (eCFR) — the actual text of federal regulations in force. Covers 5 titles: Agriculture (7), Animals (9), Food & Drugs (21), Environment (40), Wildlife (50). 55,000+ regulatory sections with full-text search.",
+                    "facets": ["title_number", "agency", "part_number"],
+                    "sort": "section_id"
+                },
+                "congressional_record": {
+                    "label_column": "title",
+                    "description_html": "Congressional Record — full text of everything said on the floor of Congress. Speeches, debates, procedural actions from 1994 to present. House, Senate, Extensions of Remarks, and Daily Digest.",
+                    "facets": ["chamber", "granule_class", "congress"],
+                    "sort_desc": "date"
+                },
+                "crec_speakers": {
+                    "description_html": "Normalized speaker data from the Congressional Record. Links members of Congress to their floor speeches, remarks, and procedural actions. 1,800+ unique speakers.",
+                    "facets": ["speaker_name"],
+                    "sort": "speaker_name"
+                },
+                "crec_bills": {
+                    "description_html": "Bills referenced in Congressional Record floor proceedings. Links floor debate to specific legislation. Cross-references with the legislation table via bill_id.",
+                    "facets": ["bill_type", "congress"],
+                    "sort_desc": "congress"
+                },
+                "congress_members": {
+                    "label_column": "full_name",
+                    "description_html": "All current and historical members of Congress (12,700+) from the congress-legislators project. Includes bioguide_id (universal key), party, state, chamber, and cross-reference IDs for OpenSecrets, FEC, GovTrack, and more.",
+                    "facets": ["party", "state", "chamber", "is_current"],
+                    "sort": "full_name"
+                },
+                "stock_trades": {
+                    "description_html": "Congressional stock trading disclosures from 100% government sources. Senate: efdsearch.senate.gov (15,000+ transactions, 2012-present). House: disclosures-clerk.house.gov PTR PDFs parsed for transaction-level data (tickers, amounts, buy/sell). Both chambers linked to congress_members via bioguide_id.",
+                    "facets": ["chamber", "transaction_type", "ticker"],
+                    "sort_desc": "transaction_date"
+                },
+                "member_overview": {
+                    "description_html": "Pre-computed view: current members of Congress with stock trade counts, floor speech counts, and bills sponsored — the big picture of each member's activity.",
+                    "sort_desc": "trade_count"
+                },
+                "stock_trades_by_ticker": {
+                    "description_html": "Pre-computed view: aggregate stock trading activity per ticker symbol, showing which stocks are most traded by members of Congress.",
+                    "sort_desc": "trade_count"
+                },
+                "committees": {
+                    "label_column": "name",
+                    "description_html": "Congressional committees and subcommittees. Links to committee memberships.",
+                    "facets": ["chamber"],
+                    "sort": "name"
+                },
+                "committee_memberships": {
+                    "description_html": "Current committee membership for all members of Congress. Includes titles (Chairman, Ranking Member) and party affiliation. Linked to congress_members via bioguide_id.",
+                    "facets": ["title", "party"],
+                    "sort": "committee_id"
+                },
+                "legislation_cosponsors": {
+                    "description_html": "Cosponsors for tracked legislation. Distinguishes original cosponsors (signed on at introduction) from later additions. Linked to congress_members via bioguide_id.",
+                    "facets": ["is_original_cosponsor"],
+                    "sort_desc": "sponsorship_date"
+                },
+                "committee_member_trades": {
+                    "description_html": "Pre-computed view: cross-reference of committee memberships with stock trades, showing what committee members are trading.",
+                    "sort_desc": "transaction_date"
+                }
+            },
+            "queries": {
+                "most_commented_dockets": {
+                    "title": "Most Commented Dockets",
+                    "description": "Dockets with the most public comments, showing comment volume and submitter breakdown.",
+                    "sql": "SELECT c.docket_id, c.agency_id, d.title AS docket_title, COUNT(*) AS comment_count, SUM(CASE WHEN c.submitter_type = 'organization' THEN 1 ELSE 0 END) AS org_comments, SUM(CASE WHEN c.submitter_type = 'individual' THEN 1 ELSE 0 END) AS individual_comments, SUM(CASE WHEN c.submitter_type = 'anonymous' THEN 1 ELSE 0 END) AS anonymous_comments, MIN(c.posted_date) AS first_comment, MAX(c.posted_date) AS last_comment FROM comments c LEFT JOIN dockets d ON d.id = c.docket_id WHERE c.docket_id IS NOT NULL GROUP BY c.docket_id ORDER BY comment_count DESC LIMIT 100"
+                },
+                "search_comments": {
+                    "title": "Search Comments (Full Text)",
+                    "description": "Search comment titles and submitter names using full-text search. Use standard search syntax: quotes for exact phrases, OR for alternatives.",
+                    "sql": "SELECT comments.id, comments.agency_id, comments.title, comments.submitter_name, comments.submitter_type, comments.posted_date, comments.docket_id FROM comments_fts JOIN comments ON comments.rowid = comments_fts.rowid WHERE comments_fts MATCH :search ORDER BY rank LIMIT 200",
+                    "params": ["search"]
+                },
+                "search_federal_register": {
+                    "title": "Search Federal Register",
+                    "description": "Full-text search across Federal Register document titles, abstracts, and agency names.",
+                    "sql": "SELECT federal_register.document_number, federal_register.title, federal_register.type, federal_register.publication_date, federal_register.agency_names, federal_register.html_url FROM federal_register_fts JOIN federal_register ON federal_register.rowid = federal_register_fts.rowid WHERE federal_register_fts MATCH :search ORDER BY rank LIMIT 200",
+                    "params": ["search"]
+                },
+                "search_dockets": {
+                    "title": "Search Dockets",
+                    "description": "Full-text search across docket titles. Find regulatory proceedings by keyword.",
+                    "sql": "SELECT dockets.id, dockets.agency_id, dockets.title, dockets.docket_type, dockets.last_modified, (SELECT COUNT(*) FROM comments WHERE docket_id = dockets.id) AS comment_count FROM dockets_fts JOIN dockets ON dockets.rowid = dockets_fts.rowid WHERE dockets_fts MATCH :search ORDER BY rank LIMIT 200",
+                    "params": ["search"]
+                },
+                "search_documents": {
+                    "title": "Search Regulatory Documents",
+                    "description": "Full-text search across regulatory document titles from Regulations.gov.",
+                    "sql": "SELECT documents.id, documents.agency_id, documents.title, documents.document_type, documents.posted_date, documents.docket_id, documents.comment_end_date FROM documents_fts JOIN documents ON documents.rowid = documents_fts.rowid WHERE documents_fts MATCH :search ORDER BY rank LIMIT 200",
+                    "params": ["search"]
+                },
+                "open_for_comment": {
+                    "title": "Currently Open for Comment",
+                    "description": "Regulatory documents with comment periods that haven't closed yet. These are opportunities for public participation.",
+                    "sql": "SELECT d.id, d.agency_id, d.title, d.document_type, d.posted_date, d.comment_start_date, d.comment_end_date, d.docket_id, CAST(julianday(d.comment_end_date) - julianday('now') AS INTEGER) AS days_remaining, (SELECT COUNT(*) FROM comments c WHERE c.docket_id = d.docket_id) AS comments_so_far FROM documents d WHERE d.comment_end_date IS NOT NULL AND d.comment_end_date > datetime('now') AND d.withdrawn = 0 ORDER BY d.comment_end_date ASC LIMIT 100"
+                },
+                "agency_comment_trends": {
+                    "title": "Comment Volume by Year & Agency",
+                    "description": "Annual comment volume for each agency, with breakdown by submitter type.",
+                    "sql": "SELECT agency_id, posted_year, COUNT(*) AS total, SUM(CASE WHEN submitter_type = 'organization' THEN 1 ELSE 0 END) AS organizations, SUM(CASE WHEN submitter_type = 'individual' THEN 1 ELSE 0 END) AS individuals, SUM(CASE WHEN submitter_type = 'anonymous' THEN 1 ELSE 0 END) AS anonymous, COUNT(DISTINCT docket_id) AS active_dockets FROM comments WHERE posted_year IS NOT NULL GROUP BY agency_id, posted_year ORDER BY agency_id, posted_year"
+                },
+                "top_organizational_commenters": {
+                    "title": "Most Active Organizational Commenters",
+                    "description": "Organizations that submit the most public comments across all agencies.",
+                    "sql": "SELECT submitter_name, COUNT(*) AS comment_count, COUNT(DISTINCT agency_id) AS agencies, COUNT(DISTINCT docket_id) AS dockets, GROUP_CONCAT(DISTINCT agency_id) AS agency_list, MIN(posted_date) AS first_comment, MAX(posted_date) AS last_comment FROM comments WHERE submitter_type = 'organization' AND submitter_name IS NOT NULL GROUP BY submitter_name ORDER BY comment_count DESC LIMIT 100"
+                },
+                "rulemaking_pipeline": {
+                    "title": "Rulemaking Pipeline (Proposed \u2192 Final)",
+                    "description": "Dockets that have both proposed rules and final rules, showing the regulatory timeline.",
+                    "sql": "SELECT d.id AS docket_id, d.agency_id, d.title, proposed.posted_date AS proposed_date, final.posted_date AS final_date, CAST(julianday(final.posted_date) - julianday(proposed.posted_date) AS INTEGER) AS days_to_finalize, (SELECT COUNT(*) FROM comments c WHERE c.docket_id = d.id) AS total_comments FROM dockets d JOIN documents proposed ON proposed.docket_id = d.id AND proposed.document_type = 'Proposed Rule' JOIN documents final ON final.docket_id = d.id AND final.document_type = 'Rule' WHERE d.docket_type = 'Rulemaking' ORDER BY total_comments DESC LIMIT 100"
+                },
+                "comments_for_docket": {
+                    "title": "Comments for a Docket",
+                    "description": "View all comments submitted for a specific docket ID (e.g., EPA-HQ-OAR-2021-0317).",
+                    "sql": "SELECT id, title, submitter_name, submitter_type, posted_date, agency_id FROM comments WHERE docket_id = :docket_id ORDER BY posted_date DESC LIMIT 500",
+                    "params": ["docket_id"]
+                },
+                "dockets_for_agency": {
+                    "title": "Dockets for an Agency",
+                    "description": "Browse all dockets for a specific agency code (e.g., EPA, FDA, FWS, USDA) with comment counts.",
+                    "sql": "SELECT d.id, d.title, d.docket_type, d.last_modified, (SELECT COUNT(*) FROM comments c WHERE c.docket_id = d.id) AS comment_count, (SELECT COUNT(*) FROM documents doc WHERE doc.docket_id = d.id) AS document_count FROM dockets d WHERE d.agency_id = :agency_id ORDER BY d.last_modified DESC LIMIT 200",
+                    "params": ["agency_id"]
+                },
+                "fr_documents_for_agency": {
+                    "title": "Federal Register Documents by Agency",
+                    "description": "Search Federal Register documents by agency name and optional year.",
+                    "sql": "SELECT document_number, title, type, publication_date, html_url FROM federal_register WHERE agency_names LIKE '%' || :agency || '%' AND (:year = '' OR pub_year = CAST(:year AS INTEGER)) ORDER BY publication_date DESC LIMIT 200",
+                    "params": ["agency", "year"]
+                },
+                "recent_rules": {
+                    "title": "Recently Published Rules",
+                    "description": "The most recently published final rules in the Federal Register.",
+                    "sql": "SELECT document_number, title, publication_date, agency_names, html_url FROM federal_register WHERE type = 'Rule' ORDER BY publication_date DESC LIMIT 100"
+                },
+                "recently_proposed_rules": {
+                    "title": "Recently Proposed Rules",
+                    "description": "Proposed rules awaiting public comment or finalization, ordered by publication date.",
+                    "sql": "SELECT document_number, title, publication_date, agency_names, html_url FROM federal_register WHERE type = 'Proposed Rule' ORDER BY publication_date DESC LIMIT 100"
+                },
+                "comment_window_analysis": {
+                    "title": "Comment Period Durations",
+                    "description": "How long agencies give the public to comment, by agency and document type.",
+                    "sql": "SELECT d.agency_id, d.document_type, COUNT(*) AS documents, CAST(AVG(julianday(d.comment_end_date) - julianday(d.comment_start_date)) AS INTEGER) AS avg_days, CAST(MIN(julianday(d.comment_end_date) - julianday(d.comment_start_date)) AS INTEGER) AS min_days, CAST(MAX(julianday(d.comment_end_date) - julianday(d.comment_start_date)) AS INTEGER) AS max_days FROM documents d WHERE d.comment_start_date IS NOT NULL AND d.comment_end_date IS NOT NULL AND d.comment_start_date != '' AND d.comment_end_date != '' AND julianday(d.comment_end_date) > julianday(d.comment_start_date) GROUP BY d.agency_id, d.document_type HAVING documents >= 3 ORDER BY avg_days DESC",
+                    "description_html": "How long agencies give the public to comment, by agency and document type. Useful for understanding whether comment periods are adequate."
+                },
+                "comment_activity_monthly": {
+                    "title": "Monthly Comment Activity",
+                    "description": "Comment volume by month across all agencies, useful for spotting surges in public engagement.",
+                    "sql": "SELECT posted_year || '-' || printf('%02d', posted_month) AS month, agency_id, COUNT(*) AS comments, COUNT(DISTINCT docket_id) AS dockets FROM comments WHERE posted_year IS NOT NULL AND posted_month IS NOT NULL GROUP BY month, agency_id ORDER BY month DESC, comments DESC LIMIT 500"
+                },
+                "cross_reference": {
+                    "title": "Federal Register \u2194 Regulations.gov Lookup",
+                    "description": "Find the Regulations.gov documents linked to a Federal Register document number, or vice versa.",
+                    "sql": "SELECT xr.fr_document_number, fr.title AS fr_title, fr.type AS fr_type, fr.publication_date, fr.html_url AS fr_url, xr.regs_document_id, doc.title AS regs_title, doc.document_type AS regs_type, doc.agency_id, doc.docket_id FROM fr_regs_crossref xr LEFT JOIN federal_register fr ON fr.document_number = xr.fr_document_number LEFT JOIN documents doc ON doc.id = xr.regs_document_id WHERE (:fr_doc_number = '' OR xr.fr_document_number = :fr_doc_number) AND (:regs_doc_id = '' OR xr.regs_document_id = :regs_doc_id) ORDER BY fr.publication_date DESC LIMIT 100",
+                    "params": ["fr_doc_number", "regs_doc_id"]
+                },
+                "document_type_trends": {
+                    "title": "Federal Register Activity by Year",
+                    "description": "Count of Federal Register documents by type and year, showing regulatory activity trends over three decades.",
+                    "sql": "SELECT pub_year, SUM(CASE WHEN type = 'Rule' THEN 1 ELSE 0 END) AS rules, SUM(CASE WHEN type = 'Proposed Rule' THEN 1 ELSE 0 END) AS proposed_rules, SUM(CASE WHEN type = 'Notice' THEN 1 ELSE 0 END) AS notices, SUM(CASE WHEN type = 'Presidential Document' THEN 1 ELSE 0 END) AS presidential, COUNT(*) AS total FROM federal_register WHERE pub_year IS NOT NULL GROUP BY pub_year ORDER BY pub_year"
+                },
+                "submitter_docket_detail": {
+                    "title": "Comments by a Specific Submitter",
+                    "description": "See all comments from a specific organization or individual across all dockets.",
+                    "sql": "SELECT c.id, c.agency_id, c.docket_id, c.title, c.submitter_type, c.posted_date, d.title AS docket_title FROM comments c LEFT JOIN dockets d ON d.id = c.docket_id WHERE c.submitter_name = :submitter_name ORDER BY c.posted_date DESC LIMIT 200",
+                    "params": ["submitter_name"]
+                },
+                "executive_orders": {
+                    "title": "Executive Orders",
+                    "description": "All Executive Orders from 1994 to present, with EO numbers and signing dates.",
+                    "sql": "SELECT executive_order_number AS eo_number, title, signing_date, publication_date, html_url FROM presidential_documents WHERE document_type = 'executive_order' AND executive_order_number IS NOT NULL ORDER BY executive_order_number DESC LIMIT 500"
+                },
+                "search_executive_orders": {
+                    "title": "Search Executive Orders & Proclamations",
+                    "description": "Search presidential documents by keyword in title or abstract.",
+                    "sql": "SELECT document_type, executive_order_number AS eo_number, title, signing_date, publication_date, html_url, abstract FROM presidential_documents WHERE title LIKE '%' || :search || '%' OR abstract LIKE '%' || :search || '%' ORDER BY signing_date DESC LIMIT 200",
+                    "params": ["search"]
+                },
+                "recent_executive_orders": {
+                    "title": "Recent Executive Orders",
+                    "description": "The 50 most recently signed Executive Orders.",
+                    "sql": "SELECT executive_order_number AS eo_number, title, signing_date, publication_date, html_url, abstract FROM presidential_documents WHERE document_type = 'executive_order' ORDER BY signing_date DESC LIMIT 50"
+                },
+                "executive_order_lookup": {
+                    "title": "Look Up Executive Order by Number",
+                    "description": "Find a specific Executive Order by its number (e.g., 14110).",
+                    "sql": "SELECT executive_order_number AS eo_number, title, signing_date, publication_date, html_url, abstract FROM presidential_documents WHERE executive_order_number = CAST(:eo_number AS INTEGER)",
+                    "params": ["eo_number"]
+                },
+                "presidential_documents_by_year": {
+                    "title": "Presidential Documents by Year",
+                    "description": "Count of Executive Orders and Proclamations signed each year.",
+                    "sql": "SELECT CAST(strftime('%Y', signing_date) AS INTEGER) AS year, SUM(CASE WHEN document_type = 'executive_order' THEN 1 ELSE 0 END) AS executive_orders, SUM(CASE WHEN document_type = 'proclamation' THEN 1 ELSE 0 END) AS proclamations, COUNT(*) AS total FROM presidential_documents WHERE signing_date IS NOT NULL GROUP BY year ORDER BY year DESC"
+                },
+                "proclamations": {
+                    "title": "Presidential Proclamations",
+                    "description": "All Presidential Proclamations, most recent first.",
+                    "sql": "SELECT title, signing_date, publication_date, html_url FROM presidential_documents WHERE document_type = 'proclamation' ORDER BY signing_date DESC LIMIT 200"
+                },
+                "spending_by_agency": {
+                    "title": "Federal Spending by Agency",
+                    "description": "Total grants and contracts by agency and fiscal year from USAspending.gov.",
+                    "sql": "SELECT COALESCE(sub_agency, agency) AS agency_name, award_category, fiscal_year, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, CAST(AVG(award_amount) AS INTEGER) AS avg_amount FROM spending_awards GROUP BY agency_name, award_category, fiscal_year ORDER BY fiscal_year DESC, total_amount DESC"
+                },
+                "top_grant_recipients": {
+                    "title": "Top Grant Recipients",
+                    "description": "Organizations receiving the most federal grant money from our tracked agencies.",
+                    "sql": "SELECT recipient_name, COUNT(*) AS grant_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, GROUP_CONCAT(DISTINCT COALESCE(sub_agency, agency)) AS agencies, MIN(start_date) AS earliest, MAX(start_date) AS latest FROM spending_awards WHERE award_category = 'grants' AND recipient_name IS NOT NULL GROUP BY recipient_name ORDER BY total_amount DESC LIMIT 100"
+                },
+                "top_contractors": {
+                    "title": "Top Contractors",
+                    "description": "Companies receiving the most federal contract money from our tracked agencies.",
+                    "sql": "SELECT recipient_name, COUNT(*) AS contract_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, GROUP_CONCAT(DISTINCT COALESCE(sub_agency, agency)) AS agencies FROM spending_awards WHERE award_category = 'contracts' AND recipient_name IS NOT NULL GROUP BY recipient_name ORDER BY total_amount DESC LIMIT 100"
+                },
+                "search_spending": {
+                    "title": "Search Spending Awards",
+                    "description": "Search grants and contracts by description keyword.",
+                    "sql": "SELECT award_id, COALESCE(sub_agency, agency) AS agency_name, award_category, recipient_name, CAST(award_amount AS INTEGER) AS amount, description, start_date, fiscal_year FROM spending_awards WHERE description LIKE '%' || :search || '%' ORDER BY award_amount DESC LIMIT 200",
+                    "params": ["search"]
+                },
+                "spending_by_state": {
+                    "title": "Federal Spending by State",
+                    "description": "Total awards by state of performance for our tracked agencies.",
+                    "sql": "SELECT state_code, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, SUM(CASE WHEN award_category = 'grants' THEN 1 ELSE 0 END) AS grants, SUM(CASE WHEN award_category = 'contracts' THEN 1 ELSE 0 END) AS contracts FROM spending_awards WHERE state_code IS NOT NULL AND state_code != '' GROUP BY state_code ORDER BY total_amount DESC"
+                },
+                "search_legislation": {
+                    "title": "Search Legislation",
+                    "description": "Search bills and resolutions by keyword in title or summary.",
+                    "sql": "SELECT bill_id, congress, bill_type || ' ' || bill_number AS bill, title, policy_area, introduced_date, latest_action_text, sponsor_name, cosponsor_count FROM legislation WHERE title LIKE '%' || :search || '%' OR summary_text LIKE '%' || :search || '%' ORDER BY introduced_date DESC LIMIT 200",
+                    "params": ["search"]
+                },
+                "legislation_by_policy_area": {
+                    "title": "Legislation by Policy Area",
+                    "description": "Browse bills filtered by CRS policy area (e.g., Environmental Protection, Health, Agriculture and Food, Animals).",
+                    "sql": "SELECT bill_id, congress, UPPER(bill_type) || ' ' || bill_number AS bill, title, introduced_date, latest_action_text, sponsor_name, sponsor_party, cosponsor_count FROM legislation WHERE policy_area = :policy_area ORDER BY introduced_date DESC LIMIT 200",
+                    "params": ["policy_area"]
+                },
+                "recent_legislation": {
+                    "title": "Recently Introduced Legislation",
+                    "description": "The most recently introduced bills in our tracked policy areas.",
+                    "sql": "SELECT bill_id, congress, UPPER(bill_type) || ' ' || bill_number AS bill, title, policy_area, introduced_date, sponsor_name, sponsor_party, cosponsor_count, latest_action_text FROM legislation ORDER BY introduced_date DESC LIMIT 100"
+                },
+                "legislation_by_sponsor": {
+                    "title": "Legislation by Sponsor",
+                    "description": "Bills sponsored by a specific member of Congress.",
+                    "sql": "SELECT bill_id, congress, UPPER(bill_type) || ' ' || bill_number AS bill, title, policy_area, introduced_date, latest_action_text, cosponsor_count FROM legislation WHERE sponsor_name LIKE '%' || :sponsor || '%' ORDER BY introduced_date DESC LIMIT 200",
+                    "params": ["sponsor"]
+                },
+                "most_cosponsored_bills": {
+                    "title": "Most Cosponsored Bills",
+                    "description": "Bills with the most cosponsors, indicating broad congressional support.",
+                    "sql": "SELECT bill_id, congress, UPPER(bill_type) || ' ' || bill_number AS bill, title, policy_area, introduced_date, sponsor_name, sponsor_party, cosponsor_count FROM legislation WHERE cosponsor_count > 0 ORDER BY cosponsor_count DESC LIMIT 100"
+                },
+                "legislation_subject_counts": {
+                    "title": "Top Legislative Subjects",
+                    "description": "Most common CRS subject terms across all tracked legislation.",
+                    "sql": "SELECT subject, COUNT(*) AS bill_count FROM legislation_subjects GROUP BY subject ORDER BY bill_count DESC LIMIT 100"
+                },
+                "search_cfr": {
+                    "title": "Search Federal Regulations (eCFR)",
+                    "description": "Full-text search across the Code of Federal Regulations. Find what the actual regulations say about any topic.",
+                    "sql": "SELECT cfr_sections.section_id, cfr_sections.title_number, cfr_sections.part_number, cfr_sections.section_number, cfr_sections.section_heading, cfr_sections.agency, cfr_sections.part_name, substr(cfr_sections.full_text, 1, 500) AS excerpt FROM cfr_fts JOIN cfr_sections ON cfr_sections.rowid = cfr_fts.rowid WHERE cfr_fts MATCH :search ORDER BY rank LIMIT 100",
+                    "params": ["search"]
+                },
+                "cfr_by_agency": {
+                    "title": "Regulations by Agency",
+                    "description": "Browse CFR sections by agency (EPA, FDA, APHIS, FWS, FSIS, NOAA).",
+                    "sql": "SELECT section_id, title_number, part_number, section_number, section_heading, part_name, subpart_name, substr(full_text, 1, 300) AS excerpt FROM cfr_sections WHERE agency = :agency ORDER BY section_id LIMIT 200",
+                    "params": ["agency"]
+                },
+                "cfr_parts": {
+                    "title": "CFR Parts Overview",
+                    "description": "List all parts (regulatory chapters) in each CFR title, with section counts.",
+                    "sql": "SELECT title_number, title_name, part_number, part_name, agency, COUNT(*) AS section_count FROM cfr_sections WHERE part_number != '' GROUP BY title_number, part_number ORDER BY title_number, CAST(part_number AS INTEGER)"
+                },
+                "cfr_section_detail": {
+                    "title": "Read a CFR Section",
+                    "description": "View the full text of a specific CFR section (e.g., '1.1' or '50.11').",
+                    "sql": "SELECT section_id, title_number, title_name, part_number, part_name, section_number, section_heading, agency, authority, source_citation, amendment_citations, full_text FROM cfr_sections WHERE section_number = :section_number",
+                    "params": ["section_number"]
+                },
+                "search_congressional_record": {
+                    "title": "Search Congressional Record",
+                    "description": "Full-text search across everything said on the floor of Congress. Speeches, debates, procedural actions.",
+                    "sql": "SELECT congressional_record.granule_id, congressional_record.date, congressional_record.congress, congressional_record.chamber, congressional_record.title, congressional_record.speakers, congressional_record.page_start, substr(congressional_record.full_text, 1, 500) AS excerpt FROM crec_fts JOIN congressional_record ON congressional_record.rowid = crec_fts.rowid WHERE crec_fts MATCH :search ORDER BY rank LIMIT 100",
+                    "params": ["search"]
+                },
+                "congressional_record_by_date": {
+                    "title": "Congressional Record by Date",
+                    "description": "View everything said on the floor of Congress on a specific date (YYYY-MM-DD).",
+                    "sql": "SELECT granule_id, chamber, granule_class, sub_granule_class, title, speakers, page_start, page_end FROM congressional_record WHERE date = :date ORDER BY chamber, page_start",
+                    "params": ["date"]
+                },
+                "floor_speeches_by_topic": {
+                    "title": "Floor Speeches by Topic",
+                    "description": "Search House and Senate floor speeches (excludes Daily Digest and procedural items).",
+                    "sql": "SELECT congressional_record.granule_id, congressional_record.date, congressional_record.chamber, congressional_record.title, congressional_record.speakers, congressional_record.page_start, substr(congressional_record.full_text, 1, 500) AS excerpt FROM crec_fts JOIN congressional_record ON congressional_record.rowid = crec_fts.rowid WHERE crec_fts MATCH :search AND congressional_record.granule_class IN ('HOUSE', 'SENATE') AND congressional_record.sub_granule_class = 'ALLOTHER' ORDER BY rank LIMIT 100",
+                    "params": ["search"]
+                },
+                "congressional_record_stats": {
+                    "title": "Congressional Record by Congress",
+                    "description": "Volume of floor activity per Congress — speeches, proceedings, and extensions of remarks.",
+                    "sql": "SELECT congress, chamber, COUNT(*) AS entries, COUNT(DISTINCT date) AS session_days FROM congressional_record WHERE congress IS NOT NULL GROUP BY congress, chamber ORDER BY congress DESC, chamber"
+                },
+                "speeches_by_member": {
+                    "title": "Floor Speeches by Member of Congress",
+                    "description": "All floor speeches and remarks by a specific member of Congress. Enter a last name (e.g., 'McConnell'), full name, or bioguide_id.",
+                    "sql": "SELECT cs.speaker_name, cs.bioguide_id, cm.full_name AS official_name, cm.party, cr.date, cr.title, cr.chamber, cr.granule_class, cr.page_start, substr(cr.full_text, 1, 400) AS excerpt FROM crec_speakers cs JOIN congressional_record cr ON cs.granule_id = cr.granule_id LEFT JOIN congress_members cm ON cs.bioguide_id = cm.bioguide_id WHERE cs.speaker_name LIKE '%' || :name || '%' OR cs.bioguide_id = :name ORDER BY cr.date DESC LIMIT 200",
+                    "params": {"name": "McConnell"}
+                },
+                "most_active_speakers": {
+                    "title": "Most Active Speakers in Congress",
+                    "description": "Members of Congress with the most floor speeches, filtered by Congress number (e.g., 118 for 2023-2024).",
+                    "sql": "SELECT cs.speaker_name, COUNT(*) AS speeches, MIN(cr.date) AS first_speech, MAX(cr.date) AS last_speech, GROUP_CONCAT(DISTINCT cr.chamber) AS chambers FROM crec_speakers cs JOIN congressional_record cr ON cs.granule_id = cr.granule_id WHERE cr.congress = :congress GROUP BY cs.speaker_name ORDER BY speeches DESC LIMIT 100",
+                    "params": {"congress": "118"}
+                },
+                "bills_discussed_on_floor": {
+                    "title": "Bills Discussed on the Floor",
+                    "description": "Bills referenced in Congressional Record floor proceedings, showing how many times each was discussed. Can filter by bill type (hr, s, hjres, etc.).",
+                    "sql": "SELECT cb.bill_id, cb.bill_type, cb.bill_number, cb.congress, COALESCE(l.title, '(not in legislation table)') AS bill_title, COUNT(*) AS mentions, MIN(cr.date) AS first_mentioned, MAX(cr.date) AS last_mentioned FROM crec_bills cb JOIN congressional_record cr ON cb.granule_id = cr.granule_id LEFT JOIN legislation l ON cb.bill_id = l.bill_id WHERE cb.congress = :congress AND (:bill_type = '' OR cb.bill_type = :bill_type) GROUP BY cb.bill_id ORDER BY mentions DESC LIMIT 100",
+                    "params": {"congress": "118", "bill_type": ""}
+                },
+                "floor_debate_for_bill": {
+                    "title": "Floor Debate for a Specific Bill",
+                    "description": "All Congressional Record entries referencing a specific bill. Enter bill_id format: congress-type-number (e.g., '118-hr-3684').",
+                    "sql": "SELECT cr.date, cr.title, cr.chamber, cs_agg.speakers, cr.page_start, substr(cr.full_text, 1, 400) AS excerpt FROM crec_bills cb JOIN congressional_record cr ON cb.granule_id = cr.granule_id LEFT JOIN (SELECT granule_id, GROUP_CONCAT(speaker_name, '; ') AS speakers FROM crec_speakers GROUP BY granule_id) cs_agg ON cr.granule_id = cs_agg.granule_id WHERE cb.bill_id = :bill_id ORDER BY cr.date",
+                    "params": {"bill_id": "118-hr-3684"}
+                },
+                "search_members": {
+                    "title": "Search Congress Members",
+                    "description": "Find current or historical members of Congress by name.",
+                    "sql": "SELECT bioguide_id, full_name, party, state, chamber, CASE WHEN is_current THEN 'Yes' ELSE 'No' END AS current, first_served, last_served, opensecrets_id, wikipedia_id FROM congress_members WHERE full_name LIKE '%' || :name || '%' OR last_name LIKE '%' || :name || '%' ORDER BY is_current DESC, last_served DESC LIMIT 200",
+                    "params": {"name": "Grassley"}
+                },
+                "member_profile": {
+                    "title": "Member Profile: Trades, Speeches, Bills",
+                    "description": "Complete profile for a member of Congress — their stock trades, floor speeches, and sponsored bills. Enter a bioguide_id (e.g., G000386 for Chuck Grassley).",
+                    "sql": "SELECT cm.full_name, cm.party, cm.state, cm.chamber, cm.first_served, cm.last_served, (SELECT COUNT(*) FROM stock_trades WHERE bioguide_id = cm.bioguide_id) AS total_trades, (SELECT COUNT(*) FROM crec_speakers WHERE bioguide_id = cm.bioguide_id) AS total_speeches, (SELECT COUNT(*) FROM legislation WHERE sponsor_bioguide_id = cm.bioguide_id) AS bills_sponsored, (SELECT GROUP_CONCAT(DISTINCT ticker, ', ') FROM stock_trades WHERE bioguide_id = cm.bioguide_id AND ticker != '' LIMIT 20) AS tickers_traded FROM congress_members cm WHERE cm.bioguide_id = :bioguide_id",
+                    "params": {"bioguide_id": "G000386"}
+                },
+                "stock_trades_for_member": {
+                    "title": "Stock Trades for a Member",
+                    "description": "All stock trading disclosures for a specific member. Enter a name (e.g., 'Pelosi') or bioguide_id.",
+                    "sql": "SELECT st.member_name, st.transaction_date, st.ticker, st.asset_description, st.transaction_type, st.amount_range, st.owner, st.chamber, st.source_url FROM stock_trades st WHERE st.member_name LIKE '%' || :name || '%' OR st.bioguide_id = :name ORDER BY st.transaction_date DESC LIMIT 500",
+                    "params": {"name": "Burr"}
+                },
+                "most_active_traders": {
+                    "title": "Most Active Congressional Traders",
+                    "description": "Members of Congress with the most stock trading disclosures.",
+                    "sql": "SELECT st.member_name, cm.party, cm.state, cm.chamber, COUNT(*) AS trade_count, COUNT(DISTINCT st.ticker) AS unique_tickers, SUM(CASE WHEN st.transaction_type LIKE '%Purchase%' THEN 1 ELSE 0 END) AS purchases, SUM(CASE WHEN st.transaction_type LIKE '%Sale%' THEN 1 ELSE 0 END) AS sales, MIN(st.transaction_date) AS first_trade, MAX(st.transaction_date) AS last_trade FROM stock_trades st LEFT JOIN congress_members cm ON st.bioguide_id = cm.bioguide_id WHERE st.chamber = 'Senate' AND st.ticker IS NOT NULL AND st.ticker != '' GROUP BY st.member_name ORDER BY trade_count DESC LIMIT 100"
+                },
+                "most_traded_stocks": {
+                    "title": "Most Traded Stocks by Congress",
+                    "description": "Stocks most frequently bought or sold by members of Congress (both chambers).",
+                    "sql": "SELECT ticker, MAX(asset_description) AS description, COUNT(*) AS trades, COUNT(DISTINCT member_name) AS traders, SUM(CASE WHEN transaction_type IN ('P', 'Purchase') THEN 1 ELSE 0 END) AS buys, SUM(CASE WHEN transaction_type LIKE '%S%' OR transaction_type LIKE '%Sale%' THEN 1 ELSE 0 END) AS sells, GROUP_CONCAT(DISTINCT member_name) AS members FROM stock_trades WHERE ticker IS NOT NULL AND ticker != '' GROUP BY ticker ORDER BY trades DESC LIMIT 100"
+                },
+                "trades_by_ticker": {
+                    "title": "Who Traded a Specific Stock?",
+                    "description": "Find all members who traded a specific stock by ticker symbol (e.g., AAPL, MSFT).",
+                    "sql": "SELECT member_name, transaction_date, transaction_type, amount_range, owner, asset_description, source_url FROM stock_trades WHERE UPPER(ticker) = UPPER(:ticker) ORDER BY transaction_date DESC",
+                    "params": {"ticker": "AAPL"}
+                },
+                "member_activity_timeline": {
+                    "title": "Member Activity Timeline",
+                    "description": "See a member's stock trades alongside their floor speeches. Enter bioguide_id.",
+                    "sql": "SELECT 'trade' AS activity_type, st.transaction_date AS date, st.ticker || ' ' || st.transaction_type || ' (' || st.amount_range || ')' AS description, st.chamber FROM stock_trades st WHERE st.bioguide_id = :bioguide_id AND st.transaction_date != '' UNION ALL SELECT 'speech' AS activity_type, cr.date, cr.title AS description, cr.chamber FROM crec_speakers cs JOIN congressional_record cr ON cs.granule_id = cr.granule_id WHERE cs.bioguide_id = :bioguide_id ORDER BY date DESC LIMIT 500",
+                    "params": {"bioguide_id": "B001135"}
+                },
+                "current_members_overview": {
+                    "title": "Current Members of Congress Overview",
+                    "description": "All current members with their trade count, speech count, and bills sponsored.",
+                    "sql": "SELECT cm.bioguide_id, cm.full_name, cm.party, cm.state, cm.chamber, (SELECT COUNT(*) FROM stock_trades WHERE bioguide_id = cm.bioguide_id) AS trades, (SELECT COUNT(*) FROM crec_speakers WHERE bioguide_id = cm.bioguide_id) AS speeches, (SELECT COUNT(*) FROM legislation WHERE sponsor_bioguide_id = cm.bioguide_id) AS bills FROM congress_members cm WHERE cm.is_current = 1 ORDER BY trades DESC, speeches DESC"
+                },
+                "committee_members": {
+                    "title": "Committee Members",
+                    "description": "View all members of a specific committee. Enter a committee ID (e.g., SSEV for Senate Environment, HSAG for House Agriculture).",
+                    "sql": "SELECT cm.bioguide_id, cm.member_name, cm.party, cm.title AS role, cm.rank, c.name AS committee_name, c.chamber, m.state, m.is_current FROM committee_memberships cm JOIN committees c ON cm.committee_id = c.committee_id LEFT JOIN congress_members m ON cm.bioguide_id = m.bioguide_id WHERE cm.committee_id = :committee_id ORDER BY cm.rank",
+                    "params": {"committee_id": "SSEV"}
+                },
+                "member_committees": {
+                    "title": "Committees for a Member",
+                    "description": "See all committee assignments for a specific member. Enter bioguide_id.",
+                    "sql": "SELECT c.committee_id, c.name, c.chamber, cm.title AS role, cm.rank, c.parent_committee_id, COALESCE(p.name, '') AS parent_committee FROM committee_memberships cm JOIN committees c ON cm.committee_id = c.committee_id LEFT JOIN committees p ON c.parent_committee_id = p.committee_id WHERE cm.bioguide_id = :bioguide_id ORDER BY c.chamber, c.name",
+                    "params": {"bioguide_id": "G000386"}
+                },
+                "committee_leadership": {
+                    "title": "Committee Leadership",
+                    "description": "Chairs and ranking members of all committees.",
+                    "sql": "SELECT cm.title AS role, cm.member_name, cm.party, c.name AS committee, c.chamber, cm.bioguide_id FROM committee_memberships cm JOIN committees c ON cm.committee_id = c.committee_id WHERE cm.title IN ('Chairman', 'Ranking Member', 'Chair', 'Vice Chairman', 'Vice Chair') ORDER BY c.chamber, c.name, cm.title"
+                },
+                "committee_trade_activity": {
+                    "title": "Stock Trades by Committee Members",
+                    "description": "All stock trades by members of a specific committee. Enter committee ID.",
+                    "sql": "SELECT cm.member_name, cm.title AS committee_role, st.ticker, st.transaction_type, st.transaction_date, st.amount_range, st.asset_description FROM committee_memberships cm JOIN stock_trades st ON cm.bioguide_id = st.bioguide_id WHERE cm.committee_id = :committee_id AND st.ticker IS NOT NULL AND st.ticker != '' ORDER BY st.transaction_date DESC LIMIT 500",
+                    "params": {"committee_id": "SSEV"}
+                },
+                "bill_cosponsors": {
+                    "title": "Cosponsors for a Bill",
+                    "description": "View all cosponsors for a specific bill. Enter bill_id format: congress-type-number (e.g., '118-hr-3684').",
+                    "sql": "SELECT lc.bioguide_id, cm.full_name, lc.party, lc.state, CASE WHEN lc.is_original_cosponsor THEN 'Original' ELSE 'Added later' END AS cosponsor_type, lc.sponsorship_date, cm.chamber FROM legislation_cosponsors lc LEFT JOIN congress_members cm ON lc.bioguide_id = cm.bioguide_id WHERE lc.bill_id = :bill_id ORDER BY lc.is_original_cosponsor DESC, lc.sponsorship_date",
+                    "params": {"bill_id": "118-hr-3684"}
+                },
+                "most_prolific_cosponsors": {
+                    "title": "Most Prolific Cosponsors",
+                    "description": "Members who cosponsor the most bills in our tracked policy areas.",
+                    "sql": "SELECT lc.bioguide_id, cm.full_name, cm.party, cm.state, cm.chamber, COUNT(*) AS bills_cosponsored, SUM(CASE WHEN lc.is_original_cosponsor THEN 1 ELSE 0 END) AS original_cosponsors FROM legislation_cosponsors lc LEFT JOIN congress_members cm ON lc.bioguide_id = cm.bioguide_id GROUP BY lc.bioguide_id ORDER BY bills_cosponsored DESC LIMIT 100"
+                },
+                "bipartisan_bills": {
+                    "title": "Bipartisan Bills (Cross-Party Cosponsorship)",
+                    "description": "Bills that have cosponsors from both parties, indicating bipartisan support.",
+                    "sql": "SELECT l.bill_id, l.congress, UPPER(l.bill_type) || ' ' || l.bill_number AS bill, l.title, l.sponsor_name, l.sponsor_party, COUNT(DISTINCT lc.bioguide_id) AS total_cosponsors, SUM(CASE WHEN lc.party = 'R' THEN 1 ELSE 0 END) AS r_cosponsors, SUM(CASE WHEN lc.party = 'D' THEN 1 ELSE 0 END) AS d_cosponsors FROM legislation l JOIN legislation_cosponsors lc ON l.bill_id = lc.bill_id GROUP BY l.bill_id HAVING r_cosponsors > 0 AND d_cosponsors > 0 ORDER BY total_cosponsors DESC LIMIT 100"
+                },
+                "spending_by_sub_agency": {
+                    "title": "Federal Spending by Sub-Agency",
+                    "description": "Total grants and contracts broken down by sub-agency within each parent agency, with award counts and totals.",
+                    "sql": "SELECT agency, sub_agency, award_category, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, CAST(AVG(award_amount) AS INTEGER) AS avg_amount, MIN(start_date) AS earliest, MAX(start_date) AS latest FROM spending_awards WHERE sub_agency IS NOT NULL AND sub_agency != '' GROUP BY agency, sub_agency, award_category ORDER BY total_amount DESC"
+                },
+                "spending_trends_over_time": {
+                    "title": "Spending Trends Over Time",
+                    "description": "Federal spending by fiscal year and agency, showing how grant and contract funding changes year to year across all 20 tracked agencies.",
+                    "sql": "SELECT fiscal_year, COALESCE(sub_agency, agency) AS agency_name, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, SUM(CASE WHEN award_category = 'grants' THEN 1 ELSE 0 END) AS grants, SUM(CASE WHEN award_category = 'contracts' THEN 1 ELSE 0 END) AS contracts, CAST(SUM(CASE WHEN award_category = 'grants' THEN award_amount ELSE 0 END) AS INTEGER) AS grant_total, CAST(SUM(CASE WHEN award_category = 'contracts' THEN award_amount ELSE 0 END) AS INTEGER) AS contract_total FROM spending_awards WHERE fiscal_year IS NOT NULL GROUP BY fiscal_year, agency_name ORDER BY fiscal_year DESC, total_amount DESC"
+                },
+                "explore_member_search": {
+                    "title": "Explore: Member Search",
+                    "description": "Search Congress members by name with stock trade, speech, and bill counts.",
+                    "sql": "SELECT cm.bioguide_id, cm.full_name, cm.party, cm.state, cm.chamber, cm.is_current, cm.first_served, cm.last_served, COALESCE(ms.trade_count, 0) AS trade_count, COALESCE(ms.speech_count, 0) AS speech_count, COALESCE(ms.bills_sponsored, 0) AS bills_sponsored FROM congress_members cm LEFT JOIN member_stats ms ON ms.bioguide_id = cm.bioguide_id WHERE cm.full_name LIKE '%' || :name || '%' ORDER BY cm.is_current DESC, trade_count DESC LIMIT 50",
+                    "params": ["name"]
+                },
+                "explore_member_profile": {
+                    "title": "Explore: Member Profile",
+                    "description": "Full member profile by bioguide_id with activity counts.",
+                    "sql": "SELECT cm.*, COALESCE(ms.trade_count, 0) AS trade_count, COALESCE(ms.speech_count, 0) AS speech_count, COALESCE(ms.bills_sponsored, 0) AS bills_sponsored FROM congress_members cm LEFT JOIN member_stats ms ON ms.bioguide_id = cm.bioguide_id WHERE cm.bioguide_id = :bioguide_id",
+                    "params": ["bioguide_id"]
+                },
+                "explore_member_trades": {
+                    "title": "Explore: Member Stock Trades",
+                    "description": "Stock trades for a specific Congress member ordered by date.",
+                    "sql": "SELECT transaction_date, ticker, asset_description, transaction_type, amount_range, owner, source_url FROM stock_trades WHERE bioguide_id = :bioguide_id ORDER BY transaction_date DESC LIMIT 200",
+                    "params": ["bioguide_id"]
+                },
+                "explore_member_speeches": {
+                    "title": "Explore: Member Floor Speeches",
+                    "description": "Congressional Record floor speeches for a specific member.",
+                    "sql": "SELECT cr.granule_id, cr.date, cr.title, cr.chamber, SUBSTR(cr.full_text, 1, 300) AS excerpt FROM crec_speakers cs JOIN congressional_record cr ON cr.granule_id = cs.granule_id WHERE cs.bioguide_id = :bioguide_id ORDER BY cr.date DESC LIMIT 100",
+                    "params": ["bioguide_id"]
+                },
+                "explore_member_bills": {
+                    "title": "Explore: Member Legislation",
+                    "description": "Legislation sponsored by a specific Congress member.",
+                    "sql": "SELECT bill_id, congress, bill_type, bill_number, title, policy_area, introduced_date, cosponsor_count, latest_action_date, latest_action_text FROM legislation WHERE sponsor_bioguide_id = :bioguide_id ORDER BY introduced_date DESC LIMIT 100",
+                    "params": ["bioguide_id"]
+                },
+                "explore_docket_detail": {
+                    "title": "Explore: Docket Detail",
+                    "description": "Docket information with document and comment counts.",
+                    "sql": "SELECT d.*, (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count, (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count FROM dockets d WHERE d.id = :docket_id",
+                    "params": ["docket_id"]
+                },
+                "explore_docket_documents": {
+                    "title": "Explore: Docket Documents",
+                    "description": "Documents in a specific regulatory docket ordered by date.",
+                    "sql": "SELECT id, title, document_type, posted_date, comment_start_date, comment_end_date, fr_doc_num FROM documents WHERE docket_id = :docket_id ORDER BY posted_date DESC LIMIT 100",
+                    "params": ["docket_id"]
+                },
+                "explore_docket_comments": {
+                    "title": "Explore: Docket Comment Stats",
+                    "description": "Comment statistics for a docket grouped by submitter type.",
+                    "sql": "SELECT submitter_type, COUNT(*) AS comment_count, MIN(posted_date) AS first_comment, MAX(posted_date) AS last_comment FROM comments WHERE docket_id = :docket_id GROUP BY submitter_type ORDER BY comment_count DESC",
+                    "params": ["docket_id"]
+                },
+                "explore_open_comments": {
+                    "title": "Explore: Open Comment Periods",
+                    "description": "Documents currently open for public comment, ordered by closing date.",
+                    "sql": "SELECT id, agency_id, title, document_type, comment_end_date, docket_id, CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0 ORDER BY comment_end_date ASC LIMIT 50"
+                },
+                "explore_lobbying_client": {
+                    "title": "Explore: Lobbying Client Search",
+                    "description": "Search lobbying clients by name with total spending and firm counts.",
+                    "sql": "SELECT client_name, SUM(income_amount) AS total_income, COUNT(DISTINCT registrant_name) AS firm_count, COUNT(*) AS filing_count, COUNT(DISTINCT issue_code) AS issue_count, MIN(filing_year) AS year_from, MAX(filing_year) AS year_to FROM lobbying_activities WHERE client_name LIKE '%' || :name || '%' GROUP BY client_name ORDER BY total_income DESC LIMIT 50",
+                    "params": ["name"]
+                },
+                "explore_lobbying_activity": {
+                    "title": "Explore: Client Lobbying Activity",
+                    "description": "Lobbying activity records for a specific client.",
+                    "sql": "SELECT registrant_name, filing_year, filing_period, issue_code, income_amount, specific_issues, government_entities FROM lobbying_activities WHERE client_name = :client_name ORDER BY filing_year DESC, filing_period DESC LIMIT 100",
+                    "params": ["client_name"]
+                },
+                "explore_lobbying_lobbyists": {
+                    "title": "Explore: Client Lobbyists",
+                    "description": "Lobbyists working for a specific client, including covered government positions.",
+                    "sql": "SELECT DISTINCT ll.lobbyist_name, ll.covered_position FROM lobbying_lobbyists ll JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid WHERE la.client_name = :client_name ORDER BY ll.lobbyist_name LIMIT 100",
+                    "params": ["client_name"]
+                },
+                "explore_lobbying_issues": {
+                    "title": "Explore: Lobbying Issue Areas",
+                    "description": "All lobbying issue areas with filing counts and client counts.",
+                    "sql": "SELECT la.issue_code, ic.description, COUNT(*) AS filing_count, COUNT(DISTINCT la.client_name) AS client_count, SUM(la.income_amount) AS total_income FROM lobbying_activities la LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code GROUP BY la.issue_code ORDER BY filing_count DESC"
+                },
+                "explore_revolving_door": {
+                    "title": "Explore: Revolving Door",
+                    "description": "Lobbyists with prior government positions (covered positions) and their current clients.",
+                    "sql": "SELECT ll.lobbyist_name, ll.covered_position, la.client_name, la.registrant_name, la.filing_year FROM lobbying_lobbyists ll JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' AND ll.covered_position != 'N/A' ORDER BY la.filing_year DESC LIMIT 200"
+                }
+            }
+        },
+        "aphis": {
+            "tables": {
+                "facilities": {
+                    "label_column": "legal_name",
+                    "description_html": "USDA APHIS-licensed animal welfare facilities including breeders, dealers, exhibitors, and research labs. 15,000+ facilities across all 50 states.",
+                    "facets": ["site_state", "license_type", "status"],
+                    "sort": "legal_name"
+                },
+                "inspections": {
+                    "description_html": "APHIS inspection records for licensed facilities. 110,000+ inspections from 2014\u2013present with violation counts and links to official reports.",
+                    "facets": ["inspection_type"],
+                    "sort_desc": "inspection_date"
+                },
+                "enforcement_actions": {
+                    "description_html": "Formal enforcement actions (fines, suspensions, revocations) taken against APHIS-licensed facilities.",
+                    "sort_desc": "action_date"
+                },
+                "teachable_moments": {
+                    "description_html": "Teachable moment citations issued during APHIS inspections, categorized by type.",
+                    "facets": ["category"],
+                    "sort_desc": "inspection_date"
+                },
+                "annual_reports": {
+                    "description_html": "Annual animal usage reports submitted by research facilities, broken down by species and USDA pain categories (C, D, E).",
+                    "sort_desc": "report_year"
+                }
+            },
+            "queries": {
+                "search_facilities": {
+                    "title": "Search Facilities",
+                    "description": "Full-text search across facility names, cities, and states.",
+                    "sql": "SELECT f.cert_number, f.legal_name, f.dba_name, f.site_city, f.site_state, f.license_type, f.status, (SELECT COUNT(*) FROM inspections i WHERE i.cert_number = f.cert_number) AS inspection_count FROM facilities_fts JOIN facilities f ON f.rowid = facilities_fts.rowid WHERE facilities_fts MATCH :search ORDER BY rank LIMIT 200",
+                    "params": ["search"]
+                },
+                "facility_inspections": {
+                    "title": "Inspection History for a Facility",
+                    "description": "View all inspections for a specific facility by certificate number (e.g., 43-A-0001).",
+                    "sql": "SELECT i.inspection_date, i.inspection_type, i.critical_count, i.noncritical_count, i.direct_count, i.teachable_moment_count, f.legal_name, f.site_city, f.site_state FROM inspections i JOIN facilities f ON f.cert_number = i.cert_number WHERE i.cert_number = :cert_number ORDER BY i.inspection_date DESC",
+                    "params": ["cert_number"]
+                },
+                "facilities_by_state": {
+                    "title": "Facilities by State",
+                    "description": "Count of APHIS-licensed facilities in each state, broken down by license type.",
+                    "sql": "SELECT site_state, license_type, COUNT(*) AS facility_count FROM facilities WHERE site_state <> '' GROUP BY site_state, license_type ORDER BY site_state, facility_count DESC"
+                },
+                "recent_inspections": {
+                    "title": "Recent Inspections",
+                    "description": "The most recent APHIS inspections across all facilities.",
+                    "sql": "SELECT i.inspection_date, i.cert_number, f.legal_name, f.site_city, f.site_state, i.inspection_type, i.critical_count, i.noncritical_count, i.direct_count FROM inspections i JOIN facilities f ON f.cert_number = i.cert_number ORDER BY i.inspection_date DESC LIMIT 200"
+                },
+                "critical_violations": {
+                    "title": "Inspections with Critical Violations",
+                    "description": "Inspections where critical (serious) violations were found.",
+                    "sql": "SELECT i.inspection_date, i.cert_number, f.legal_name, f.site_city, f.site_state, f.license_type, i.critical_count, i.noncritical_count, i.direct_count FROM inspections i JOIN facilities f ON f.cert_number = i.cert_number WHERE i.critical_count > 0 ORDER BY i.inspection_date DESC LIMIT 200"
+                },
+                "worst_violators": {
+                    "title": "Facilities with Most Violations",
+                    "description": "Facilities ranked by total critical + noncritical + direct violations across all inspections.",
+                    "sql": "SELECT f.cert_number, f.legal_name, f.site_city, f.site_state, f.license_type, COUNT(*) AS total_inspections, SUM(i.critical_count) AS total_critical, SUM(i.noncritical_count) AS total_noncritical, SUM(i.direct_count) AS total_direct, SUM(i.critical_count) + SUM(i.noncritical_count) + SUM(i.direct_count) AS total_violations FROM inspections i JOIN facilities f ON f.cert_number = i.cert_number GROUP BY i.cert_number HAVING total_violations > 0 ORDER BY total_violations DESC LIMIT 100"
+                },
+                "facilities_by_type": {
+                    "title": "Facilities by License Type",
+                    "description": "Browse facilities filtered by license type (e.g., Class A - Breeder, Class C - Exhibitor, Class B - Dealer, Class R - Research Facility).",
+                    "sql": "SELECT cert_number, legal_name, dba_name, site_city, site_state, status FROM facilities WHERE license_type = :license_type ORDER BY legal_name LIMIT 500",
+                    "params": ["license_type"]
+                },
+                "inspection_trends": {
+                    "title": "Inspection Trends by Year",
+                    "description": "Annual inspection counts with violation breakdowns.",
+                    "sql": "SELECT CAST(strftime('%Y', inspection_date) AS INTEGER) AS year, COUNT(*) AS inspections, SUM(CASE WHEN critical_count > 0 THEN 1 ELSE 0 END) AS with_critical, SUM(critical_count) AS total_critical, SUM(noncritical_count) AS total_noncritical, SUM(direct_count) AS total_direct FROM inspections WHERE inspection_date IS NOT NULL GROUP BY year ORDER BY year DESC"
+                }
+            }
+        },
+        "lobbying": {
+            "tables": {
+                "lobbying_filings_raw": {
+                    "label_column": "registrant_name",
+                    "description_html": "Raw lobbying disclosure filings from the Senate Office of Public Records (SOPR). Each row is a single filing — registrations, quarterly reports, amendments, and terminations. Includes registrant and client names, reported income/expenses, filing period, and the full raw JSON from the API.",
+                    "facets": ["filing_type", "filing_year", "filing_period", "is_amendment", "is_no_activity", "is_termination"],
+                    "sort_desc": "received_date"
+                },
+                "lobbying_registrations": {
+                    "label_column": "registrant_name",
+                    "description_html": "Lobbying registrations (LD-1 forms) filed when a lobbying firm or organization first registers to lobby on behalf of a client. Includes effective dates and client details.",
+                    "facets": ["filing_type"],
+                    "sort_desc": "received_date"
+                },
+                "lobbying_activities": {
+                    "label_column": "client_name",
+                    "description_html": "Individual lobbying activities reported in quarterly filings. Each row is one issue area for one client — includes the specific issues lobbied on, government entities contacted, and income/expense amounts.",
+                    "facets": ["issue_code", "filing_year", "filing_period"],
+                    "sort_desc": "filing_year"
+                },
+                "lobbying_lobbyists": {
+                    "label_column": "lobbyist_name",
+                    "description_html": "Individual lobbyists listed on lobbying filings. Includes covered positions (prior government roles) and whether the lobbyist is newly added to the filing.",
+                    "facets": ["is_new"],
+                    "sort": "lobbyist_name"
+                },
+                "lobbying_contributions": {
+                    "label_column": "recipient_name",
+                    "description_html": "Political contributions reported by lobbyists on LD-203 forms. Includes contribution amounts, recipients, and dates — required disclosures for registered lobbyists.",
+                    "facets": ["contribution_type", "filing_year"],
+                    "sort_desc": "contribution_date"
+                },
+                "lobbying_issue_codes": {
+                    "label_column": "description",
+                    "description_html": "Reference table of lobbying issue area codes (e.g., ENV = Environment/Superfund, HCR = Health Issues, TAX = Taxation/Internal Revenue Code). Used in lobbying_activities.",
+                    "sort": "code"
+                },
+                "lobbying_gov_entities": {
+                    "label_column": "name",
+                    "description_html": "Government entities contacted during lobbying activities — Congress, executive agencies, and White House offices.",
+                    "sort": "name"
+                },
+                "lobbying_filing_types": {
+                    "label_column": "name",
+                    "description_html": "Reference table of lobbying filing types (registrations, quarterly reports, amendments, terminations).",
+                    "sort": "id"
+                }
+            },
+            "queries": {
+                "search_lobbying_clients": {
+                    "title": "Search Lobbying Clients",
+                    "description": "Search for a client by name across all lobbying activity filings. Find who is lobbying on their behalf and on what issues.",
+                    "sql": "SELECT DISTINCT client_name, registrant_name, issue_code, filing_year, filing_period, CAST(income_amount AS INTEGER) AS income, government_entities, substr(specific_issues, 1, 300) AS issues_excerpt FROM lobbying_activities WHERE client_name LIKE '%' || :client_name || '%' ORDER BY filing_year DESC, filing_period DESC LIMIT 200",
+                    "params": ["client_name"]
+                },
+                "lobbying_by_issue_area": {
+                    "title": "Lobbying by Issue Area",
+                    "description": "Count of lobbying activity filings by issue code, showing which policy areas attract the most lobbying.",
+                    "sql": "SELECT la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description, COUNT(*) AS filing_count, COUNT(DISTINCT la.client_name) AS unique_clients, COUNT(DISTINCT la.registrant_name) AS unique_registrants, CAST(SUM(la.income_amount) AS INTEGER) AS total_income FROM lobbying_activities la LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code GROUP BY la.issue_code ORDER BY filing_count DESC"
+                },
+                "top_lobbying_clients_by_spending": {
+                    "title": "Top Lobbying Clients by Spending",
+                    "description": "Clients that spend the most on lobbying, ranked by total reported income across all filings and issue areas.",
+                    "sql": "SELECT client_name, COUNT(*) AS activity_count, COUNT(DISTINCT registrant_name) AS firms_hired, COUNT(DISTINCT issue_code) AS issue_areas, CAST(SUM(income_amount) AS INTEGER) AS total_reported, MIN(filing_year) AS first_year, MAX(filing_year) AS last_year FROM lobbying_activities WHERE income_amount > 0 GROUP BY client_name ORDER BY total_reported DESC LIMIT 100"
+                },
+                "top_lobbying_firms": {
+                    "title": "Top Lobbying Firms (Registrants)",
+                    "description": "Lobbying firms (registrants) ranked by total reported income across all clients and filings.",
+                    "sql": "SELECT registrant_name, COUNT(*) AS activity_count, COUNT(DISTINCT client_name) AS unique_clients, COUNT(DISTINCT issue_code) AS issue_areas, CAST(SUM(income_amount) AS INTEGER) AS total_income, MIN(filing_year) AS first_year, MAX(filing_year) AS last_year FROM lobbying_activities WHERE income_amount > 0 GROUP BY registrant_name ORDER BY total_income DESC LIMIT 100"
+                },
+                "lobbying_activity_for_client": {
+                    "title": "Lobbying Activity for a Client",
+                    "description": "Detailed lobbying activity for a specific client — every issue area, government entity contacted, and specific issues lobbied on.",
+                    "sql": "SELECT la.filing_year, la.filing_period, la.registrant_name, la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description, la.government_entities, la.specific_issues, CAST(la.income_amount AS INTEGER) AS income, CAST(la.expense_amount AS INTEGER) AS expenses FROM lobbying_activities la LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code WHERE la.client_name = :client_name ORDER BY la.filing_year DESC, la.filing_period DESC LIMIT 500",
+                    "params": ["client_name"]
+                },
+                "lobbyists_for_client": {
+                    "title": "Lobbyists for a Client",
+                    "description": "Individual lobbyists who have lobbied on behalf of a specific client, including their covered government positions.",
+                    "sql": "SELECT DISTINCT ll.lobbyist_name, ll.covered_position, la.registrant_name, la.client_name, la.filing_year, la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description FROM lobbying_lobbyists ll JOIN lobbying_activities la ON ll.filing_uuid = la.filing_uuid LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code WHERE la.client_name LIKE '%' || :client_name || '%' ORDER BY la.filing_year DESC, ll.lobbyist_name LIMIT 500",
+                    "params": ["client_name"]
+                },
+                "lobbying_spending_over_time": {
+                    "title": "Lobbying Spending Over Time",
+                    "description": "Total reported lobbying income by year, showing spending trends across the lobbying industry.",
+                    "sql": "SELECT filing_year, COUNT(*) AS activity_count, COUNT(DISTINCT client_name) AS unique_clients, COUNT(DISTINCT registrant_name) AS unique_registrants, CAST(SUM(income_amount) AS INTEGER) AS total_income, CAST(SUM(expense_amount) AS INTEGER) AS total_expenses FROM lobbying_activities WHERE filing_year IS NOT NULL GROUP BY filing_year ORDER BY filing_year DESC"
+                },
+                "search_specific_issues": {
+                    "title": "Search Specific Issues",
+                    "description": "Full-text search on the specific issues described in lobbying filings. Find lobbying related to any topic, bill, or regulation.",
+                    "sql": "SELECT la.client_name, la.registrant_name, la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description, la.filing_year, la.filing_period, la.government_entities, la.specific_issues, CAST(la.income_amount AS INTEGER) AS income FROM lobbying_activities la LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code WHERE la.specific_issues LIKE '%' || :search || '%' ORDER BY la.filing_year DESC, la.income_amount DESC LIMIT 200",
+                    "params": ["search"]
+                },
+                "lobbyists_with_government_positions": {
+                    "title": "Lobbyists with Government Positions",
+                    "description": "Lobbyists who held covered government positions (revolving door) — former congressional staff, executive branch officials, and other government roles.",
+                    "sql": "SELECT DISTINCT ll.lobbyist_name, ll.covered_position, la.registrant_name, la.client_name, la.filing_year FROM lobbying_lobbyists ll JOIN lobbying_activities la ON ll.filing_uuid = la.filing_uuid WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' ORDER BY ll.lobbyist_name, la.filing_year DESC LIMIT 500"
+                },
+                "political_contributions_by_lobbyists": {
+                    "title": "Political Contributions by Lobbyists",
+                    "description": "Search political contributions reported by registered lobbyists. Enter a lobbyist name, recipient name, or leave blank for top contributions.",
+                    "sql": "SELECT lc.lobbyist_name, lc.contributor_name, lc.recipient_name, lc.payee_name, lc.contribution_type, CAST(lc.amount AS INTEGER) AS amount, lc.contribution_date, lc.filing_year FROM lobbying_contributions lc WHERE (:search = '' OR lc.lobbyist_name LIKE '%' || :search || '%' OR lc.recipient_name LIKE '%' || :search || '%' OR lc.contributor_name LIKE '%' || :search || '%') ORDER BY lc.amount DESC, lc.contribution_date DESC LIMIT 200",
+                    "params": ["search"]
+                }
+            }
+        }
+    }
+}

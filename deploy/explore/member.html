@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Profiles — OpenRegs Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon {
+            padding: 0 1rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        /* Filter chips */
+        .filters {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin: 1.5rem auto 0;
+            max-width: 800px;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: all 0.3s;
+            border-radius: 6px;
+        }
+
+        .chip:hover {
+            color: var(--text-secondary);
+            background: var(--surface-hover);
+        }
+
+        .chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        /* Examples */
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .example-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.03em;
+        }
+
+        .example-chip:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .ticker-chip {
+            font-weight: 500;
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.2);
+            background: rgba(245, 158, 11, 0.04);
+        }
+
+        .ticker-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0.5rem 2rem 1rem;
+        }
+        .ticker-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Results */
+        .results-area {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 3rem;
+        }
+
+        .results-status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+            min-height: 1.2em;
+        }
+
+        .results-status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+            cursor: pointer;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .member-name {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .party-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            flex-shrink: 0;
+            letter-spacing: 0.05em;
+        }
+
+        .party-badge.dem { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .party-badge.rep { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        .party-badge.ind { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.5rem;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .card-stats {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+        }
+
+        .card-stats span { color: var(--dawn-gold); font-weight: 400; }
+
+        .source-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--dawn-amber);
+            text-decoration: none;
+            opacity: 0.8;
+        }
+        .source-link:hover { opacity: 1; text-decoration: underline; }
+        .doc-link { color: var(--dawn-gold); text-decoration: none; }
+        .doc-link:hover { text-decoration: underline; }
+
+        .back-btn {
+            display: inline-block; margin-top: 0.5rem; padding: 0.3rem 0.7rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+            color: var(--dawn-gold); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .back-btn:hover { background: rgba(245, 158, 11, 0.08); }
+
+        .top-list { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1rem; }
+        .top-item {
+            display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem;
+            background: var(--surface); border-radius: 6px; cursor: pointer; transition: background 0.2s;
+        }
+        .top-item:hover { background: var(--surface-hover); }
+        .top-rank {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            color: var(--text-muted); min-width: 1.5rem; text-align: right;
+        }
+        .top-info { flex: 1; min-width: 0; }
+        .top-name { font-size: 0.85rem; color: var(--text-primary); }
+        .top-meta { font-size: 0.7rem; color: var(--text-muted); }
+
+        .ticker-link { color: var(--dawn-gold); text-decoration: none; font-weight: 500; }
+        .ticker-link:hover { text-decoration: underline; }
+
+        .bill-expand { margin-top: 0; }
+        .expand-list {
+            margin-top: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2);
+            border-radius: 6px; max-height: 300px; overflow-y: auto;
+        }
+        .expand-item {
+            padding: 0.35rem 0.5rem; border-radius: 4px; cursor: pointer;
+            font-size: 0.8rem; transition: background 0.2s;
+        }
+        .expand-item:hover { background: var(--surface-hover); }
+        .expand-note { font-size: 0.8rem; color: var(--text-muted); padding: 0.5rem 0; }
+        .loading-inline { font-size: 0.8rem; color: var(--text-muted); padding: 0.3rem 0; }
+
+        .cross-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .cross-link {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--dawn-gold);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .cross-link:hover { background: rgba(245, 158, 11, 0.08); border-color: var(--dawn-amber); }
+
+        .load-more-btn {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--dawn-gold);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .load-more-btn:hover { background: rgba(245, 158, 11, 0.08); }
+
+        /* Detail panel */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+
+        .detail-overlay.visible { display: block; }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            overflow-y: auto;
+            z-index: 1001;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+
+        .detail-panel.visible { transform: translateX(0); }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1.5rem 2rem 0;
+            transition: color 0.3s;
+        }
+
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .detail-header {
+            padding: 1rem 2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-header .member-name {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-header .meta-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .detail-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+        }
+
+        .detail-tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            padding: 1rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: color 0.3s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .detail-tab:hover { color: var(--text-secondary); }
+
+        .detail-tab.active {
+            color: var(--dawn-gold);
+            border-bottom-color: var(--dawn-amber);
+        }
+
+        .detail-content {
+            padding: 2rem;
+        }
+
+        /* Overview tab */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .overview-item {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .overview-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.3rem;
+        }
+
+        .overview-value {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .overview-value.big {
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        /* Committees list */
+        .committee-list {
+            list-style: none;
+            margin-top: 1rem;
+        }
+
+        .committee-list li {
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .committee-list li .title-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--dawn-amber);
+            background: rgba(245, 158, 11, 0.08);
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            margin-left: 0.5rem;
+        }
+
+        /* Data tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .data-table th {
+            text-align: left;
+            padding: 0.6rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
+        }
+
+        .data-table td {
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .data-table tr:hover td { background: var(--surface); }
+
+        .data-table .money {
+            color: var(--dawn-gold);
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 500;
+        }
+
+        .data-table a {
+            color: var(--dawn-amber);
+            text-decoration: none;
+        }
+
+        .data-table a:hover { text-decoration: underline; }
+
+        /* Speech cards */
+        .speech-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .speech-card .speech-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+        }
+
+        .speech-card .speech-meta {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.03em;
+        }
+
+        .speech-card .speech-excerpt {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.5;
+        }
+
+        /* Bill cards */
+        .bill-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .bill-card .bill-number {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--dawn-amber);
+            margin-bottom: 0.3rem;
+            letter-spacing: 0.05em;
+        }
+
+        .bill-card .bill-title {
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .bill-card .bill-meta {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.3rem;
+        }
+
+        .bill-card .bill-action {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            margin-top: 0.3rem;
+        }
+
+        .type-badge {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 500;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .type-badge.purchase { background: rgba(34,197,94,0.12); color: #4ade80; }
+        .type-badge.sale { background: rgba(239,68,68,0.12); color: #f87171; }
+        .type-badge.exchange { background: rgba(168,85,247,0.12); color: #c084fc; }
+
+        /* Loading & empty */
+        .loading { text-align: center; padding: 3rem; }
+
+        .loading-dots { display: inline-flex; gap: 0.4rem; }
+
+        .loading-dots span {
+            width: 6px; height: 6px;
+            background: var(--dawn-amber);
+            border-radius: 50%;
+            animation: loadPulse 1.2s ease-in-out infinite;
+        }
+
+        .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes loadPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 300;
+        }
+
+        .empty-state .hint {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 1rem;
+            opacity: 0.6;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            padding-bottom: 4rem;
+        }
+
+        .page-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.05em;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 2.5rem 1.5rem 1.5rem; }
+            .search-container { padding: 0 1.5rem; }
+            .filters { padding: 0 1.5rem; }
+            .results-area { padding: 0 1.5rem; }
+            .card-header { flex-direction: column; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html" class="active">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Member profiles</h1>
+        <p>Search 12,700+ current and historical members of Congress. Stock trades, floor speeches, legislation, and committee assignments.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search by name, state, party, or stock ticker..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+    </div>
+
+    <div class="filters">
+        <div class="chip active" data-filter="current">Current Members</div>
+        <div class="chip" data-filter="senate">Senate</div>
+        <div class="chip" data-filter="house">House</div>
+        <div class="chip" data-filter="all">All Members</div>
+    </div>
+
+    <div class="ticker-bar" id="tickerBar">
+        <span class="ticker-label">Search by ticker:</span>
+        <span class="example-chip ticker-chip" data-ticker="MSFT">MSFT</span>
+        <span class="example-chip ticker-chip" data-ticker="AAPL">AAPL</span>
+        <span class="example-chip ticker-chip" data-ticker="NVDA">NVDA</span>
+        <span class="example-chip ticker-chip" data-ticker="AMZN">AMZN</span>
+        <span class="example-chip ticker-chip" data-ticker="DIS">DIS</span>
+    </div>
+
+    <div class="results-area">
+        <div class="results-status" id="resultsStatus"></div>
+        <div id="results">
+            <div class="empty-state">
+                <div class="empty-icon">&#9670;</div>
+                <p>Search for any member of Congress — current or historical</p>
+                <div class="hint">Stock trades, floor speeches, legislation, and committees</div>
+                <div class="examples">
+                    <span class="example-chip" data-query="Pelosi">Pelosi</span>
+                    <span class="example-chip" data-query="Cruz">Cruz</span>
+                    <span class="example-chip" data-query="Warren">Warren</span>
+                    <span class="example-chip" data-query="Tuberville">Tuberville</span>
+                    <span class="example-chip" data-query="Sanders">Sanders</span>
+                    <span class="example-chip" data-query="TX">Texas (TX)</span>
+                </div>
+            </div>
+        </div>
+        <div class="pagination" id="pagination" style="display:none;">
+            <button class="page-btn" id="prevBtn" disabled>&larr; Previous</button>
+            <button class="page-btn" id="nextBtn">Next &rarr;</button>
+        </div>
+    </div>
+
+    <!-- Detail slide-over panel -->
+    <div class="detail-overlay" id="detailOverlay"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" id="detailClose">&larr; Back to results</button>
+            <div class="detail-header" id="detailHeader"></div>
+            <div class="detail-tabs" id="detailTabs">
+                <button class="detail-tab active" data-tab="overview">Overview</button>
+                <button class="detail-tab" data-tab="votes">Votes</button>
+                <button class="detail-tab" data-tab="donors">Donors</button>
+                <button class="detail-tab" data-tab="trades">Trades</button>
+                <button class="detail-tab" data-tab="speeches">Speeches</button>
+                <button class="detail-tab" data-tab="bills">Legislation</button>
+            </div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '';
+        const API = API_BASE + '/openregs';
+
+        let currentFilter = 'current';
+        let currentQuery = '';
+        let currentOffset = 0;
+        const PAGE_SIZE = 30;
+        let hasMore = false;
+        let currentMember = null;
+        let currentDetailTab = 'overview';
+
+        // Cache for detail data
+        const detailCache = {};
+
+        // Elements
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('resultsStatus');
+        const paginationDiv = document.getElementById('pagination');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const chips = document.querySelectorAll('.chip');
+        const examples = document.querySelectorAll('.example-chip');
+        const detailOverlay = document.getElementById('detailOverlay');
+        const detailPanel = document.getElementById('detailPanel');
+        const detailClose = document.getElementById('detailClose');
+        const detailHeader = document.getElementById('detailHeader');
+        const detailTabs = document.getElementById('detailTabs');
+        const detailContent = document.getElementById('detailContent');
+
+        // URL state
+        function readURL() {
+            const p = new URLSearchParams(location.search);
+            if (p.get('q')) searchInput.value = p.get('q');
+            if (p.get('filter')) {
+                currentFilter = p.get('filter');
+                chips.forEach(c => c.classList.toggle('active', c.dataset.filter === currentFilter));
+            }
+            if (p.get('member') || p.get('id')) {
+                // Load member detail on page load (supports both ?member= and ?id=)
+                setTimeout(() => openMember(p.get('member') || p.get('id')), 300);
+            }
+            currentQuery = searchInput.value.trim();
+            doSearch();
+        }
+
+        function writeURL() {
+            const p = new URLSearchParams();
+            if (currentQuery) p.set('q', currentQuery);
+            if (currentFilter !== 'current') p.set('filter', currentFilter);
+            if (currentMember) p.set('member', currentMember);
+            const qs = p.toString();
+            history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+        }
+
+        // Utility functions
+        function esc(str) {
+            if (str == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        function truncate(str, len) {
+            if (!str) return '';
+            return str.length > len ? str.slice(0, len) + '...' : str;
+        }
+
+        function formatNumber(n) {
+            if (n == null) return '0';
+            return Number(n).toLocaleString();
+        }
+
+        function formatMoney(val) {
+            if (val == null || val === '') return '\u2014';
+            const num = Number(val);
+            if (isNaN(num)) return val;
+            if (Math.abs(num) >= 1e9) return '$' + (num / 1e9).toFixed(1) + 'B';
+            if (Math.abs(num) >= 1e6) return '$' + (num / 1e6).toFixed(1) + 'M';
+            if (Math.abs(num) >= 1e3) return '$' + (num / 1e3).toFixed(0) + 'K';
+            return '$' + num.toLocaleString();
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function partyBadge(party) {
+            const p = (party || '').charAt(0).toUpperCase();
+            if (p === 'D') return '<span class="party-badge dem">D</span>';
+            if (p === 'R') return '<span class="party-badge rep">R</span>';
+            return '<span class="party-badge ind">' + esc(p || 'I') + '</span>';
+        }
+
+        function tradeBadge(type) {
+            const t = (type || '').toLowerCase();
+            if (t.includes('purchase')) return '<span class="type-badge purchase">Buy</span>';
+            if (t.includes('sale')) return '<span class="type-badge sale">Sell</span>';
+            if (t.includes('exchange')) return '<span class="type-badge exchange">Exchange</span>';
+            return '<span class="type-badge" style="background:var(--surface);color:var(--text-muted);">' + esc(type || 'Other') + '</span>';
+        }
+
+        // Filter chips
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                currentFilter = chip.dataset.filter;
+                currentOffset = 0;
+                doSearch();
+            });
+        });
+
+        // Example chips
+        examples.forEach(chip => {
+            chip.addEventListener('click', () => {
+                if (chip.dataset.ticker) {
+                    openTicker(chip.dataset.ticker);
+                } else if (chip.dataset.query) {
+                    searchInput.value = chip.dataset.query;
+                    currentOffset = 0;
+                    doSearch();
+                }
+            });
+        });
+
+        // Search triggers
+        searchBtn.addEventListener('click', () => { currentOffset = 0; doSearch(); });
+        searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { currentOffset = 0; doSearch(); } });
+
+        // Pagination
+        prevBtn.addEventListener('click', () => { if (currentOffset >= PAGE_SIZE) { currentOffset -= PAGE_SIZE; doSearch(); } });
+        nextBtn.addEventListener('click', () => { if (hasMore) { currentOffset += PAGE_SIZE; doSearch(); } });
+
+        // Detail panel
+        detailClose.addEventListener('click', closeDetail);
+        detailOverlay.addEventListener('click', closeDetail);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+        detailTabs.querySelectorAll('.detail-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                detailTabs.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentDetailTab = tab.dataset.tab;
+                loadDetailTab();
+            });
+        });
+
+        function looksLikeTicker(q) {
+            return /^[A-Za-z]{1,5}$/.test(q.trim());
+        }
+
+        async function doSearch() {
+            currentQuery = searchInput.value.trim();
+            writeURL();
+
+            // Smart ticker detection: if query looks like a stock ticker, go straight to ticker view
+            if (currentQuery && looksLikeTicker(currentQuery)) {
+                resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+                statusDiv.textContent = 'Checking ticker...';
+                paginationDiv.style.display = 'none';
+                try {
+                    const tq = currentQuery.toUpperCase().replace(/'/g, "''");
+                    const tickerCheck = await query(`SELECT COUNT(*) AS cnt FROM stock_trades WHERE ticker = '${tq}'`);
+                    if (tickerCheck[0] && tickerCheck[0].cnt > 0) {
+                        openTicker(tq);
+                        return;
+                    }
+                } catch (e) { /* fall through to normal search */ }
+            }
+
+            resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            statusDiv.textContent = '';
+            paginationDiv.style.display = 'none';
+
+            try {
+                let where = [];
+                const q = currentQuery.replace(/'/g, "''");
+
+                if (q) {
+                    // Search by name, state code, or party
+                    where.push(`(full_name LIKE '%${q}%' OR state = '${q.toUpperCase()}' OR party LIKE '${q}%')`);
+                }
+
+                if (currentFilter === 'current') where.push('is_current = 1');
+                else if (currentFilter === 'senate') where.push("chamber = 'Senate'");
+                else if (currentFilter === 'house') where.push("chamber = 'House'");
+                // 'all' has no extra filter
+
+                const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+
+                const sql = `
+                    SELECT bioguide_id, full_name, party, state, chamber,
+                           is_current, first_served, last_served,
+                           COALESCE(trade_count, 0) AS trade_count,
+                           COALESCE(speech_count, 0) AS speech_count,
+                           COALESCE(bills_sponsored, 0) AS bills_sponsored,
+                           COALESCE(vote_count, 0) AS vote_count,
+                           COALESCE(fec_total_received, 0) AS fec_total_received
+                    FROM congress_members
+                    ${whereClause}
+                    ORDER BY is_current DESC, trade_count DESC
+                    LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+                `;
+
+                const rows = await query(sql);
+                hasMore = rows.length > PAGE_SIZE;
+                const display = rows.slice(0, PAGE_SIZE);
+
+                if (display.length === 0) {
+                    resultsDiv.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">&empty;</div>
+                            <p>No members found${currentQuery ? ' for "' + esc(currentQuery) + '"' : ''}</p>
+                            <div class="hint">Try a different name, state code (e.g. TX), or party</div>
+                        </div>`;
+                    statusDiv.textContent = '0 results';
+                    return;
+                }
+
+                const offsetLabel = currentOffset > 0 ? ` (${currentOffset + 1}\u2013${currentOffset + display.length})` : '';
+                const dateLabel = statsDate ? `<span style="float:right;font-size:0.72rem;color:var(--text-muted);font-family:'IBM Plex Mono',monospace;">Activity counts as of ${statsDate}</span>` : '';
+                const filterLabel = !currentQuery ? {current: 'current', senate: 'Senate', house: 'House', all: 'all'}[currentFilter] || '' : '';
+                const sortLabel = !currentQuery ? ', sorted by most stock trades' : '';
+                statusDiv.innerHTML = `<span class="count">${display.length}${hasMore ? '+' : ''}</span> ${filterLabel} members${offsetLabel}${sortLabel}${dateLabel}`;
+
+                resultsDiv.innerHTML = display.map(r => `
+                    <div class="result-card" data-bioguide="${esc(r.bioguide_id)}" onclick="openMember('${esc(r.bioguide_id)}')">
+                        <div class="card-header">
+                            <div class="member-name">${esc(r.full_name)}</div>
+                            ${partyBadge(r.party)}
+                        </div>
+                        <div class="card-meta">
+                            <span class="meta-item">${esc(r.state)}</span>
+                            <span class="meta-item">${esc(r.chamber)}</span>
+                            ${r.is_current ? '<span class="meta-item" style="color:var(--dawn-amber);">Current</span>' : '<span class="meta-item">' + esc((r.first_served||'') + ' \u2013 ' + (r.last_served||'')) + '</span>'}
+                        </div>
+                        <div class="card-stats">
+                            <span>${formatNumber(r.vote_count)}</span> votes &middot;
+                            <span>${formatNumber(r.bills_sponsored)}</span> bills &middot;
+                            <span>${formatNumber(r.trade_count)}</span> trades
+                            ${r.fec_total_received > 0 ? ' &middot; <span>' + formatMoney(r.fec_total_received) + '</span> raised' : ''}
+                        </div>
+                    </div>
+                `).join('');
+
+                paginationDiv.style.display = 'flex';
+                prevBtn.disabled = currentOffset === 0;
+                nextBtn.disabled = !hasMore;
+
+            } catch (err) {
+                resultsDiv.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&#9888;</div>
+                        <p>Error fetching data</p>
+                        <div class="hint">${esc(err.message)}</div>
+                    </div>`;
+            }
+        }
+
+        async function openMember(bioguideId) {
+            currentMember = bioguideId;
+            writeURL();
+
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailContent.innerHTML = '';
+
+            // Reset to overview tab and show tabs
+            currentDetailTab = 'overview';
+            detailTabs.style.display = '';
+            detailTabs.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'overview'));
+
+            try {
+                const sql = `
+                    SELECT *
+                    FROM congress_members
+                    WHERE bioguide_id = '${bioguideId.replace(/'/g, "''")}'
+                `;
+                const rows = await query(sql);
+                if (rows.length === 0) {
+                    detailHeader.innerHTML = '<p style="padding:1rem;">Member not found</p>';
+                    return;
+                }
+
+                const m = rows[0];
+                detailCache[bioguideId] = m;
+
+                detailHeader.innerHTML = `
+                    <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+                        <div style="flex:1;">
+                            <div class="member-name">${esc(m.full_name)}</div>
+                            <div class="meta-row">
+                                ${partyBadge(m.party)}
+                                <span class="meta-item">${esc(m.state)}${m.district ? ' \u2013 District ' + m.district : ''}</span>
+                                <span class="meta-item">${esc(m.chamber)}</span>
+                                ${m.is_current ? '<span class="meta-item" style="color:var(--dawn-amber);">Current Member</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                loadDetailTab();
+
+            } catch (err) {
+                detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function openCommittee(committeeId, committeeName) {
+            detailTabs.style.display = 'none';
+            detailContent.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailHeader.innerHTML = `<div class="card-title" style="font-size:1.3rem;margin-bottom:0.3rem;">${esc(committeeName)}</div>
+                <button class="back-btn" onclick="openMember(currentMember)">&larr; Back to member</button>`;
+
+            try {
+                const cid = committeeId.replace(/'/g, "''");
+                const [info, members] = await Promise.all([
+                    query(`SELECT committee_id, name, chamber, url, parent_committee_id FROM committees WHERE committee_id = '${cid}'`),
+                    query(`
+                        SELECT cm2.bioguide_id, cm3.full_name, cm3.party, cm3.state, cm3.chamber, cm3.is_current,
+                            cm2.party AS party_side, cm2.title, cm2.rank,
+                            COALESCE(cm3.trade_count,0) AS trade_count,
+                            COALESCE(cm3.speech_count,0) AS speech_count,
+                            COALESCE(cm3.bills_sponsored,0) AS bills_sponsored
+                        FROM committee_memberships cm2
+                        JOIN congress_members cm3 ON cm3.bioguide_id = cm2.bioguide_id
+                        WHERE cm2.committee_id = '${cid}'
+                        ORDER BY cm2.rank ASC
+                    `)
+                ]);
+
+                const c = info[0] || {};
+                let html = '';
+
+                // Subcommittees
+                const subs = await query(`SELECT committee_id, name FROM committees WHERE parent_committee_id = '${cid}' ORDER BY name`);
+                if (subs.length > 0) {
+                    html += `<div class="section-title">Subcommittees (${subs.length})</div>`;
+                    html += '<ul class="committee-list">';
+                    html += subs.map(s => `<li onclick="openCommittee('${esc(s.committee_id)}', '${esc(s.name).replace(/'/g, "\\'")}')" style="cursor:pointer;">${esc(s.name)}</li>`).join('');
+                    html += '</ul>';
+                }
+
+                // Members
+                html += `<div class="section-title">Members (${members.length})</div>`;
+                html += '<div class="top-list">';
+                members.forEach(m => {
+                    const partyClass = m.party === 'Republican' ? 'party-r' : m.party === 'Democrat' ? 'party-d' : 'party-i';
+                    const partyLetter = m.party === 'Republican' ? 'R' : m.party === 'Democrat' ? 'D' : 'I';
+                    html += `<div class="top-item" onclick="openMember('${esc(m.bioguide_id)}')">
+                        <div class="top-info">
+                            <div class="top-name">
+                                <span class="party-badge ${partyClass}">${partyLetter}</span>
+                                ${esc(m.full_name)} <span style="color:var(--text-muted);font-size:0.75rem;">${esc(m.state)}</span>
+                                ${m.title ? '<span class="title-badge">' + esc(m.title) + '</span>' : ''}
+                            </div>
+                            <div class="top-meta">${formatNumber(m.trade_count)} trades &middot; ${formatNumber(m.speech_count)} speeches &middot; ${formatNumber(m.bills_sponsored)} bills</div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+
+                if (c.url) {
+                    html += `<div style="margin-top:1rem;"><a class="source-link" href="${esc(c.url)}" target="_blank" rel="noopener">Committee Website &rarr;</a></div>`;
+                }
+
+                detailContent.innerHTML = html;
+            } catch (err) {
+                detailContent.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        async function openTicker(ticker) {
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailTabs.style.display = 'none';
+            detailContent.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            const backBtn = currentMember ? `<button class="back-btn" onclick="openMember(currentMember)">&larr; Back to member</button>` : '';
+            detailHeader.innerHTML = `<div class="card-title" style="font-size:1.3rem;margin-bottom:0.3rem;">${esc(ticker)}</div>
+                <div style="font-size:0.85rem;color:var(--text-secondary);">All Congressional stock trades</div>
+                ${backBtn}`;
+
+            try {
+                const tSafe = ticker.replace(/'/g, "''");
+                const [members, totals, recent] = await Promise.all([
+                    query(`
+                        SELECT st.bioguide_id, cm.full_name, cm.party, cm.state, cm.is_current,
+                            COUNT(*) AS trade_count,
+                            SUM(CASE WHEN st.transaction_type IN ('Purchase','P') THEN 1 ELSE 0 END) AS buys,
+                            SUM(CASE WHEN st.transaction_type LIKE 'Sale%' OR st.transaction_type LIKE 'S%' THEN 1 ELSE 0 END) AS sells,
+                            MIN(st.transaction_date) AS first_trade,
+                            MAX(st.transaction_date) AS last_trade
+                        FROM stock_trades st
+                        JOIN congress_members cm ON cm.bioguide_id = st.bioguide_id
+                        WHERE st.ticker = '${tSafe}'
+                        GROUP BY st.bioguide_id
+                        ORDER BY trade_count DESC
+                    `),
+                    query(`
+                        SELECT COUNT(*) AS total_trades,
+                            COUNT(DISTINCT bioguide_id) AS member_count,
+                            SUM(CASE WHEN transaction_type IN ('Purchase','P') THEN 1 ELSE 0 END) AS total_buys,
+                            SUM(CASE WHEN transaction_type LIKE 'Sale%' OR transaction_type LIKE 'S%' THEN 1 ELSE 0 END) AS total_sells,
+                            MIN(transaction_date) AS first_trade,
+                            MAX(transaction_date) AS last_trade
+                        FROM stock_trades WHERE ticker = '${tSafe}'
+                    `),
+                    query(`
+                        SELECT st.transaction_date, st.transaction_type, st.amount_range, st.asset_description,
+                            cm.full_name, cm.party, st.bioguide_id
+                        FROM stock_trades st
+                        JOIN congress_members cm ON cm.bioguide_id = st.bioguide_id
+                        WHERE st.ticker = '${tSafe}'
+                        ORDER BY st.transaction_date DESC
+                        LIMIT 50
+                    `)
+                ]);
+
+                const t = totals[0] || {};
+                let html = '';
+
+                // Stats
+                html += '<div class="stat-grid">';
+                html += `<div class="stat-box"><div class="num">${formatNumber(t.total_trades)}</div><div class="label">Total Trades</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(t.member_count)}</div><div class="label">Members</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(t.total_buys)}</div><div class="label">Purchases</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(t.total_sells)}</div><div class="label">Sales</div></div>`;
+                html += '</div>';
+
+                // Members who traded
+                html += `<div class="section-title">Members Who Traded ${esc(ticker)} (${members.length})</div>`;
+                html += '<div class="top-list">';
+                members.forEach((m, i) => {
+                    const partyClass = m.party === 'Republican' ? 'party-r' : m.party === 'Democrat' ? 'party-d' : 'party-i';
+                    const partyLetter = m.party === 'Republican' ? 'R' : m.party === 'Democrat' ? 'D' : 'I';
+                    html += `<div class="top-item" onclick="openMember('${esc(m.bioguide_id)}')">
+                        <span class="top-rank">${i + 1}</span>
+                        <div class="top-info">
+                            <div class="top-name">
+                                <span class="party-badge ${partyClass}">${partyLetter}</span>
+                                ${esc(m.full_name)} <span style="color:var(--text-muted);font-size:0.75rem;">${esc(m.state)}</span>
+                                ${m.is_current ? '' : '<span style="color:var(--text-muted);font-size:0.65rem;"> (former)</span>'}
+                            </div>
+                            <div class="top-meta">${formatNumber(m.buys)} buys &middot; ${formatNumber(m.sells)} sells &middot; ${m.first_trade} to ${m.last_trade}</div>
+                        </div>
+                        <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-size:0.8rem;color:var(--dawn-gold);">${formatNumber(m.trade_count)}</div>
+                    </div>`;
+                });
+                html += '</div>';
+
+                // Recent trades timeline
+                html += `<div class="section-title">Recent Trades</div>`;
+                html += '<div class="top-list">';
+                recent.forEach(r => {
+                    const partyLetter = r.party === 'Republican' ? 'R' : r.party === 'Democrat' ? 'D' : 'I';
+                    const partyClass = r.party === 'Republican' ? 'party-r' : r.party === 'Democrat' ? 'party-d' : 'party-i';
+                    html += `<div class="top-item" onclick="openMember('${esc(r.bioguide_id)}')">
+                        <div class="top-info">
+                            <div class="top-name"><span class="party-badge ${partyClass}">${partyLetter}</span> ${esc(r.full_name)}</div>
+                            <div class="top-meta">${esc(r.transaction_date)} &middot; ${tradeBadge(r.transaction_type)} &middot; ${esc(r.amount_range || '')}</div>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+
+                detailContent.innerHTML = html;
+            } catch (err) {
+                detailContent.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        function closeDetail() {
+            detailOverlay.classList.remove('visible');
+            detailPanel.classList.remove('visible');
+            currentMember = null;
+            writeURL();
+        }
+
+        async function loadDetailTab() {
+            if (!currentMember) return;
+            const bid = currentMember.replace(/'/g, "''");
+            detailContent.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+
+            try {
+                switch (currentDetailTab) {
+                    case 'overview': await loadOverview(bid); break;
+                    case 'votes': await loadVotes(bid); break;
+                    case 'donors': await loadDonors(bid); break;
+                    case 'trades': await loadTrades(bid); break;
+                    case 'speeches': await loadSpeeches(bid); break;
+                    case 'bills': await loadBills(bid); break;
+                }
+            } catch (err) {
+                detailContent.innerHTML = `<div class="empty-state"><p>${esc(err.message)}</p></div>`;
+            }
+        }
+
+        async function loadOverview(bid) {
+            const m = detailCache[currentMember] || {};
+
+            // Get committees
+            const committees = await query(`
+                SELECT c.committee_id, c.name, c.chamber, cm.title, cm.rank
+                FROM committee_memberships cm
+                JOIN committees c ON c.committee_id = cm.committee_id
+                WHERE cm.bioguide_id = '${bid}'
+                ORDER BY cm.rank ASC
+            `);
+
+            let html = '<div class="overview-grid">';
+            html += `
+                <div class="overview-item">
+                    <div class="overview-label">Service</div>
+                    <div class="overview-value">${esc(m.first_served || '?')} \u2013 ${esc(m.last_served || 'Present')}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">Roll Call Votes</div>
+                    <div class="overview-value big">${formatNumber(m.vote_count)}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">Bills Sponsored</div>
+                    <div class="overview-value big">${formatNumber(m.bills_sponsored)}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">Floor Speeches</div>
+                    <div class="overview-value big">${formatNumber(m.speech_count)}</div>
+                </div>
+                <div class="overview-item">
+                    <div class="overview-label">Stock Trades</div>
+                    <div class="overview-value big">${formatNumber(m.trade_count)}</div>
+                </div>
+                ${m.fec_total_received > 0 ? '<div class="overview-item"><div class="overview-label">PAC/Committee $ Received</div><div class="overview-value big">' + formatMoney(m.fec_total_received) + '</div></div>' : ''}
+            `;
+            if (m.birthday) html += `<div class="overview-item"><div class="overview-label">Born</div><div class="overview-value">${esc(m.birthday)}</div></div>`;
+            if (m.gender) html += `<div class="overview-item"><div class="overview-label">Gender</div><div class="overview-value">${esc(m.gender === 'M' ? 'Male' : m.gender === 'F' ? 'Female' : m.gender)}</div></div>`;
+            html += '</div>';
+
+            if (committees.length > 0) {
+                html += '<div class="section-title">Committee Assignments</div>';
+                html += '<ul class="committee-list">';
+                html += committees.map(c =>
+                    `<li onclick="openCommittee('${esc(c.committee_id)}', '${esc(c.name).replace(/'/g, "\\'")}')" style="cursor:pointer;">${esc(c.name)}${c.title ? '<span class="title-badge">' + esc(c.title) + '</span>' : ''}</li>`
+                ).join('');
+                html += '</ul>';
+            }
+
+            // Cross-links to other explore pages
+            const lastName = (m.last_name || m.full_name.split(' ').pop()).toUpperCase();
+            html += '<div class="section-title">Explore Connections</div>';
+            html += '<div class="cross-links">';
+            html += `<a class="cross-link" href="/explore/lobbying.html?q=${encodeURIComponent(lastName)}&tab=revdoor">Lobbying &amp; Revolving Door &rarr;</a>`;
+            html += `<a class="cross-link" href="/explore/regulation.html?q=${encodeURIComponent(m.full_name)}">Regulations &amp; Dockets &rarr;</a>`;
+            html += '</div>';
+
+            detailContent.innerHTML = html;
+        }
+
+        const DETAIL_BATCH = 50;
+
+        function voteUrl(v) {
+            if (!v.source_url) return '';
+            if (v.chamber === 'House') {
+                const yr = (v.date || '').substring(0, 4);
+                const roll = String(v.roll_call_number).padStart(3, '0');
+                return yr ? 'https://clerk.house.gov/Votes/' + yr + roll : v.source_url.replace('.xml', '.htm');
+            }
+            return v.source_url.replace('.xml', '.htm');
+        }
+
+        function billUrl(billId) {
+            if (!billId) return '';
+            return '/explore/legislation.html?detail=' + encodeURIComponent(billId);
+        }
+
+        async function loadVotes(bid, offset = 0) {
+            const votes = await query(`
+                SELECT mv.congress, mv.chamber, mv.session, mv.roll_call_number,
+                       mv.vote_cast, rv.date, rv.question, rv.result, rv.bill_id,
+                       rv.yea_count, rv.nay_count, rv.description, rv.source_url
+                FROM member_votes mv
+                JOIN roll_call_votes rv ON rv.congress = mv.congress
+                    AND rv.chamber = mv.chamber AND rv.session = mv.session
+                    AND rv.roll_call_number = mv.roll_call_number
+                WHERE mv.bioguide_id = '${bid}'
+                ORDER BY rv.date DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            if (offset === 0 && votes.length === 0) {
+                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9745;</div><p>No roll call votes on record</p></div>';
+                return;
+            }
+
+            const hasMore = votes.length > DETAIL_BATCH;
+            const batch = votes.slice(0, DETAIL_BATCH);
+
+            function voteBadge(v) {
+                const colors = {Yea:'#22c55e', Nay:'#ef4444', Present:'#eab308', 'Not Voting':'#64748b'};
+                return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:3px;font-size:0.7rem;font-weight:500;background:' + (colors[v]||'#64748b') + '22;color:' + (colors[v]||'#64748b') + ';">' + esc(v) + '</span>';
+            }
+
+            if (offset === 0) {
+                const total = detailCache[currentMember]?.vote_count || '';
+                let html = `<div class="section-title">${total ? formatNumber(total) + ' total' : ''} roll call votes</div>`;
+                html += '<div style="overflow-x:auto;"><table class="data-table">';
+                html += '<thead><tr><th>Date</th><th>Vote</th><th>Question</th><th>Result</th><th>Bill</th></tr></thead><tbody id="voteBody">';
+                html += batch.map(v => {
+                    const vUrl = voteUrl(v);
+                    const bUrl = billUrl(v.bill_id);
+                    return `<tr>
+                    <td style="white-space:nowrap;">${vUrl ? '<a href="' + esc(vUrl) + '" target="_blank" rel="noopener">' + esc(v.date || '') + '</a>' : esc(v.date || '')}</td>
+                    <td>${voteBadge(v.vote_cast)}</td>
+                    <td>${vUrl ? '<a href="' + esc(vUrl) + '" target="_blank" rel="noopener" style="color:var(--text-primary);text-decoration:none;">' + esc(truncate(v.question || v.description || '', 80)) + '</a>' : esc(truncate(v.question || v.description || '', 80))}</td>
+                    <td style="white-space:nowrap;">${esc(v.result || '')}</td>
+                    <td style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">${bUrl ? '<a href="' + esc(bUrl) + '">' + esc(v.bill_id) + '</a>' : (v.bill_id ? esc(v.bill_id) : '\u2014')}</td>
+                </tr>`;
+                }).join('');
+                html += '</tbody></table></div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreVotes('${bid}', ${offset + DETAIL_BATCH})">Load more votes</button>`;
+                detailContent.innerHTML = html;
+            } else {
+                const tbody = document.getElementById('voteBody');
+                tbody.insertAdjacentHTML('beforeend', batch.map(v => {
+                    const vUrl = voteUrl(v);
+                    const bUrl = billUrl(v.bill_id);
+                    return `<tr>
+                    <td style="white-space:nowrap;">${vUrl ? '<a href="' + esc(vUrl) + '" target="_blank" rel="noopener">' + esc(v.date || '') + '</a>' : esc(v.date || '')}</td>
+                    <td>${voteBadge(v.vote_cast)}</td>
+                    <td>${vUrl ? '<a href="' + esc(vUrl) + '" target="_blank" rel="noopener" style="color:var(--text-primary);text-decoration:none;">' + esc(truncate(v.question || v.description || '', 80)) + '</a>' : esc(truncate(v.question || v.description || '', 80))}</td>
+                    <td style="white-space:nowrap;">${esc(v.result || '')}</td>
+                    <td style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;">${bUrl ? '<a href="' + esc(bUrl) + '">' + esc(v.bill_id) + '</a>' : (v.bill_id ? esc(v.bill_id) : '\u2014')}</td>
+                </tr>`;
+                }).join(''));
+                const btn = detailContent.querySelector('.load-more-btn');
+                if (btn) { if (hasMore) btn.onclick = () => loadMoreVotes(bid, offset + DETAIL_BATCH); else btn.remove(); }
+            }
+        }
+        window.loadMoreVotes = (bid, offset) => loadVotes(bid, offset);
+
+        async function loadDonors(bid, offset = 0) {
+            // Get top contributing committees
+            const donors = await query(`
+                SELECT fc.cmte_id, COALESCE(fc.cmte_name, fc.cmte_id) AS cmte_name,
+                       SUM(fc.transaction_amt) AS total_amount,
+                       COUNT(*) AS contribution_count,
+                       MIN(fc.transaction_dt) AS first_date,
+                       MAX(fc.transaction_dt) AS last_date,
+                       MIN(fc.cycle) AS first_cycle,
+                       MAX(fc.cycle) AS last_cycle
+                FROM fec_contributions fc
+                JOIN fec_candidate_crosswalk xw ON xw.fec_candidate_id = fc.cand_id
+                WHERE xw.bioguide_id = '${bid}'
+                GROUP BY fc.cmte_id
+                ORDER BY total_amount DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            if (offset === 0 && donors.length === 0) {
+                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">$</div><p>No FEC contribution data on record</p><div class="hint">FEC data covers 2010\u20132026 election cycles</div></div>';
+                return;
+            }
+
+            const hasMore = donors.length > DETAIL_BATCH;
+            const batch = donors.slice(0, DETAIL_BATCH);
+            const m = detailCache[currentMember] || {};
+
+            if (offset === 0) {
+                let html = `<div class="section-title">${m.fec_total_received > 0 ? formatMoney(m.fec_total_received) + ' total from PACs/committees' : 'PAC/Committee Contributions'}</div>`;
+                html += '<div style="overflow-x:auto;"><table class="data-table">';
+                html += '<thead><tr><th>Committee</th><th>Total</th><th>Count</th><th>Cycles</th></tr></thead><tbody id="donorBody">';
+                html += batch.map(d => `<tr>
+                    <td>${d.cmte_id ? '<a href="https://www.fec.gov/data/committee/' + esc(d.cmte_id) + '/" target="_blank" rel="noopener">' + esc(truncate(d.cmte_name, 60)) + '</a>' : esc(truncate(d.cmte_name, 60))}</td>
+                    <td class="money">${formatMoney(d.total_amount)}</td>
+                    <td>${formatNumber(d.contribution_count)}</td>
+                    <td class="muted">${d.first_cycle}${d.first_cycle !== d.last_cycle ? '\u2013' + d.last_cycle : ''}</td>
+                </tr>`).join('');
+                html += '</tbody></table></div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreDonors('${bid}', ${offset + DETAIL_BATCH})">Load more donors</button>`;
+                detailContent.innerHTML = html;
+            } else {
+                const tbody = document.getElementById('donorBody');
+                tbody.insertAdjacentHTML('beforeend', batch.map(d => `<tr>
+                    <td>${d.cmte_id ? '<a href="https://www.fec.gov/data/committee/' + esc(d.cmte_id) + '/" target="_blank" rel="noopener">' + esc(truncate(d.cmte_name, 60)) + '</a>' : esc(truncate(d.cmte_name, 60))}</td>
+                    <td class="money">${formatMoney(d.total_amount)}</td>
+                    <td>${formatNumber(d.contribution_count)}</td>
+                    <td class="muted">${d.first_cycle}${d.first_cycle !== d.last_cycle ? '\u2013' + d.last_cycle : ''}</td>
+                </tr>`).join(''));
+                const btn = detailContent.querySelector('.load-more-btn');
+                if (btn) { if (hasMore) btn.onclick = () => loadMoreDonors(bid, offset + DETAIL_BATCH); else btn.remove(); }
+            }
+        }
+        window.loadMoreDonors = (bid, offset) => loadDonors(bid, offset);
+
+        function renderTradeRow(t) {
+            return `<tr>
+                <td style="white-space:nowrap;">${esc(t.transaction_date || '')}</td>
+                <td style="font-family:'IBM Plex Mono',monospace;">${t.ticker ? '<a href="#" class="ticker-link" onclick="event.preventDefault();event.stopPropagation();openTicker(\'' + esc(t.ticker) + '\')">' + esc(t.ticker) + '</a>' : '\u2014'}</td>
+                <td>${esc(truncate(t.asset_description, 60))}</td>
+                <td>${tradeBadge(t.transaction_type)}</td>
+                <td style="white-space:nowrap;">${esc(t.amount_range || '\u2014')}</td>
+                <td>${t.source_url ? '<a class="source-link" href="' + esc(t.source_url) + '" target="_blank" rel="noopener">Source &rarr;</a>' : ''}</td>
+            </tr>`;
+        }
+
+        async function loadTrades(bid, offset = 0) {
+            const trades = await query(`
+                SELECT transaction_date, ticker, asset_description, transaction_type,
+                       amount_range, owner, source_url
+                FROM stock_trades
+                WHERE bioguide_id = '${bid}'
+                ORDER BY transaction_date DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            if (offset === 0 && trades.length === 0) {
+                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9670;</div><p>No stock trades on record</p></div>';
+                return;
+            }
+
+            const hasMore = trades.length > DETAIL_BATCH;
+            const batch = trades.slice(0, DETAIL_BATCH);
+
+            if (offset === 0) {
+                const total = detailCache[currentMember]?.trade_count || '';
+                let html = `<div class="section-title">${total ? total + ' total' : ''} trades</div>`;
+                html += '<div style="overflow-x:auto;"><table class="data-table">';
+                html += '<thead><tr><th>Date</th><th>Ticker</th><th>Asset</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="tradeBody">';
+                html += batch.map(renderTradeRow).join('');
+                html += '</tbody></table></div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreTrades('${bid}', ${offset + DETAIL_BATCH})">Load more trades</button>`;
+                detailContent.innerHTML = html;
+            } else {
+                document.getElementById('tradeBody').insertAdjacentHTML('beforeend', batch.map(renderTradeRow).join(''));
+                const oldBtn = detailContent.querySelector('.load-more-btn');
+                if (oldBtn) oldBtn.remove();
+                if (hasMore) detailContent.insertAdjacentHTML('beforeend', `<button class="load-more-btn" onclick="loadMoreTrades('${bid}', ${offset + DETAIL_BATCH})">Load more trades</button>`);
+            }
+        }
+        window.loadMoreTrades = (bid, offset) => loadTrades(bid, offset);
+
+        function renderSpeechCard(s) {
+            const speechUrl = s.granule_id ? '/explore/speech.html?id=' + encodeURIComponent(s.granule_id) : '';
+            return `<div class="speech-card">
+                <div class="speech-title">${speechUrl ? '<a class="doc-link" href="' + esc(speechUrl) + '">' + esc(s.title || 'Untitled') + '</a>' : esc(s.title || 'Untitled')}</div>
+                <div class="speech-meta">${esc(s.date)} &middot; ${esc(s.chamber)}${speechUrl ? ' &middot; <a class="source-link" href="' + esc(speechUrl) + '">Full text &rarr;</a>' : ''}</div>
+                <div class="speech-excerpt">${esc(truncate(s.excerpt, 300))}</div>
+            </div>`;
+        }
+
+        async function loadSpeeches(bid, offset = 0) {
+            const speeches = await query(`
+                SELECT cr.granule_id, cr.date, cr.title, cr.chamber,
+                       SUBSTR(cr.full_text, 1, 300) AS excerpt
+                FROM crec_speakers cs
+                JOIN congressional_record cr ON cr.granule_id = cs.granule_id
+                WHERE cs.bioguide_id = '${bid}'
+                ORDER BY cr.date DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            if (offset === 0 && speeches.length === 0) {
+                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9670;</div><p>No floor speeches on record</p></div>';
+                return;
+            }
+
+            const hasMore = speeches.length > DETAIL_BATCH;
+            const batch = speeches.slice(0, DETAIL_BATCH);
+
+            if (offset === 0) {
+                const total = detailCache[currentMember]?.speech_count || '';
+                let html = `<div class="section-title">${total ? total + ' total' : ''} speeches</div>`;
+                html += '<div id="speechList">' + batch.map(renderSpeechCard).join('') + '</div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreSpeeches('${bid}', ${offset + DETAIL_BATCH})">Load more speeches</button>`;
+                detailContent.innerHTML = html;
+            } else {
+                document.getElementById('speechList').insertAdjacentHTML('beforeend', batch.map(renderSpeechCard).join(''));
+                const oldBtn = detailContent.querySelector('.load-more-btn');
+                if (oldBtn) oldBtn.remove();
+                if (hasMore) detailContent.insertAdjacentHTML('beforeend', `<button class="load-more-btn" onclick="loadMoreSpeeches('${bid}', ${offset + DETAIL_BATCH})">Load more speeches</button>`);
+            }
+        }
+        window.loadMoreSpeeches = (bid, offset) => loadSpeeches(bid, offset);
+
+        const typeMap = {hr:'house-bill',s:'senate-bill',hres:'house-resolution',sres:'senate-resolution',hjres:'house-joint-resolution',sjres:'senate-joint-resolution',hconres:'house-concurrent-resolution',sconres:'senate-concurrent-resolution'};
+
+        function renderBillCard(b) {
+            const detailUrl = b.bill_id ? '/explore/legislation.html?detail=' + encodeURIComponent(b.bill_id) : '';
+            const billSafe = (b.bill_id || '').replace(/'/g, "\\'");
+            return `<div class="bill-card">
+                <div class="bill-number">${esc(b.bill_type || '')}${b.bill_number || ''} &mdash; ${esc(b.congress)}th Congress</div>
+                <div class="bill-title">${detailUrl ? '<a class="doc-link" href="' + esc(detailUrl) + '">' + esc(truncate(b.title, 200)) + '</a>' : esc(truncate(b.title, 200))}</div>
+                <div class="bill-meta">
+                    ${b.policy_area ? esc(b.policy_area) + ' &middot; ' : ''}
+                    Introduced ${esc(b.introduced_date || '?')}
+                    ${b.cosponsor_count ? ' &middot; <a href="#" class="ticker-link" onclick="event.preventDefault();toggleCosponsors(this,\'' + billSafe + '\')">' + b.cosponsor_count + ' cosponsors</a>' : ''}
+                    ${b.speech_count ? ' &middot; <a href="#" class="ticker-link" onclick="event.preventDefault();toggleSpeeches(this,\'' + billSafe + '\')">' + b.speech_count + ' floor speeches</a>' : ''}
+                    ${detailUrl ? ' &middot; <a class="source-link" href="' + esc(detailUrl) + '">Full details &rarr;</a>' : ''}
+                </div>
+                ${b.latest_action_text ? '<div class="bill-action">Latest: ' + esc(truncate(b.latest_action_text, 150)) + '</div>' : ''}
+                <div class="bill-expand"></div>
+            </div>`;
+        }
+
+        async function loadBills(bid, offset = 0) {
+            const bills = await query(`
+                SELECT l.bill_id, l.congress, l.bill_type, l.bill_number, l.title,
+                       l.policy_area, l.introduced_date, l.cosponsor_count,
+                       l.latest_action_date, l.latest_action_text, l.url,
+                       (SELECT COUNT(*) FROM crec_bills cb WHERE cb.bill_id = l.bill_id) AS speech_count
+                FROM legislation l
+                WHERE l.sponsor_bioguide_id = '${bid}'
+                ORDER BY l.introduced_date DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            if (offset === 0 && bills.length === 0) {
+                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">&#9670;</div><p>No sponsored legislation on record</p></div>';
+                return;
+            }
+
+            const hasMore = bills.length > DETAIL_BATCH;
+            const batch = bills.slice(0, DETAIL_BATCH);
+
+            if (offset === 0) {
+                const total = detailCache[currentMember]?.bills_sponsored || '';
+                let html = `<div class="section-title">${total ? total + ' total' : ''} bills</div>`;
+                html += '<div id="billList">' + batch.map(renderBillCard).join('') + '</div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreBills('${bid}', ${offset + DETAIL_BATCH})">Load more bills</button>`;
+                detailContent.innerHTML = html;
+            } else {
+                document.getElementById('billList').insertAdjacentHTML('beforeend', batch.map(renderBillCard).join(''));
+                const oldBtn = detailContent.querySelector('.load-more-btn');
+                if (oldBtn) oldBtn.remove();
+                if (hasMore) detailContent.insertAdjacentHTML('beforeend', `<button class="load-more-btn" onclick="loadMoreBills('${bid}', ${offset + DETAIL_BATCH})">Load more bills</button>`);
+            }
+        }
+        window.loadMoreBills = (bid, offset) => loadBills(bid, offset);
+
+        async function toggleCosponsors(link, billId) {
+            const card = link.closest('.bill-card');
+            const expand = card.querySelector('.bill-expand');
+            if (expand.innerHTML) { expand.innerHTML = ''; return; }
+            expand.innerHTML = '<div class="loading-inline">Loading cosponsors...</div>';
+            try {
+                const bSafe = billId.replace(/'/g, "''");
+                const cosps = await query(`
+                    SELECT bioguide_id, full_name, party, state, sponsorship_date, is_original_cosponsor
+                    FROM legislation_cosponsors
+                    WHERE bill_id = '${bSafe}'
+                    ORDER BY sponsorship_date ASC
+                    LIMIT 100
+                `);
+                if (cosps.length === 0) { expand.innerHTML = '<div class="expand-note">No cosponsor details available</div>'; return; }
+                let html = '<div class="expand-list">';
+                cosps.forEach(c => {
+                    const pl = c.party === 'D' ? 'party-d' : c.party === 'R' ? 'party-r' : 'party-i';
+                    html += `<div class="expand-item" onclick="openMember('${esc(c.bioguide_id)}')">
+                        <span class="party-badge ${pl}">${esc(c.party)}</span>
+                        ${esc(c.full_name)} <span style="color:var(--text-muted);font-size:0.7rem;">${esc(c.state)}${c.is_original_cosponsor ? ' &middot; original' : ''}</span>
+                    </div>`;
+                });
+                html += '</div>';
+                expand.innerHTML = html;
+            } catch (err) { expand.innerHTML = `<div class="expand-note" style="color:var(--dawn-rose);">${esc(err.message)}</div>`; }
+        }
+
+        async function toggleSpeeches(link, billId) {
+            const card = link.closest('.bill-card');
+            const expand = card.querySelector('.bill-expand');
+            if (expand.innerHTML) { expand.innerHTML = ''; return; }
+            expand.innerHTML = '<div class="loading-inline">Loading floor speeches...</div>';
+            try {
+                const bSafe = billId.replace(/'/g, "''");
+                const speeches = await query(`
+                    SELECT cb.granule_id, cr.title, cr.date AS date_issued,
+                        GROUP_CONCAT(DISTINCT cs.member_name) AS speakers
+                    FROM crec_bills cb
+                    JOIN congressional_record cr ON cr.granule_id = cb.granule_id
+                    LEFT JOIN crec_speakers cs ON cs.granule_id = cb.granule_id
+                    WHERE cb.bill_id = '${bSafe}'
+                    GROUP BY cb.granule_id
+                    ORDER BY cr.date DESC
+                    LIMIT 30
+                `);
+                if (speeches.length === 0) { expand.innerHTML = '<div class="expand-note">No floor speech details available</div>'; return; }
+                let html = '<div class="expand-list">';
+                speeches.forEach(s => {
+                    const sUrl = s.granule_id ? '/explore/speech.html?id=' + encodeURIComponent(s.granule_id) : '';
+                    html += `<div class="expand-item">
+                        ${sUrl ? '<a class="doc-link" href="' + esc(sUrl) + '">' : ''}${esc(truncate(s.title, 120))}${sUrl ? '</a>' : ''}
+                        <div style="font-size:0.7rem;color:var(--text-muted);">${esc(s.date_issued || '')}${s.speakers ? ' &middot; ' + esc(truncate(s.speakers, 80)) : ''}</div>
+                    </div>`;
+                });
+                html += '</div>';
+                expand.innerHTML = html;
+            } catch (err) { expand.innerHTML = `<div class="expand-note" style="color:var(--dawn-rose);">${esc(err.message)}</div>`; }
+        }
+
+        // Load stats date
+        let statsDate = '';
+        query("SELECT value FROM build_metadata WHERE key = 'member_stats_updated'")
+            .then(rows => {
+                if (rows.length > 0) statsDate = rows[0].value;
+            }).catch(() => {});
+
+        // Init
+        readURL();
+        searchInput.focus();
+    </script>
+</body>
+</html>

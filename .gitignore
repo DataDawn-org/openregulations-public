@@ -1,0 +1,40 @@
+# Data (too large for git, rebuilt from APIs)
+*.db
+federal_register/
+regulations_gov/
+usaspending/
+congress_gov/
+ecfr/
+congressional_record/
+congress_members/
+stock_trades/
+lobbying/
+fara/
+fec/
+congress_votes/
+comment_details/
+aphis/raw/
+aphis/pdfs/
+aphis/db/
+aphis/logs/
+logs/
+
+# Secrets
+scripts/config.json
+
+# Old docs
+DATA_README.md
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Local config
+.claude/

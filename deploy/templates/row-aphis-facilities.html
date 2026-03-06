@@ -1,0 +1,106 @@
+{% extends "default:row.html" %}
+
+{% block extra_head %}
+<style>
+  .facility-header {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .facility-header h2 { margin: 0 0 0.5rem 0; font-size: 1.4rem; }
+  .facility-header .subtitle { color: #666; font-size: 0.9rem; }
+  .facility-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .facility-meta dt { font-size: 0.8rem; color: #666; margin: 0; }
+  .facility-meta dd { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem 0; }
+
+  .related-section { margin-top: 1.5rem; }
+  .related-section h3 {
+    font-size: 1.1rem;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.5rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .badge-active { background: #d4edda; color: #155724; }
+  .badge-inactive { background: #f8d7da; color: #721c24; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% for row in display_rows %}
+<div class="facility-header">
+  <h2>{{ row["legal_name"] or "Unknown Facility" }}</h2>
+  {% if row["dba_name"] %}
+    <div class="subtitle">DBA: {{ row["dba_name"] }}</div>
+  {% endif %}
+  {% if row["site_name"] and row["site_name"] != row["legal_name"] %}
+    <div class="subtitle">Site: {{ row["site_name"] }}</div>
+  {% endif %}
+
+  <div class="facility-meta">
+    <dl>
+      <dt>Certificate Number</dt>
+      <dd>{{ row["cert_number"] }}</dd>
+    </dl>
+    <dl>
+      <dt>License Type</dt>
+      <dd>{{ row["license_type"] or "N/A" }}</dd>
+    </dl>
+    <dl>
+      <dt>Status</dt>
+      <dd>
+        {% if row["status"] %}
+          <span class="badge {% if 'active' in (row['status']|lower) %}badge-active{% else %}badge-inactive{% endif %}">
+            {{ row["status"] }}
+          </span>
+        {% else %}
+          N/A
+        {% endif %}
+      </dd>
+    </dl>
+    <dl>
+      <dt>Location</dt>
+      <dd>
+        {% if row["site_city"] %}{{ row["site_city"] }}, {% endif %}
+        {{ row["site_state"] or "" }}
+        {{ row["site_zip"] or "" }}
+      </dd>
+    </dl>
+    {% if row["site_address"] %}
+    <dl>
+      <dt>Address</dt>
+      <dd>{{ row["site_address"] }}</dd>
+    </dl>
+    {% endif %}
+    {% if row["first_seen_date"] or row["last_seen_date"] %}
+    <dl>
+      <dt>Record Period</dt>
+      <dd>{{ row["first_seen_date"] or "?" }} &mdash; {{ row["last_seen_date"] or "present" }}</dd>
+    </dl>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% for fk_table in foreign_key_tables %}
+<div class="related-section">
+  <h3>
+    {{ fk_table.other_table|replace("_", " ")|title }}
+    {% if fk_table.count %}({{ "{:,}".format(fk_table.count) }}){% endif %}
+  </h3>
+  <p><a href="{{ fk_table.link }}">View all {{ fk_table.other_table|replace("_", " ") }} &rarr;</a></p>
+</div>
+{% endfor %}
+{% endblock %}
