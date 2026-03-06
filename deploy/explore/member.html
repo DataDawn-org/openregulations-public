@@ -515,6 +515,35 @@
             border-bottom-color: var(--dawn-amber);
         }
 
+        .donor-subtabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.2rem;
+        }
+        .donor-subtab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 0.45rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+        .donor-subtab:hover {
+            color: var(--text-secondary);
+            border-color: var(--text-muted);
+        }
+        .donor-subtab.active {
+            color: var(--dawn-gold);
+            border-color: var(--dawn-amber);
+            background: rgba(245, 158, 11, 0.08);
+        }
+
         .detail-content {
             padding: 2rem;
         }
@@ -1557,14 +1586,34 @@
         }
         window.loadMoreVotes = (bid, offset) => loadVotes(bid, offset);
 
-        async function loadDonors(bid, offset = 0) {
-            // Get top contributing committees
+        let donorSubTab = 'pacs';
+
+        async function loadDonors(bid) {
+            const m = detailCache[currentMember] || {};
+            let html = '<div class="donor-subtabs">';
+            html += `<button class="donor-subtab ${donorSubTab === 'pacs' ? 'active' : ''}" onclick="switchDonorTab('pacs')">PACs / Committees</button>`;
+            html += `<button class="donor-subtab ${donorSubTab === 'employers' ? 'active' : ''}" onclick="switchDonorTab('employers')">By Employer</button>`;
+            html += '</div>';
+            html += '<div id="donorSubContent"></div>';
+            detailContent.innerHTML = html;
+
+            if (donorSubTab === 'pacs') {
+                await loadDonorPACs(bid, 0);
+            } else {
+                await loadDonorEmployers(bid, 0);
+            }
+        }
+
+        window.switchDonorTab = function(tab) {
+            donorSubTab = tab;
+            if (currentMember) loadDonors(currentMember.replace(/'/g, "''"));
+        };
+
+        async function loadDonorPACs(bid, offset) {
             const donors = await query(`
                 SELECT fc.cmte_id, COALESCE(fc.cmte_name, fc.cmte_id) AS cmte_name,
                        SUM(fc.transaction_amt) AS total_amount,
                        COUNT(*) AS contribution_count,
-                       MIN(fc.transaction_dt) AS first_date,
-                       MAX(fc.transaction_dt) AS last_date,
                        MIN(fc.cycle) AS first_cycle,
                        MAX(fc.cycle) AS last_cycle
                 FROM fec_contributions fc
@@ -1575,8 +1624,9 @@
                 LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
             `);
 
+            const container = document.getElementById('donorSubContent');
             if (offset === 0 && donors.length === 0) {
-                detailContent.innerHTML = '<div class="empty-state"><div class="empty-icon">$</div><p>No FEC contribution data on record</p><div class="hint">FEC data covers 2010\u20132026 election cycles</div></div>';
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">$</div><p>No PAC/committee contribution data on record</p><div class="hint">FEC data covers 2010\u20132026 election cycles</div></div>';
                 return;
             }
 
@@ -1595,8 +1645,8 @@
                     <td class="muted">${d.first_cycle}${d.first_cycle !== d.last_cycle ? '\u2013' + d.last_cycle : ''}</td>
                 </tr>`).join('');
                 html += '</tbody></table></div>';
-                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreDonors('${bid}', ${offset + DETAIL_BATCH})">Load more donors</button>`;
-                detailContent.innerHTML = html;
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreDonors('${bid}', ${offset + DETAIL_BATCH})">Load more PACs</button>`;
+                container.innerHTML = html;
             } else {
                 const tbody = document.getElementById('donorBody');
                 tbody.insertAdjacentHTML('beforeend', batch.map(d => `<tr>
@@ -1605,11 +1655,57 @@
                     <td>${formatNumber(d.contribution_count)}</td>
                     <td class="muted">${d.first_cycle}${d.first_cycle !== d.last_cycle ? '\u2013' + d.last_cycle : ''}</td>
                 </tr>`).join(''));
-                const btn = detailContent.querySelector('.load-more-btn');
+                const btn = container.querySelector('.load-more-btn');
                 if (btn) { if (hasMore) btn.onclick = () => loadMoreDonors(bid, offset + DETAIL_BATCH); else btn.remove(); }
             }
         }
-        window.loadMoreDonors = (bid, offset) => loadDonors(bid, offset);
+        window.loadMoreDonors = (bid, offset) => loadDonorPACs(bid, offset);
+
+        async function loadDonorEmployers(bid, offset) {
+            const employers = await query(`
+                SELECT employer, SUM(total_amount) AS total_amount,
+                       SUM(donation_count) AS donation_count
+                FROM fec_employer_to_candidate
+                WHERE bioguide_id = '${bid}'
+                GROUP BY employer
+                ORDER BY total_amount DESC
+                LIMIT ${DETAIL_BATCH + 1} OFFSET ${offset}
+            `);
+
+            const container = document.getElementById('donorSubContent');
+            if (offset === 0 && employers.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">$</div><p>No individual contribution data by employer</p><div class="hint">Aggregated from FEC individual contributions (2020\u20132026 cycles)</div></div>';
+                return;
+            }
+
+            const hasMore = employers.length > DETAIL_BATCH;
+            const batch = employers.slice(0, DETAIL_BATCH);
+
+            if (offset === 0) {
+                let html = `<div class="section-title">Individual Contributions by Employer</div>`;
+                html += '<div class="hint" style="margin:-0.8rem 0 1rem;font-size:0.78rem;">Aggregated from individual FEC filings \u2014 shows where a candidate\u2019s individual donors work, not corporate donations</div>';
+                html += '<div style="overflow-x:auto;"><table class="data-table">';
+                html += '<thead><tr><th>Employer</th><th>Total</th><th>Contributions</th></tr></thead><tbody id="employerBody">';
+                html += batch.map(e => `<tr>
+                    <td>${esc(truncate(e.employer || 'Unknown', 50))}</td>
+                    <td class="money">${formatMoney(e.total_amount)}</td>
+                    <td>${formatNumber(e.donation_count)}</td>
+                </tr>`).join('');
+                html += '</tbody></table></div>';
+                if (hasMore) html += `<button class="load-more-btn" onclick="loadMoreEmployers('${bid}', ${offset + DETAIL_BATCH})">Load more employers</button>`;
+                container.innerHTML = html;
+            } else {
+                const tbody = document.getElementById('employerBody');
+                tbody.insertAdjacentHTML('beforeend', batch.map(e => `<tr>
+                    <td>${esc(truncate(e.employer || 'Unknown', 50))}</td>
+                    <td class="money">${formatMoney(e.total_amount)}</td>
+                    <td>${formatNumber(e.donation_count)}</td>
+                </tr>`).join(''));
+                const btn = container.querySelector('.load-more-btn');
+                if (btn) { if (hasMore) btn.onclick = () => loadMoreEmployers(bid, offset + DETAIL_BATCH); else btn.remove(); }
+            }
+        }
+        window.loadMoreEmployers = (bid, offset) => loadDonorEmployers(bid, offset);
 
         function renderTradeRow(t) {
             return `<tr>
