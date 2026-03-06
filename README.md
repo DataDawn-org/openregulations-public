@@ -2,8 +2,6 @@
 
 A comprehensive database of U.S. federal government data: regulations, legislation, congressional floor speeches, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending. All from official government sources. All public domain.
 
-Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ Crabdaddy ([Claude Code](https://docs.anthropic.com/en/docs/claude-code)) 🦀
-
 **Build command**: `python3 scripts/05_build_database.py`
 **Deploy command**: `bash deploy/deploy.sh`
 **Live instance**: https://regs.datadawn.org/
@@ -99,7 +97,7 @@ All pages use the same DataDawn dark theme with self-contained HTML (inline CSS 
 **GovInfo Bulk Data**
 - URL: https://www.govinfo.gov/bulkdata
 - Free, public, no API key needed.
-- eCFR: Current regulatory text for 5 CFR titles (7, 9, 21, 40, 50).
+- eCFR: Current regulatory text for 19 CFR titles (7, 9, 10, 14, 15, 17, 20, 21, 24, 28, 29, 33, 34, 38, 40, 44, 46, 49, 50).
 - Congressional Record (CREC): Floor proceedings, 1994–present.
 - BILLSTATUS: Congressional legislation metadata.
 
@@ -908,13 +906,3 @@ These are defined in `deploy/metadata.json`. The metadata also configures facets
 8. **5 agencies only** — Dockets, documents, and comments cover EPA, FDA, USDA, FWS, and APHIS. The Federal Register table covers all 444 agencies.
 
 9. **Cross-reference coverage** — 70,030 of 727,510 Regulations.gov documents (9.6%) are linked to Federal Register records. Most supporting materials and older documents lack a `fr_doc_num` field. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata, but the majority of documents simply don't have FR document numbers.
-
----
-
-## License
-
-This project is licensed under [Creative Commons Zero v1.0 Universal](LICENSE). All government-sourced data is in the public domain.
-
-Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ Crabdaddy ([Claude Code](https://docs.anthropic.com/en/docs/claude-code)) 🦀
-
-A [DataDawn](https://datadawn.org) project.

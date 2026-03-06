@@ -46,7 +46,7 @@
                 },
                 "spending_awards": {
                     "label_column": "recipient_name",
-                    "description_html": "Federal grants and contracts from USAspending.gov for EPA, APHIS, FDA, and FWS. Includes award amounts, recipients, descriptions, and program codes.",
+                    "description_html": "Federal grants and contracts from USAspending.gov across 20 agencies. 863,000+ awards with amounts, recipients, descriptions, and program codes.",
                     "facets": ["agency", "award_category", "fiscal_year"],
                     "sort_desc": "award_amount"
                 },
@@ -108,7 +108,7 @@
                 },
                 "cfr_sections": {
                     "label_column": "section_heading",
-                    "description_html": "Current Code of Federal Regulations (eCFR) — the actual text of federal regulations in force. Covers 5 titles: Agriculture (7), Animals (9), Food & Drugs (21), Environment (40), Wildlife (50). 55,000+ regulatory sections with full-text search.",
+                    "description_html": "Current Code of Federal Regulations (eCFR) — the actual text of federal regulations in force. Covers 19 CFR titles with 123,000+ regulatory sections and full-text search.",
                     "facets": ["title_number", "agency", "part_number"],
                     "sort": "section_id"
                 },
@@ -166,6 +166,108 @@
                 "committee_member_trades": {
                     "description_html": "Pre-computed view: cross-reference of committee memberships with stock trades, showing what committee members are trading.",
                     "sort_desc": "transaction_date"
+                },
+                "roll_call_votes": {
+                    "description_html": "Roll call votes in the House and Senate, Congresses 106\u2013119. Includes vote question, result, and linked bill.",
+                    "facets": ["chamber", "congress", "result"],
+                    "sort_desc": "date"
+                },
+                "member_votes": {
+                    "description_html": "Individual member voting records for 8.3M+ votes. Links to roll_call_votes and congress_members via bioguide_id.",
+                    "facets": ["vote_cast"],
+                    "sort_desc": "vote_id"
+                },
+                "comment_details": {
+                    "description_html": "Full comment text and metadata for a subset of Regulations.gov comments. Includes submitter type, organization, and attachment info.",
+                    "sort_desc": "posted_date"
+                },
+                "fec_candidates": {
+                    "label_column": "candidate_name",
+                    "description_html": "FEC candidate records \u2014 64,000+ candidates for federal office with party, state, office, and election cycles.",
+                    "facets": ["candidate_office", "candidate_party", "candidate_state"],
+                    "sort": "candidate_name"
+                },
+                "fec_committees": {
+                    "label_column": "committee_name",
+                    "description_html": "FEC political committees \u2014 PACs, party committees, campaign committees. 155,000+ records.",
+                    "facets": ["committee_type", "committee_party"],
+                    "sort": "committee_name"
+                },
+                "fec_contributions": {
+                    "description_html": "FEC contributions from committees to candidates. 4.4M+ records with amounts, dates, and election types.",
+                    "facets": ["transaction_type"],
+                    "sort_desc": "contribution_receipt_date"
+                },
+                "fec_candidate_crosswalk": {
+                    "description_html": "Maps FEC candidate IDs to bioguide_id, enabling cross-reference between campaign finance and congressional activity."
+                },
+                "fec_employer_totals": {
+                    "description_html": "Pre-computed: total individual contributions aggregated by employer name.",
+                    "sort_desc": "total_amount"
+                },
+                "fec_employer_to_candidate": {
+                    "description_html": "Pre-computed: individual contributions aggregated by employer \u2192 candidate.",
+                    "sort_desc": "total_amount"
+                },
+                "fec_employer_to_party": {
+                    "description_html": "Pre-computed: individual contributions aggregated by employer \u2192 party.",
+                    "sort_desc": "total_amount"
+                },
+                "fec_top_occupations": {
+                    "description_html": "Pre-computed: individual contributions aggregated by occupation.",
+                    "sort_desc": "total_amount"
+                },
+                "fara_registrants": {
+                    "label_column": "registrant_name",
+                    "description_html": "FARA foreign agent registrants \u2014 firms and individuals registered under the Foreign Agents Registration Act.",
+                    "facets": ["registration_status"],
+                    "sort": "registrant_name"
+                },
+                "fara_foreign_principals": {
+                    "label_column": "foreign_principal_name",
+                    "description_html": "Foreign principals (governments, political parties, foreign entities) represented by FARA registrants. 17,000+ records with country of origin.",
+                    "facets": ["country", "principal_type"],
+                    "sort": "foreign_principal_name"
+                },
+                "fara_short_forms": {
+                    "description_html": "Individual foreign agents (employees/associates of registrants) registered under FARA. 44,000+ records.",
+                    "sort": "agent_name"
+                },
+                "fara_registrant_docs": {
+                    "description_html": "Documents filed by FARA registrants \u2014 registration statements, supplemental statements, and informational materials. 151,000+ filings.",
+                    "facets": ["document_type"],
+                    "sort_desc": "stamped_date"
+                },
+                "lobbying_filings": {
+                    "description_html": "Senate Lobbying Disclosure Act filings (1999\u20132026). LD-1 registrations and LD-2 quarterly activity reports. 1.5M+ filings.",
+                    "facets": ["filing_year"],
+                    "sort_desc": "filing_year"
+                },
+                "lobbying_activities": {
+                    "description_html": "Lobbying activity reports by issue area. Each row is one issue area within a quarterly filing, with government entities contacted and description of lobbying activities.",
+                    "facets": ["general_issue_code"],
+                    "sort_desc": "filing_year"
+                },
+                "lobbying_lobbyists": {
+                    "description_html": "Individual lobbyists listed on LDA filings. 3.5M+ records with covered positions (former government roles).",
+                    "sort": "lobbyist_name"
+                },
+                "lobbying_issue_codes": {
+                    "description_html": "Reference table: 79 lobbying issue area codes (AGR, ENV, TAX, etc.) used in lobbying activity reports."
+                },
+                "lobbying_contributions": {
+                    "description_html": "LD-203 political contribution reports filed by lobbyists. Currently being populated.",
+                    "sort_desc": "filing_year"
+                },
+                "docket_summary": {
+                    "description_html": "Pre-computed: per-docket summary with document and comment counts, date ranges.",
+                    "sort_desc": "comment_count"
+                },
+                "federal_register_agencies": {
+                    "description_html": "Junction table linking Federal Register documents to their publishing agencies."
+                },
+                "lis_to_bioguide": {
+                    "description_html": "Crosswalk mapping Senate LIS IDs to bioguide_id for 326 senators."
                 }
             },
             "queries": {
