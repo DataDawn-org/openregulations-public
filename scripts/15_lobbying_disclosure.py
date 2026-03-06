@@ -50,7 +50,7 @@ LOG_DIR = PROJECT_DIR / "logs"
 PROGRESS_FILE = LOG_DIR / "progress.txt"
 
 PAGE_SIZE = 250
-MIN_INTERVAL = 1.0  # Senate LDA allows 120 req/min; 1s interval stays well under
+MIN_INTERVAL = 0.5  # 120 requests/minute = 2/sec, stay under with 0.5s gap
 
 # === Logging ===
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -123,6 +123,10 @@ def api_get(session, url, params=None):
                 log.warning(f"Server error {resp.status_code} — waiting 30s before retry")
                 time.sleep(30)
                 continue
+
+            if resp.status_code == 400:
+                log.warning(f"400 Bad Request for {url} params={params} — returning None")
+                return None
 
             resp.raise_for_status()
             return resp.json()
@@ -812,7 +816,8 @@ def pull_contributions(session):
 
     import datetime
     current_year = datetime.date.today().year
-    years = list(range(1999, current_year + 1))
+    # LD-203 contribution filings started in 2008
+    years = list(range(2008, current_year + 1))
 
     for year in years:
         if _shutdown:
