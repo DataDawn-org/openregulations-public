@@ -19,8 +19,11 @@ aphis/db/
 aphis/logs/
 logs/
 
-# Secrets
+# Secrets and private docs
 scripts/config.json
+CLAUDE.md
+.env
+.env.*
 
 # Old docs
 DATA_README.md
