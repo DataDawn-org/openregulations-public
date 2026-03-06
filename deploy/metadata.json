@@ -715,18 +715,18 @@
                 "fara_by_country": {
                     "title": "FARA: Foreign Principals by Country",
                     "description": "Foreign principals (governments, entities) grouped by country, ranked by number of active registrants.",
-                    "sql": "SELECT country, COUNT(*) AS principals, COUNT(DISTINCT registrant_id) AS registrants FROM fara_foreign_principals WHERE country IS NOT NULL GROUP BY country ORDER BY principals DESC LIMIT 50"
+                    "sql": "SELECT country, COUNT(*) AS principals, COUNT(DISTINCT registration_number) AS registrants FROM fara_foreign_principals WHERE country IS NOT NULL GROUP BY country ORDER BY principals DESC LIMIT 50"
                 },
                 "fara_search_registrants": {
                     "title": "FARA: Search Registrants",
                     "description": "Search FARA registrants by name.",
-                    "sql": "SELECT registrant_id, registrant_name, address, registration_status FROM fara_registrants WHERE fara_registrants_fts MATCH :search ORDER BY registrant_name LIMIT 50",
+                    "sql": "SELECT registration_number, name, business_name, city, state, registration_date, termination_date FROM fara_registrants WHERE rowid IN (SELECT rowid FROM fara_registrants_fts WHERE fara_registrants_fts MATCH :search) ORDER BY name LIMIT 50",
                     "params": {"search": "consulting"}
                 },
                 "fara_agents_for_country": {
                     "title": "FARA: Agents Representing a Country",
                     "description": "All registrants and agents representing foreign principals from a given country.",
-                    "sql": "SELECT fp.foreign_principal_name, fp.country, r.registrant_name, fp.registration_date FROM fara_foreign_principals fp JOIN fara_registrants r ON r.registrant_id = fp.registrant_id WHERE UPPER(fp.country) LIKE '%' || UPPER(:country) || '%' ORDER BY fp.registration_date DESC LIMIT 100",
+                    "sql": "SELECT fp.foreign_principal, fp.country, fp.registrant_name, fp.fp_registration_date FROM fara_foreign_principals fp WHERE UPPER(fp.country) LIKE '%' || UPPER(:country) || '%' ORDER BY fp.fp_registration_date DESC LIMIT 100",
                     "params": {"country": "CHINA"}
                 },
                 "top_pac_donors_to_candidate": {
@@ -749,13 +749,13 @@
                 "voting_record": {
                     "title": "Votes: Member Voting Record",
                     "description": "Recent roll call votes for a specific member of Congress.",
-                    "sql": "SELECT rv.date, rv.chamber, rv.question, rv.result, mv.vote_cast, rv.bill_id FROM member_votes mv JOIN roll_call_votes rv ON rv.vote_id = mv.vote_id WHERE mv.bioguide_id = :bioguide_id ORDER BY rv.date DESC LIMIT 100",
+                    "sql": "SELECT rv.date, rv.chamber, rv.question, rv.result, mv.vote_cast, rv.bill_id FROM member_votes mv JOIN roll_call_votes rv ON rv.congress = mv.congress AND rv.chamber = mv.chamber AND rv.session = mv.session AND rv.roll_call_number = mv.roll_call_number WHERE mv.bioguide_id = :bioguide_id ORDER BY rv.date DESC LIMIT 100",
                     "params": {"bioguide_id": "P000197"}
                 },
                 "party_line_votes": {
                     "title": "Votes: Most Partisan Roll Calls",
                     "description": "Roll call votes with the biggest party-line splits (most one-sided by party).",
-                    "sql": "SELECT rv.date, rv.chamber, rv.question, rv.result, rv.bill_id, SUM(CASE WHEN mv.vote_cast = 'Yea' THEN 1 ELSE 0 END) AS yeas, SUM(CASE WHEN mv.vote_cast = 'Nay' THEN 1 ELSE 0 END) AS nays FROM roll_call_votes rv JOIN member_votes mv ON mv.vote_id = rv.vote_id WHERE rv.date >= '2023-01-01' GROUP BY rv.vote_id ORDER BY rv.date DESC LIMIT 100"
+                    "sql": "SELECT rv.date, rv.chamber, rv.question, rv.result, rv.bill_id, rv.yea_count, rv.nay_count FROM roll_call_votes rv WHERE rv.date >= '2023-01-01' ORDER BY rv.date DESC LIMIT 100"
                 },
                 "recent_votes": {
                     "title": "Votes: Recent Roll Calls",
