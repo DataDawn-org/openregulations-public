@@ -1,0 +1,132 @@
+{% extends "default:database.html" %}
+
+{% block extra_head %}
+<style>
+  .query-categories { margin: 1rem 0 1.5rem 0; }
+  .query-category {
+    margin-bottom: 1.5rem;
+  }
+  .query-category h3 {
+    font-size: 1rem;
+    color: #1a1a2e;
+    margin: 0 0 0.5rem 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid #eee;
+  }
+  .query-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 0.5rem;
+  }
+  .query-item {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  .query-item:hover { background: #f8f9fa; }
+  .query-item a { text-decoration: none; font-weight: 500; color: #2c3e50; }
+  .query-item a:hover { color: #2980b9; }
+  .query-item .qdesc { font-size: 0.78rem; color: #888; margin-top: 0.15rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% if queries %}
+<div class="query-categories">
+  <h2 style="font-size:1.2rem;margin-bottom:1rem">Explore the Data</h2>
+
+  {% set search_queries = [] %}
+  {% set comment_queries = [] %}
+  {% set eo_queries = [] %}
+  {% set fr_queries = [] %}
+  {% set other_queries = [] %}
+
+  {% for query in queries %}
+    {% if "search" in query.name|lower or "lookup" in query.name|lower %}
+      {% set _ = search_queries.append(query) %}
+    {% elif "comment" in query.name|lower or "submitter" in query.name|lower or "docket" in query.name|lower %}
+      {% set _ = comment_queries.append(query) %}
+    {% elif "executive" in query.name|lower or "proclamation" in query.name|lower or "presidential" in query.name|lower %}
+      {% set _ = eo_queries.append(query) %}
+    {% elif "rule" in query.name|lower or "federal" in query.name|lower or "fr_" in query.name|lower or "document_type" in query.name|lower %}
+      {% set _ = fr_queries.append(query) %}
+    {% else %}
+      {% set _ = other_queries.append(query) %}
+    {% endif %}
+  {% endfor %}
+
+  {% if search_queries %}
+  <div class="query-category">
+    <h3>Search</h3>
+    <div class="query-list">
+      {% for q in search_queries %}
+      <div class="query-item">
+        <a href="/openregs/{{ q.name }}">{{ q.title }}</a>
+        {% if q.description %}<div class="qdesc">{{ q.description[:100] }}{% if q.description|length > 100 %}&hellip;{% endif %}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if comment_queries %}
+  <div class="query-category">
+    <h3>Public Comments & Dockets</h3>
+    <div class="query-list">
+      {% for q in comment_queries %}
+      <div class="query-item">
+        <a href="/openregs/{{ q.name }}">{{ q.title }}</a>
+        {% if q.description %}<div class="qdesc">{{ q.description[:100] }}{% if q.description|length > 100 %}&hellip;{% endif %}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if eo_queries %}
+  <div class="query-category">
+    <h3>Executive Orders & Proclamations</h3>
+    <div class="query-list">
+      {% for q in eo_queries %}
+      <div class="query-item">
+        <a href="/openregs/{{ q.name }}">{{ q.title }}</a>
+        {% if q.description %}<div class="qdesc">{{ q.description[:100] }}{% if q.description|length > 100 %}&hellip;{% endif %}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if fr_queries %}
+  <div class="query-category">
+    <h3>Federal Register</h3>
+    <div class="query-list">
+      {% for q in fr_queries %}
+      <div class="query-item">
+        <a href="/openregs/{{ q.name }}">{{ q.title }}</a>
+        {% if q.description %}<div class="qdesc">{{ q.description[:100] }}{% if q.description|length > 100 %}&hellip;{% endif %}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if other_queries %}
+  <div class="query-category">
+    <h3>Analysis & Trends</h3>
+    <div class="query-list">
+      {% for q in other_queries %}
+      <div class="query-item">
+        <a href="/openregs/{{ q.name }}">{{ q.title }}</a>
+        {% if q.description %}<div class="qdesc">{{ q.description[:100] }}{% if q.description|length > 100 %}&hellip;{% endif %}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{{ super() }}
+{% endblock %}

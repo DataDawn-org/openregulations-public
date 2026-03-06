@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regulatory Lifecycle — OpenRegs Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .tabs {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin: 1.5rem auto 0;
+            max-width: 800px;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: all 0.3s;
+            border-radius: 6px;
+        }
+
+        .tab:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .tab.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .tab-badge {
+            display: inline-block;
+            background: var(--dawn-amber);
+            color: var(--night);
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.1rem 0.4rem;
+            border-radius: 10px;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+        }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .example-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.03em;
+        }
+
+        .example-chip:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .results-area {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 3rem;
+        }
+
+        .results-status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+            min-height: 1.2em;
+        }
+
+        .results-status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+            cursor: pointer;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .agency-badge {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 500;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            flex-shrink: 0;
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--dawn-amber);
+            letter-spacing: 0.05em;
+        }
+
+        .type-badge {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 500;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .type-badge.rule { background: rgba(34,197,94,0.12); color: #4ade80; }
+        .type-badge.proposed { background: rgba(59,130,246,0.12); color: #60a5fa; }
+        .type-badge.notice { background: rgba(168,85,247,0.12); color: #c084fc; }
+        .type-badge.rulemaking { background: rgba(245,158,11,0.12); color: var(--dawn-amber); }
+        .type-badge.nonrulemaking { background: rgba(148,163,184,0.12); color: #94a3b8; }
+        .type-badge.open { background: rgba(34,197,94,0.15); color: #4ade80; }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .card-excerpt {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.4rem;
+            line-height: 1.5;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .meta-item span { color: var(--dawn-gold); }
+
+        .source-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--dawn-amber);
+            text-decoration: none;
+            margin-left: auto;
+            opacity: 0.8;
+        }
+        .source-link:hover { opacity: 1; text-decoration: underline; }
+
+        .doc-link {
+            color: var(--dawn-gold);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .doc-link:hover { text-decoration: underline; }
+
+        .cross-links { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem; }
+        .cross-link {
+            display: inline-block; padding: 0.5rem 1rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            color: var(--dawn-gold); font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+            text-decoration: none; transition: background 0.2s;
+        }
+        .cross-link:hover { background: rgba(245, 158, 11, 0.08); border-color: var(--dawn-amber); }
+
+        .top-list { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1rem; }
+        .top-item {
+            display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem;
+            background: var(--surface); border-radius: 6px; cursor: pointer; transition: background 0.2s;
+        }
+        .top-item:hover { background: var(--surface-hover); }
+        .top-rank {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            color: var(--text-muted); min-width: 1.5rem; text-align: right;
+        }
+        .top-info { flex: 1; min-width: 0; }
+        .top-name { font-size: 0.85rem; color: var(--text-primary); }
+        .top-meta { font-size: 0.7rem; color: var(--text-muted); }
+        .money-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: var(--dawn-gold); }
+
+        .load-more-btn {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            margin-top: 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--dawn-gold);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .load-more-btn:hover { background: rgba(245, 158, 11, 0.08); }
+
+        /* Detail panel */
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+
+        .detail-overlay.visible { display: block; }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            overflow-y: auto;
+            z-index: 1001;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+
+        .detail-panel.visible { transform: translateX(0); }
+
+        .detail-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1.5rem 2rem 0;
+            transition: color 0.3s;
+        }
+
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-header {
+            padding: 1rem 2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-content {
+            padding: 2rem;
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .section-title:first-child { margin-top: 0; }
+
+        /* Timeline */
+        .timeline { list-style: none; }
+
+        .timeline li {
+            position: relative;
+            padding: 0.8rem 0 0.8rem 1.5rem;
+            border-left: 2px solid var(--border);
+        }
+
+        .timeline li::before {
+            content: '';
+            position: absolute;
+            left: -5px;
+            top: 1rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--dawn-amber);
+        }
+
+        .timeline .tl-date {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .timeline .tl-title {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-top: 0.2rem;
+        }
+
+        .timeline .tl-type {
+            margin-top: 0.3rem;
+        }
+
+        /* Comment stats */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-box {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.8rem;
+            text-align: center;
+        }
+
+        .stat-box .num {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.2rem;
+            color: var(--dawn-gold);
+        }
+
+        .stat-box .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 0.2rem;
+        }
+
+        .loading { text-align: center; padding: 3rem; }
+        .loading-dots { display: inline-flex; gap: 0.4rem; }
+
+        .loading-dots span {
+            width: 6px; height: 6px;
+            background: var(--dawn-amber);
+            border-radius: 50%;
+            animation: loadPulse 1.2s ease-in-out infinite;
+        }
+
+        .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes loadPulse {
+            0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
+        }
+
+        .empty-state { text-align: center; padding: 4rem 2rem; }
+        .empty-state .empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+        .empty-state .hint { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem; opacity: 0.6; }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            padding-bottom: 4rem;
+        }
+
+        .page-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 2.5rem 1.5rem 1.5rem; }
+            .search-container { padding: 0 1.5rem; }
+            .tabs { padding: 0 1.5rem; }
+            .results-area { padding: 0 1.5rem; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html" class="active">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Regulatory lifecycle</h1>
+        <p>Follow regulations from proposal to final rule. Search dockets, Federal Register documents, and millions of public comments.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search dockets, documents, or comments..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="dockets">Dockets</div>
+        <div class="tab" data-tab="frdocs">FR Documents</div>
+        <div class="tab" data-tab="comments">Comments</div>
+        <div class="tab" data-tab="open">Open for Comment <span id="openBadge" class="tab-badge" style="display:none;"></span></div>
+        <div class="tab" data-tab="agencies">Agencies</div>
+        <div class="tab" data-tab="executive">Executive Orders</div>
+        <div class="tab" data-tab="policy">Policy Areas</div>
+    </div>
+
+    <div class="results-area">
+        <div class="results-status" id="resultsStatus"></div>
+        <div id="results">
+            <div class="empty-state">
+                <div class="empty-icon">&#9670;</div>
+                <p>Search federal regulations, dockets, and public comments</p>
+                <div class="hint">Full-text search across 3M+ public comments and 993K+ Federal Register documents</div>
+                <div class="examples">
+                    <span class="example-chip" data-query="endangered species">endangered species</span>
+                    <span class="example-chip" data-query="clean water">clean water</span>
+                    <span class="example-chip" data-query="air quality">air quality</span>
+                    <span class="example-chip" data-query="food safety">food safety</span>
+                    <span class="example-chip" data-query="pesticide">pesticide</span>
+                </div>
+            </div>
+        </div>
+        <div class="pagination" id="pagination" style="display:none;">
+            <button class="page-btn" id="prevBtn" disabled>&larr; Previous</button>
+            <button class="page-btn" id="nextBtn">Next &rarr;</button>
+        </div>
+    </div>
+
+    <!-- Detail slide-over -->
+    <div class="detail-overlay" id="detailOverlay"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" id="detailClose">&larr; Back to results</button>
+            <div class="detail-header" id="detailHeader"></div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '';
+        const API = API_BASE + '/openregs';
+
+        let currentTab = 'dockets';
+        let currentQuery = '';
+        let currentOffset = 0;
+        const PAGE_SIZE = 30;
+        let hasMore = false;
+
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('resultsStatus');
+        const paginationDiv = document.getElementById('pagination');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const tabs = document.querySelectorAll('.tab');
+        const examples = document.querySelectorAll('.example-chip');
+        const detailOverlay = document.getElementById('detailOverlay');
+        const detailPanel = document.getElementById('detailPanel');
+        const detailClose = document.getElementById('detailClose');
+        const detailHeader = document.getElementById('detailHeader');
+        const detailContent = document.getElementById('detailContent');
+
+        function esc(str) {
+            if (str == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        function truncate(str, len) {
+            if (!str) return '';
+            return str.length > len ? str.slice(0, len) + '...' : str;
+        }
+
+        function formatNumber(n) {
+            if (n == null) return '0';
+            return Number(n).toLocaleString();
+        }
+
+        function formatMoney(n) {
+            if (n == null || n === 0) return '$0';
+            const abs = Math.abs(n);
+            if (abs >= 1e12) return '$' + (n/1e12).toFixed(1) + 'T';
+            if (abs >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+            if (abs >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+            if (abs >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+            return '$' + Number(n).toLocaleString();
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function docketTypeBadge(t) {
+            if (!t) return '';
+            const lower = t.toLowerCase();
+            if (lower.includes('rulemaking')) return '<span class="type-badge rulemaking">Rulemaking</span>';
+            return '<span class="type-badge nonrulemaking">' + esc(t) + '</span>';
+        }
+
+        function docTypeBadge(t) {
+            if (!t) return '';
+            const lower = t.toLowerCase();
+            if (lower === 'rule') return '<span class="type-badge rule">Rule</span>';
+            if (lower.includes('proposed')) return '<span class="type-badge proposed">Proposed Rule</span>';
+            if (lower.includes('notice')) return '<span class="type-badge notice">Notice</span>';
+            return '<span class="type-badge nonrulemaking">' + esc(t) + '</span>';
+        }
+
+        // URL state
+        function readURL() {
+            const p = new URLSearchParams(location.search);
+            if (p.get('q')) searchInput.value = p.get('q');
+            if (p.get('tab')) {
+                currentTab = p.get('tab');
+                tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === currentTab));
+            }
+            if (p.get('docket')) {
+                setTimeout(() => openDocket(p.get('docket')), 300);
+            }
+            if (p.get('agency')) {
+                const aName = p.get('agency');
+                const aCode = p.get('regs_code') || '';
+                setTimeout(() => openAgency(aName, aCode), 300);
+            }
+            if (p.get('q')) { currentQuery = searchInput.value.trim(); doSearch(); }
+            else if (currentTab === 'open' || currentTab === 'agencies' || currentTab === 'executive' || currentTab === 'policy') doSearch();
+        }
+
+        function writeURL() {
+            const p = new URLSearchParams();
+            if (currentQuery) p.set('q', currentQuery);
+            if (currentTab !== 'dockets') p.set('tab', currentTab);
+            const qs = p.toString();
+            history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+        }
+
+        // Tabs
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentTab = tab.dataset.tab;
+                currentOffset = 0;
+                if (currentTab === 'open' || currentTab === 'agencies' || currentTab === 'executive' || currentTab === 'policy' || currentQuery) doSearch();
+            });
+        });
+
+        examples.forEach(chip => {
+            chip.addEventListener('click', () => {
+                searchInput.value = chip.dataset.query;
+                currentOffset = 0;
+                doSearch();
+            });
+        });
+
+        searchBtn.addEventListener('click', () => { currentOffset = 0; doSearch(); });
+        searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') { currentOffset = 0; doSearch(); } });
+        prevBtn.addEventListener('click', () => { if (currentOffset >= PAGE_SIZE) { currentOffset -= PAGE_SIZE; doSearch(); } });
+        nextBtn.addEventListener('click', () => { if (hasMore) { currentOffset += PAGE_SIZE; doSearch(); } });
+
+        detailClose.addEventListener('click', closeDetail);
+        detailOverlay.addEventListener('click', closeDetail);
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetail(); });
+
+        async function doSearch() {
+            currentQuery = searchInput.value.trim();
+            writeURL();
+
+            resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            statusDiv.textContent = '';
+            paginationDiv.style.display = 'none';
+
+            try {
+                let rows;
+                const qSafe = currentQuery.replace(/'/g, "''");
+                const qFTS = currentQuery.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
+
+                switch (currentTab) {
+                    case 'dockets':
+                        rows = await searchDockets(qSafe, qFTS);
+                        break;
+                    case 'frdocs':
+                        rows = await searchFRDocs(qSafe, qFTS);
+                        break;
+                    case 'comments':
+                        rows = await searchComments(qSafe, qFTS);
+                        break;
+                    case 'open':
+                        rows = await searchOpen(qSafe);
+                        break;
+                    case 'agencies':
+                        rows = await searchAgencies(qSafe);
+                        break;
+                    case 'executive':
+                        rows = await searchExecutiveOrders(qSafe);
+                        break;
+                    case 'policy':
+                        rows = await searchPolicyAreas(qSafe, qFTS);
+                        break;
+                }
+
+                hasMore = rows.length > PAGE_SIZE;
+                const display = rows.slice(0, PAGE_SIZE);
+
+                if (display.length === 0) {
+                    const msg = currentTab === 'open'
+                        ? 'No documents currently open for comment'
+                        : `No results for "${esc(currentQuery)}"`;
+                    resultsDiv.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">&empty;</div>
+                            <p>${msg}</p>
+                            <div class="hint">Try different search terms or switch tabs</div>
+                        </div>`;
+                    statusDiv.textContent = '0 results';
+                    return;
+                }
+
+                statusDiv.innerHTML = `<span class="count">${display.length}${hasMore ? '+' : ''}</span> results`;
+                resultsDiv.innerHTML = display.map(r => renderCard(r)).join('');
+
+                paginationDiv.style.display = 'flex';
+                prevBtn.disabled = currentOffset === 0;
+                nextBtn.disabled = !hasMore;
+
+            } catch (err) {
+                resultsDiv.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&#9888;</div>
+                        <p>Error fetching data</p>
+                        <div class="hint">${esc(err.message)}</div>
+                    </div>`;
+            }
+        }
+
+        async function searchDockets(q, qFTS) {
+            if (!q) return [];
+            return await query(`
+                SELECT d.id, d.agency_id, d.title, d.docket_type,
+                    (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
+                    (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+                FROM dockets d
+                WHERE d.id IN (
+                    SELECT d2.id FROM dockets_fts JOIN dockets d2 ON d2.rowid = dockets_fts.rowid
+                    WHERE dockets_fts MATCH '"${qFTS}"'
+                    UNION
+                    SELECT doc.docket_id FROM federal_register_fts
+                    JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
+                    JOIN documents doc ON doc.fr_doc_num = fr.document_number
+                    WHERE federal_register_fts MATCH '"${qFTS}"' AND doc.docket_id IS NOT NULL
+                )
+                ORDER BY doc_count DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        async function searchFRDocs(q, qFTS) {
+            if (!q) return [];
+            return await query(`
+                SELECT fr.document_number, fr.title, fr.type, fr.agency_names, fr.publication_date, fr.abstract, fr.html_url, fr.pdf_url
+                FROM federal_register_fts JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
+                WHERE federal_register_fts MATCH '"${qFTS}"'
+                ORDER BY rank
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        async function searchComments(q, qFTS) {
+            if (!q) return [];
+            return await query(`
+                SELECT c.id, c.title, c.submitter_name, c.submitter_type, c.docket_id,
+                       c.agency_id, c.posted_date
+                FROM comments_fts JOIN comments c ON c.rowid = comments_fts.rowid
+                WHERE comments_fts MATCH '"${qFTS}"'
+                ORDER BY rank
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        async function searchOpen(q) {
+            const filter = q ? `AND (title LIKE '%${q}%' OR agency_id LIKE '%${q}%' OR docket_id LIKE '%${q}%')` : '';
+            return await query(`
+                SELECT id, agency_id, title, comment_end_date, docket_id, document_type,
+                    CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                FROM documents
+                WHERE comment_end_date > datetime('now') AND withdrawn = 0 ${filter}
+                ORDER BY comment_end_date ASC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        // Map spending agency names to Regs.gov codes (for agencies with regulatory data)
+        const AGENCY_REGS_MAP = {
+            'Environmental Protection Agency': 'EPA',
+            'Department of Health and Human Services': 'FDA',
+            'Department of the Interior': 'FWS',
+            'Department of Agriculture': 'APHIS',
+        };
+
+        async function searchAgencies(q) {
+            if (!q) {
+                // Use pre-computed summary table for browsing (~instant vs ~7s)
+                return await query(`
+                    SELECT name, award_count, total_spending, sub_count
+                    FROM spending_agency_summary
+                    ORDER BY total_spending DESC
+                    LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+                `);
+            }
+            return await query(`
+                SELECT s.agency AS name,
+                    COUNT(*) AS award_count,
+                    CAST(SUM(s.award_amount) AS INTEGER) AS total_spending,
+                    COUNT(DISTINCT s.sub_agency) AS sub_count
+                FROM spending_awards s
+                WHERE s.agency LIKE '%${q}%' OR s.sub_agency LIKE '%${q}%'
+                GROUP BY s.agency
+                ORDER BY total_spending DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        async function searchExecutiveOrders(q) {
+            const where = q ? `WHERE title LIKE '%${q}%' OR CAST(executive_order_number AS TEXT) LIKE '%${q}%' OR abstract LIKE '%${q}%'` : '';
+            return await query(`
+                SELECT document_number, title, document_type, executive_order_number,
+                       signing_date, publication_date, html_url, abstract
+                FROM presidential_documents
+                ${where}
+                ORDER BY signing_date DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        function renderCard(r) {
+            switch (currentTab) {
+                case 'dockets': return renderDocketCard(r);
+                case 'frdocs': return renderFRCard(r);
+                case 'comments': return renderCommentCard(r);
+                case 'open': return renderOpenCard(r);
+                case 'agencies': return renderAgencyCard(r);
+                case 'executive': return renderExecutiveCard(r);
+                case 'policy': return renderPolicyCard(r);
+            }
+        }
+
+        function renderDocketCard(r) {
+            return `
+                <div class="result-card" onclick="openDocket('${esc(r.id)}')">
+                    <div class="card-header">
+                        <div class="card-title">${esc(truncate(r.title, 200))}</div>
+                        <span class="agency-badge">${esc(r.agency_id)}</span>
+                    </div>
+                    <div class="card-meta">
+                        ${docketTypeBadge(r.docket_type)}
+                        <span class="meta-item"><span>${formatNumber(r.comment_count)}</span> comments</span>
+                        <span class="meta-item"><span>${formatNumber(r.doc_count)}</span> documents</span>
+                        <span class="meta-item">${esc(r.id)}</span>
+                        <a class="source-link" href="https://www.regulations.gov/docket/${encodeURIComponent(r.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on Regulations.gov &rarr;</a>
+                    </div>
+                </div>`;
+        }
+
+        function renderFRCard(r) {
+            return `
+                <div class="result-card">
+                    <div class="card-header">
+                        <div class="card-title">${r.html_url ? '<a class="doc-link" href="' + esc(r.html_url) + '" target="_blank" rel="noopener">' + esc(truncate(r.title, 200)) + '</a>' : esc(truncate(r.title, 200))}</div>
+                        ${docTypeBadge(r.type)}
+                    </div>
+                    ${r.abstract ? '<div class="card-excerpt">' + esc(truncate(r.abstract, 250)) + '</div>' : ''}
+                    <div class="card-meta">
+                        <span class="meta-item">${esc(r.publication_date)}</span>
+                        <span class="meta-item">${esc(truncate(r.agency_names, 60))}</span>
+                        ${r.html_url ? '<a class="source-link" href="' + esc(r.html_url) + '" target="_blank" rel="noopener">Federal Register &rarr;</a>' : ''}
+                        ${r.pdf_url ? '<a class="source-link" href="' + esc(r.pdf_url) + '" target="_blank" rel="noopener">PDF &rarr;</a>' : ''}
+                    </div>
+                </div>`;
+        }
+
+        function renderCommentCard(r) {
+            return `
+                <div class="result-card" onclick="openDocket('${esc(r.docket_id)}')">
+                    <div class="card-header">
+                        <div class="card-title">${esc(truncate(r.title || 'Comment by ' + (r.submitter_name || 'Anonymous'), 200))}</div>
+                        <span class="agency-badge">${esc(r.agency_id)}</span>
+                    </div>
+                    <div class="card-meta">
+                        <span class="meta-item">${esc(r.submitter_name || 'Anonymous')}</span>
+                        ${r.submitter_type ? '<span class="meta-item">' + esc(r.submitter_type) + '</span>' : ''}
+                        <span class="meta-item">${esc(r.posted_date)}</span>
+                        <span class="meta-item">${esc(r.docket_id)}</span>
+                        <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(r.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View Comment &rarr;</a>
+                    </div>
+                </div>`;
+        }
+
+        function renderOpenCard(r) {
+            const urgent = r.days_left <= 7;
+            return `
+                <div class="result-card" onclick="openDocket('${esc(r.docket_id)}')">
+                    <div class="card-header">
+                        <div class="card-title">${esc(truncate(r.title, 200))}</div>
+                        <span class="type-badge open">${r.days_left} days left</span>
+                    </div>
+                    <div class="card-meta">
+                        <span class="agency-badge">${esc(r.agency_id)}</span>
+                        ${docTypeBadge(r.document_type)}
+                        <span class="meta-item">Closes ${esc(r.comment_end_date)}</span>
+                        <span class="meta-item">${esc(r.docket_id)}</span>
+                        <a class="source-link" href="https://www.regulations.gov/document/${encodeURIComponent(r.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">Submit Comment &rarr;</a>
+                    </div>
+                </div>`;
+        }
+
+        async function searchPolicyAreas(q, qFTS) {
+            if (q) {
+                // Search bills within policy areas via FTS
+                return await query(`
+                    SELECT l.policy_area, COUNT(*) AS bill_count,
+                        COUNT(DISTINCT l.sponsor_bioguide_id) AS sponsor_count,
+                        MIN(l.congress) AS congress_from,
+                        MAX(l.congress) AS congress_to
+                    FROM legislation l
+                    WHERE l.rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"${qFTS}"')
+                    GROUP BY l.policy_area
+                    ORDER BY bill_count DESC
+                    LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+                `);
+            }
+            // Browse all policy areas
+            return await query(`
+                SELECT l.policy_area, COUNT(*) AS bill_count,
+                    COUNT(DISTINCT l.sponsor_bioguide_id) AS sponsor_count,
+                    MIN(l.congress) AS congress_from,
+                    MAX(l.congress) AS congress_to
+                FROM legislation l
+                WHERE l.policy_area IS NOT NULL
+                GROUP BY l.policy_area
+                ORDER BY bill_count DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
+            `);
+        }
+
+        function renderPolicyCard(r) {
+            if (!r.policy_area) return '';
+            return `
+                <div class="result-card" onclick="openPolicyArea('${esc(r.policy_area).replace(/'/g, "\\'")}')">
+                    <div class="card-header">
+                        <div class="card-title">${esc(r.policy_area)}</div>
+                    </div>
+                    <div class="card-meta">
+                        <span class="meta-item"><span>${formatNumber(r.bill_count)}</span> bills</span>
+                        <span class="meta-item"><span>${formatNumber(r.sponsor_count)}</span> sponsors</span>
+                        <span class="meta-item">${r.congress_from}th\u2013${r.congress_to}th Congress</span>
+                    </div>
+                </div>`;
+        }
+
+        // Policy area detail
+        async function openPolicyArea(area) {
+            if (!area) return;
+
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailContent.innerHTML = '';
+
+            try {
+                const aSafe = area.replace(/'/g, "''");
+
+                const [stats, recentBills, topSponsors, topSubjects] = await Promise.all([
+                    query(`
+                        SELECT COUNT(*) AS bill_count,
+                            COUNT(DISTINCT sponsor_bioguide_id) AS sponsor_count,
+                            MIN(congress) AS congress_from,
+                            MAX(congress) AS congress_to,
+                            SUM(cosponsor_count) AS total_cosponsors
+                        FROM legislation WHERE policy_area = '${aSafe}'
+                    `),
+                    query(`
+                        SELECT l.bill_id, l.congress, l.bill_type, l.bill_number, l.title,
+                            l.introduced_date, l.cosponsor_count, l.latest_action_text,
+                            cm.full_name AS sponsor_name, cm.party AS sponsor_party
+                        FROM legislation l
+                        LEFT JOIN congress_members cm ON cm.bioguide_id = l.sponsor_bioguide_id
+                        WHERE l.policy_area = '${aSafe}'
+                        ORDER BY l.introduced_date DESC
+                        LIMIT 30
+                    `),
+                    query(`
+                        SELECT cm.bioguide_id, cm.full_name, cm.party, cm.state, cm.is_current,
+                            COUNT(*) AS bills
+                        FROM legislation l
+                        JOIN congress_members cm ON cm.bioguide_id = l.sponsor_bioguide_id
+                        WHERE l.policy_area = '${aSafe}'
+                        GROUP BY cm.bioguide_id
+                        ORDER BY bills DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT ls.subject, COUNT(DISTINCT ls.bill_id) AS cnt
+                        FROM legislation_subjects ls
+                        JOIN legislation l ON l.bill_id = ls.bill_id
+                        WHERE l.policy_area = '${aSafe}'
+                        GROUP BY ls.subject
+                        ORDER BY cnt DESC
+                        LIMIT 15
+                    `)
+                ]);
+
+                const s = stats[0] || {};
+
+                detailHeader.innerHTML = `
+                    <div class="card-title" style="font-size:1.3rem;margin-bottom:0.3rem;">${esc(area)}</div>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);">Legislative Policy Area</div>
+                `;
+
+                let html = '';
+
+                // Stats
+                html += '<div class="stat-grid">';
+                html += `<div class="stat-box"><div class="num">${formatNumber(s.bill_count)}</div><div class="label">Bills</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(s.sponsor_count)}</div><div class="label">Sponsors</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(s.total_cosponsors)}</div><div class="label">Cosponsors</div></div>`;
+                html += `<div class="stat-box"><div class="num">${s.congress_from}\u2013${s.congress_to}</div><div class="label">Congresses</div></div>`;
+                html += '</div>';
+
+                // Top subjects
+                if (topSubjects.length > 0) {
+                    html += '<div class="section-title" style="margin-bottom:0.5rem;">Top Subject Tags</div>';
+                    html += '<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem;">';
+                    topSubjects.forEach(ts => {
+                        html += `<span style="padding:0.25rem 0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-size:0.75rem;color:var(--text-secondary);">${esc(ts.subject)} (${ts.cnt})</span>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Top sponsors
+                if (topSponsors.length > 0) {
+                    html += `<div class="section-title">Top Sponsors (${topSponsors.length})</div>`;
+                    html += '<div class="top-list">';
+                    topSponsors.forEach((sp, i) => {
+                        const pl = sp.party === 'Republican' ? 'party-r' : sp.party === 'Democrat' ? 'party-d' : 'party-i';
+                        const letter = sp.party === 'Republican' ? 'R' : sp.party === 'Democrat' ? 'D' : 'I';
+                        html += `<div class="top-item" onclick="window.open('/explore/member.html?member=${encodeURIComponent(sp.bioguide_id)}','_blank')">
+                            <span class="top-rank">${i + 1}</span>
+                            <div class="top-info">
+                                <div class="top-name"><span class="party-badge ${pl}">${letter}</span> ${esc(sp.full_name)} <span style="color:var(--text-muted);font-size:0.7rem;">${esc(sp.state)}</span></div>
+                                <div class="top-meta">${formatNumber(sp.bills)} bills${sp.is_current ? '' : ' (former member)'}</div>
+                            </div>
+                        </div>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Recent bills
+                if (recentBills.length > 0) {
+                    html += `<div class="section-title">Recent Bills (${recentBills.length})</div>`;
+                    html += '<div class="top-list">';
+                    recentBills.forEach(b => {
+                        const pClass = b.sponsor_party === 'Republican' ? 'party-r' : b.sponsor_party === 'Democrat' ? 'party-d' : '';
+                        html += `<div class="top-item">
+                            <div class="top-info">
+                                <div class="top-name">${esc(b.bill_type || '')}${b.bill_number || ''} &mdash; ${esc(truncate(b.title, 100))}</div>
+                                <div class="top-meta"><span class="${pClass}">${esc(b.sponsor_name || '?')}</span> &middot; ${esc(b.introduced_date || '')}${b.cosponsor_count ? ' &middot; ' + b.cosponsor_count + ' cosponsors' : ''}</div>
+                            </div>
+                        </div>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Cross-links
+                html += '<div class="cross-links" style="margin-top:1rem;">';
+                html += `<a class="cross-link" href="/explore/lobbying.html?q=${encodeURIComponent(area)}">Related Lobbying &rarr;</a>`;
+                html += `<a class="cross-link" href="/explore/entity.html?q=${encodeURIComponent(area)}">Follow the Data &rarr;</a>`;
+                html += '</div>';
+
+                detailContent.innerHTML = html;
+            } catch (err) {
+                detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        function renderAgencyCard(r) {
+            const regsCode = AGENCY_REGS_MAP[r.name] || '';
+            const safeName = esc(r.name).replace(/'/g, "\\'");
+            return `
+                <div class="result-card" onclick="openAgency('${safeName}', '${esc(regsCode)}')">
+                    <div class="card-header">
+                        <div class="card-title">${esc(r.name)}</div>
+                        ${regsCode ? '<span class="agency-badge">' + esc(regsCode) + '</span>' : ''}
+                    </div>
+                    <div class="card-meta">
+                        <span class="meta-item"><span>${formatNumber(r.award_count)}</span> awards</span>
+                        <span class="meta-item">${formatMoney(r.total_spending)} spending</span>
+                        <span class="meta-item"><span>${r.sub_count}</span> sub-agencies</span>
+                        ${regsCode ? '<span class="meta-item" style="color:var(--dawn-amber);">Has regulation data</span>' : ''}
+                    </div>
+                </div>`;
+        }
+
+        function renderExecutiveCard(r) {
+            const isEO = r.document_type === 'executive_order';
+            return `
+                <div class="result-card">
+                    <div class="card-header">
+                        <div class="card-title">${r.html_url ? '<a class="doc-link" href="' + esc(r.html_url) + '" target="_blank" rel="noopener">' + esc(truncate(r.title, 200)) + '</a>' : esc(truncate(r.title, 200))}</div>
+                        <span class="type-badge ${isEO ? 'rule' : 'notice'}">${isEO ? 'EO ' + (r.executive_order_number || '') : 'Proclamation'}</span>
+                    </div>
+                    <div class="card-meta">
+                        <span class="meta-item">Signed ${esc(r.signing_date || '?')}</span>
+                        <span class="meta-item">Published ${esc(r.publication_date || '?')}</span>
+                        ${r.html_url ? '<a class="source-link" href="' + esc(r.html_url) + '" target="_blank" rel="noopener">Federal Register &rarr;</a>' : ''}
+                    </div>
+                    ${r.abstract ? '<div class="card-excerpt">' + esc(truncate(r.abstract, 300)) + '</div>' : ''}
+                </div>`;
+        }
+
+        // Agency detail — takes agency name + optional regs_code
+        async function openAgency(agencyName, regsCode) {
+            if (!agencyName) return;
+
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailContent.innerHTML = '';
+
+            try {
+                const safeName = agencyName.replace(/'/g, "''");
+                const aid = (regsCode || '').replace(/'/g, "''");
+
+                // Always fetch spending + FR data; conditionally fetch Regs.gov data
+                const promises = [
+                    query(`
+                        SELECT sub_agency, award_category,
+                            COUNT(*) AS award_count,
+                            CAST(SUM(award_amount) AS INTEGER) AS total_amount
+                        FROM spending_awards
+                        WHERE agency = '${safeName}'
+                        GROUP BY sub_agency
+                        ORDER BY total_amount DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT recipient_name,
+                            COUNT(*) AS award_count,
+                            CAST(SUM(award_amount) AS INTEGER) AS total_amount
+                        FROM spending_awards
+                        WHERE agency = '${safeName}'
+                        GROUP BY recipient_name
+                        ORDER BY total_amount DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT COUNT(*) AS cnt FROM spending_awards WHERE agency = '${safeName}'
+                    `),
+                    query(`
+                        SELECT COUNT(*) AS cnt FROM federal_register WHERE agency_names LIKE '%${safeName.replace(/Department of the /,'').replace(/Department of /,'').split(' ')[0]}%'
+                    `)
+                ];
+
+                // If this agency has Regs.gov data, also fetch regulatory stats
+                if (aid) {
+                    promises.push(
+                        query(`
+                            SELECT
+                                (SELECT COUNT(*) FROM dockets WHERE agency_id = '${aid}') AS docket_count,
+                                (SELECT COUNT(*) FROM documents WHERE agency_id = '${aid}') AS doc_count,
+                                (SELECT COUNT(*) FROM comments WHERE agency_id = '${aid}') AS comment_count,
+                                (SELECT COUNT(*) FROM documents WHERE agency_id = '${aid}' AND comment_end_date > datetime('now') AND withdrawn = 0) AS open_count
+                        `),
+                        query(`
+                            SELECT d.id, d.title, d.docket_type,
+                                (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
+                                (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+                            FROM dockets d
+                            WHERE d.agency_id = '${aid}'
+                            ORDER BY d.id DESC
+                            LIMIT 20
+                        `),
+                        query(`
+                            SELECT id, title, comment_end_date, docket_id,
+                                CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                            FROM documents
+                            WHERE agency_id = '${aid}' AND comment_end_date > datetime('now') AND withdrawn = 0
+                            ORDER BY comment_end_date ASC
+                            LIMIT 20
+                        `)
+                    );
+                }
+
+                const results = await Promise.all(promises);
+                const [subAgencies, topRecipients, spendingCount, frCount] = results;
+                const regsStats = aid ? results[4] : null;
+                const recentDockets = aid ? results[5] : [];
+                const openDocs = aid ? results[6] : [];
+
+                const totalSpending = subAgencies.reduce((s, r) => s + (r.total_amount || 0), 0);
+                const rs = regsStats ? regsStats[0] || {} : {};
+
+                const regsGovUrl = aid ? 'https://www.regulations.gov/search?filter=' + encodeURIComponent(aid) : '';
+                detailHeader.innerHTML = `
+                    <div class="card-title" style="font-size:1.3rem;margin-bottom:0.3rem;">${esc(agencyName)}</div>
+                    ${aid ? '<span class="agency-badge" style="font-size:0.85rem;">' + esc(aid) + ' — Regulations.gov</span>' : ''}
+                    ${regsGovUrl ? ' <a href="' + esc(regsGovUrl) + '" target="_blank" rel="noopener" style="color:var(--dawn-amber);text-decoration:none;font-family:\'IBM Plex Mono\',monospace;font-size:0.75rem;margin-left:0.5rem;">View on Regulations.gov &rarr;</a>' : ''}
+                `;
+
+                let html = '<div class="stat-grid">';
+                html += `<div class="stat-box"><div class="num">${formatMoney(totalSpending)}</div><div class="label">Total Spending</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber((spendingCount[0]||{}).cnt)}</div><div class="label">Awards</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber((frCount[0]||{}).cnt)}</div><div class="label">FR Docs</div></div>`;
+                if (aid) {
+                    html += `<div class="stat-box"><div class="num">${formatNumber(rs.docket_count)}</div><div class="label">Dockets</div></div>`;
+                    html += `<div class="stat-box"><div class="num">${formatNumber(rs.doc_count)}</div><div class="label">Reg Docs</div></div>`;
+                    html += `<div class="stat-box"><div class="num">${formatNumber(rs.comment_count)}</div><div class="label">Comments</div></div>`;
+                } else {
+                    html += `<div class="stat-box"><div class="num">${subAgencies.length}</div><div class="label">Sub-agencies</div></div>`;
+                }
+                html += '</div>';
+
+                // Open for comment (only for Regs.gov agencies)
+                if (openDocs.length > 0) {
+                    html += `<div class="section-title" style="color:var(--dawn-amber);">Open for Comment (${openDocs.length})</div>`;
+                    openDocs.forEach(d => {
+                        html += `<div class="result-card" onclick="openDocket('${esc(d.docket_id)}')" style="margin-bottom:0.5rem;">
+                            <div class="card-title" style="font-size:0.85rem;">${esc(truncate(d.title, 150))}</div>
+                            <div class="card-meta"><span class="type-badge open">${d.days_left} days left</span></div>
+                        </div>`;
+                    });
+                }
+
+                // Recent dockets (only for Regs.gov agencies)
+                if (recentDockets.length > 0) {
+                    html += `<div class="section-title">Recent Dockets (${recentDockets.length})</div>`;
+                    html += '<div class="top-list">';
+                    recentDockets.forEach(d => {
+                        html += `<div class="top-item" onclick="openDocket('${esc(d.id)}')">
+                            <div class="top-info">
+                                <div class="top-name">${esc(truncate(d.title, 100))}</div>
+                                <div class="top-meta">${esc(d.id)} &middot; ${formatNumber(d.comment_count)} comments &middot; ${formatNumber(d.doc_count)} docs</div>
+                            </div>
+                        </div>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Sub-agencies by spending
+                if (subAgencies.length > 1) {
+                    html += `<div class="section-title">Sub-agencies by Spending</div>`;
+                    html += '<div class="top-list">';
+                    subAgencies.forEach((sa, i) => {
+                        html += `<div class="top-item">
+                            <span class="top-rank">${i + 1}</span>
+                            <div class="top-info">
+                                <div class="top-name">${esc(sa.sub_agency || agencyName)}</div>
+                                <div class="top-meta">${formatNumber(sa.award_count)} awards</div>
+                            </div>
+                            <span class="money-badge">${formatMoney(sa.total_amount)}</span>
+                        </div>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Top spending recipients
+                if (topRecipients.length > 0) {
+                    html += '<div class="section-title">Top Spending Recipients</div>';
+                    html += '<div class="top-list">';
+                    topRecipients.forEach((sp, i) => {
+                        html += `<div class="top-item">
+                            <span class="top-rank">${i + 1}</span>
+                            <div class="top-info">
+                                <div class="top-name">${esc(sp.recipient_name)}</div>
+                                <div class="top-meta">${formatNumber(sp.award_count)} awards</div>
+                            </div>
+                            <span class="money-badge">${formatMoney(sp.total_amount)}</span>
+                        </div>`;
+                    });
+                    html += '</div>';
+                }
+
+                // Cross-links
+                html += '<div class="cross-links" style="margin-top:1rem;">';
+                html += `<a class="cross-link" href="/explore/lobbying.html?q=${encodeURIComponent(agencyName)}">Related Lobbying &rarr;</a>`;
+                html += `<a class="cross-link" href="/explore/member.html?q=${encodeURIComponent(agencyName)}&filter=all">Related Members &rarr;</a>`;
+                html += `<a class="cross-link" href="/explore/entity.html?q=${encodeURIComponent(agencyName)}">Cross-dataset Entity Search &rarr;</a>`;
+                html += '</div>';
+
+                detailContent.innerHTML = html;
+            } catch (err) {
+                detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        // Docket detail
+        async function openDocket(docketId) {
+            if (!docketId) return;
+
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailContent.innerHTML = '';
+
+            try {
+                const did = docketId.replace(/'/g, "''");
+
+                // Load docket info, documents, and comment stats in parallel
+                const [docketRows, docs, commentStats, frDocs, orgComments] = await Promise.all([
+                    query(`
+                        SELECT d.*,
+                            (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
+                            (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+                        FROM dockets d WHERE d.id = '${did}'
+                    `),
+                    query(`
+                        SELECT id, title, document_type, posted_date, comment_start_date, comment_end_date, fr_doc_num
+                        FROM documents WHERE docket_id = '${did}'
+                        ORDER BY posted_date DESC LIMIT 51
+                    `),
+                    query(`
+                        SELECT submitter_type, COUNT(*) AS cnt
+                        FROM comments WHERE docket_id = '${did}'
+                        GROUP BY submitter_type ORDER BY cnt DESC LIMIT 10
+                    `),
+                    query(`
+                        SELECT fr.document_number, fr.title, fr.type, fr.publication_date,
+                               fr.abstract, fr.html_url, fr.pdf_url
+                        FROM fr_regs_crossref xr
+                        JOIN documents doc ON doc.id = xr.regs_document_id
+                        JOIN federal_register fr ON fr.document_number = xr.fr_document_number
+                        WHERE doc.docket_id = '${did}'
+                        ORDER BY fr.publication_date DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT c.id, c.title, c.submitter_name, c.posted_date,
+                               cd.comment_text, cd.subtype, cd.city, cd.state_province,
+                               cd.attachment_count, cd.attachment_urls
+                        FROM comments c
+                        JOIN comment_details cd ON cd.id = c.id
+                        WHERE c.docket_id = '${did}'
+                        ORDER BY cd.comment_text IS NOT NULL DESC, c.posted_date DESC
+                        LIMIT 20
+                    `)
+                ]);
+
+                if (docketRows.length === 0) {
+                    detailHeader.innerHTML = '<p style="padding:1rem;">Docket not found</p>';
+                    return;
+                }
+
+                const d = docketRows[0];
+
+                detailHeader.innerHTML = `
+                    <div class="card-title" style="font-size:1.3rem;margin-bottom:0.5rem;">${esc(d.title)}</div>
+                    <div class="card-meta">
+                        <span class="agency-badge">${esc(d.agency_id)}</span>
+                        ${docketTypeBadge(d.docket_type)}
+                        <span class="meta-item">${esc(d.id)}</span>
+                        <a class="source-link" href="https://www.regulations.gov/docket/${encodeURIComponent(d.id)}" target="_blank" rel="noopener">View on Regulations.gov &rarr;</a>
+                    </div>
+                `;
+
+                let html = '';
+
+                // Stats
+                html += '<div class="stat-grid">';
+                html += `<div class="stat-box"><div class="num">${formatNumber(d.comment_count)}</div><div class="label">Comments</div></div>`;
+                html += `<div class="stat-box"><div class="num">${formatNumber(d.doc_count)}</div><div class="label">Documents</div></div>`;
+                html += '</div>';
+
+                // Comment breakdown
+                if (commentStats.length > 0) {
+                    html += '<div class="section-title">Comments by Submitter Type</div>';
+                    html += '<div class="stat-grid">';
+                    html += commentStats.map(s =>
+                        `<div class="stat-box"><div class="num">${formatNumber(s.cnt)}</div><div class="label">${esc(s.submitter_type || 'Unknown')}</div></div>`
+                    ).join('');
+                    html += '</div>';
+                }
+
+                // Organization/detailed comments
+                if (orgComments.length > 0) {
+                    html += `<div class="section-title">Detailed Comments (${orgComments.length})</div>`;
+                    orgComments.forEach(c => {
+                        const loc = [c.city, c.state_province].filter(Boolean).join(', ');
+                        const attUrls = c.attachment_urls ? JSON.parse(c.attachment_urls) : [];
+                        html += `<div class="result-card" style="margin-bottom:0.5rem;">
+                            <div class="card-header">
+                                <div class="card-title" style="font-size:0.85rem;">${esc(truncate(c.title || c.submitter_name || 'Comment', 200))}</div>
+                                ${c.subtype ? '<span class="type-badge" style="font-size:0.6rem;">' + esc(c.subtype) + '</span>' : ''}
+                            </div>
+                            <div class="card-meta">
+                                ${c.submitter_name ? '<span class="meta-item">' + esc(c.submitter_name) + '</span>' : ''}
+                                ${loc ? '<span class="meta-item">' + esc(loc) + '</span>' : ''}
+                                <span class="meta-item">${esc(c.posted_date)}</span>
+                                ${c.attachment_count > 0 ? '<span class="meta-item">' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') + '</span>' : ''}
+                                <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">View on Regs.gov &rarr;</a>
+                            </div>
+                            ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + esc(truncate(c.comment_text, 500)) + '</div>' : ''}
+                            ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
+                        </div>`;
+                    });
+                }
+
+                // Federal Register documents (cross-referenced)
+                if (frDocs.length > 0) {
+                    html += `<div class="section-title">Federal Register Documents (${frDocs.length})</div>`;
+                    frDocs.forEach(fr => {
+                        html += `<div class="result-card" style="margin-bottom:0.5rem;">
+                            <div class="card-header">
+                                <div class="card-title" style="font-size:0.85rem;">${fr.html_url ? '<a class="doc-link" href="' + esc(fr.html_url) + '" target="_blank" rel="noopener">' + esc(truncate(fr.title, 150)) + '</a>' : esc(truncate(fr.title, 150))}</div>
+                                ${docTypeBadge(fr.type)}
+                            </div>
+                            <div class="card-meta">
+                                <span class="meta-item">Published ${esc(fr.publication_date || '?')}</span>
+                                ${fr.html_url ? '<a class="source-link" href="' + esc(fr.html_url) + '" target="_blank" rel="noopener">Federal Register &rarr;</a>' : ''}
+                                ${fr.pdf_url ? '<a class="source-link" href="' + esc(fr.pdf_url) + '" target="_blank" rel="noopener">PDF &rarr;</a>' : ''}
+                            </div>
+                            ${fr.abstract ? '<div class="card-excerpt">' + esc(truncate(fr.abstract, 250)) + '</div>' : ''}
+                        </div>`;
+                    });
+                }
+
+                // Document timeline
+                if (docs.length > 0) {
+                    const docHasMore = docs.length > 50;
+                    const docBatch = docs.slice(0, 50);
+                    html += `<div class="section-title">Document Timeline (${d.doc_count} total)</div>`;
+                    html += '<ul class="timeline" id="docTimeline">';
+                    html += docBatch.map(doc => `
+                        <li>
+                            <div class="tl-date">${esc(doc.posted_date)}</div>
+                            <div class="tl-title"><a class="doc-link" href="https://www.regulations.gov/document/${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${esc(truncate(doc.title, 150))}</a></div>
+                            <div class="tl-type">
+                                ${docTypeBadge(doc.document_type)}
+                                ${doc.fr_doc_num ? '<a class="source-link" href="https://www.federalregister.gov/d/' + encodeURIComponent(doc.fr_doc_num) + '" target="_blank" rel="noopener">FR Doc &rarr;</a>' : ''}
+                            </div>
+                        </li>
+                    `).join('');
+                    html += '</ul>';
+                    if (docHasMore) html += `<button class="load-more-btn" onclick="loadMoreDocs('${esc(did)}', 50)">Load more documents</button>`;
+                }
+
+                // Cross-links
+                const topWords = (d.title || '').split(/\s+/).filter(w => w.length > 4).slice(0, 3).join(' ');
+                if (topWords) {
+                    html += '<div class="section-title" style="margin-top:1.5rem;">Explore Connections</div>';
+                    html += '<div class="cross-links">';
+                    html += `<a class="cross-link" href="/explore/lobbying.html?q=${encodeURIComponent(topWords)}">Related Lobbying &rarr;</a>`;
+                    html += `<a class="cross-link" href="/explore/member.html?q=${encodeURIComponent(d.agency_id)}&filter=all">Members &amp; ${esc(d.agency_id)} &rarr;</a>`;
+                    html += '</div>';
+                }
+
+                detailContent.innerHTML = html;
+
+            } catch (err) {
+                detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
+        }
+
+        window.loadMoreDocs = async function(did, offset) {
+            const docs = await query(`
+                SELECT id, title, document_type, posted_date, comment_start_date, comment_end_date, fr_doc_num
+                FROM documents WHERE docket_id = '${did}'
+                ORDER BY posted_date DESC LIMIT 51 OFFSET ${offset}
+            `);
+            const hasMore = docs.length > 50;
+            const batch = docs.slice(0, 50);
+            document.getElementById('docTimeline').insertAdjacentHTML('beforeend', batch.map(doc => `
+                <li>
+                    <div class="tl-date">${esc(doc.posted_date)}</div>
+                    <div class="tl-title"><a class="doc-link" href="https://www.regulations.gov/document/${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${esc(truncate(doc.title, 150))}</a></div>
+                    <div class="tl-type">
+                        ${docTypeBadge(doc.document_type)}
+                        ${doc.fr_doc_num ? '<a class="source-link" href="https://www.federalregister.gov/d/' + encodeURIComponent(doc.fr_doc_num) + '" target="_blank" rel="noopener">FR Doc &rarr;</a>' : ''}
+                    </div>
+                </li>
+            `).join(''));
+            const oldBtn = detailContent.querySelector('.load-more-btn');
+            if (oldBtn) oldBtn.remove();
+            if (hasMore) detailContent.insertAdjacentHTML('beforeend', `<button class="load-more-btn" onclick="loadMoreDocs('${did}', ${offset + 50})">Load more documents</button>`);
+        };
+
+        function closeDetail() {
+            detailOverlay.classList.remove('visible');
+            detailPanel.classList.remove('visible');
+        }
+
+        // Load open comment count badge
+        query("SELECT COUNT(*) AS cnt FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0")
+            .then(rows => {
+                if (rows.length > 0 && rows[0].cnt > 0) {
+                    const badge = document.getElementById('openBadge');
+                    badge.textContent = rows[0].cnt;
+                    badge.style.display = 'inline-block';
+                }
+            }).catch(() => {});
+
+        readURL();
+        searchInput.focus();
+    </script>
+</body>
+</html>

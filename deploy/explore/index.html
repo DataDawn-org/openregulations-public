@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explore — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        /* Hero */
+        .hero {
+            padding: 5rem 3rem 3rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        /* Stats row */
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 2.5rem;
+            margin: 3rem auto 0;
+            max-width: 800px;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat .num {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: var(--dawn-gold);
+        }
+
+        .stat .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-top: 0.3rem;
+        }
+
+        /* Pathway cards */
+        .pathways {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            max-width: 1000px;
+            margin: 4rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .pathway-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 2rem;
+            text-decoration: none;
+            color: inherit;
+            transition: border-color 0.3s, transform 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .pathway-card:hover {
+            border-color: rgba(245, 158, 11, 0.25);
+            transform: translateY(-3px);
+        }
+
+        .pathway-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            opacity: 0.8;
+        }
+
+        .pathway-card h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            font-weight: 400;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+        }
+
+        .pathway-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.5;
+            flex: 1;
+        }
+
+        .pathway-stats {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 1.2rem;
+            letter-spacing: 0.03em;
+        }
+
+        .pathway-stats span { color: var(--dawn-gold); }
+
+        .pathway-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-amber);
+            margin-top: 1rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* API card */
+        .api-section {
+            max-width: 1000px;
+            margin: 3rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .api-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 2rem;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .api-card:hover {
+            border-color: rgba(245, 158, 11, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .api-card .api-icon {
+            font-size: 2rem;
+            opacity: 0.7;
+            flex-shrink: 0;
+        }
+
+        .api-card h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.1rem;
+            font-weight: 400;
+            margin-bottom: 0.4rem;
+        }
+
+        .api-card p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.4;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .hero { padding: 3rem 1.5rem 2rem; }
+            .stats { gap: 1.5rem; padding: 0 1.5rem; }
+            .pathways { padding: 0 1.5rem; }
+            .api-section { padding: 0 1.5rem; }
+            .api-card { flex-direction: column; text-align: center; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html" class="active">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <h1>Explore the data</h1>
+        <p>Federal regulatory data, congressional activity, and lobbying disclosures &mdash; all searchable, all free. Powered by public records from the Federal Register, Regulations.gov, Congress.gov, and the Senate Office of Public Records.</p>
+    </div>
+
+    <div class="stats" id="stats">
+        <div class="stat"><div class="num" id="statFR">&mdash;</div><div class="label">FR Documents</div></div>
+        <div class="stat"><div class="num" id="statComments">&mdash;</div><div class="label">Public Comments</div></div>
+        <div class="stat"><div class="num" id="statVotes">&mdash;</div><div class="label">Roll Call Votes</div></div>
+        <div class="stat"><div class="num" id="statMembers">&mdash;</div><div class="label">Members of Congress</div></div>
+        <div class="stat"><div class="num" id="statLobbying">&mdash;</div><div class="label">Lobbying Filings</div></div>
+        <div class="stat"><div class="num" id="statFEC">&mdash;</div><div class="label">FEC Contributions</div></div>
+        <div class="stat"><div class="num" id="statFARA">&mdash;</div><div class="label">Foreign Agents</div></div>
+    </div>
+
+    <div class="pathways">
+        <a href="/explore/member.html" class="pathway-card">
+            <div class="pathway-icon">&#9679;</div>
+            <h2>Member Profiles</h2>
+            <p>Search current and historical members of Congress. See their voting record, campaign donors, stock trades, floor speeches, and sponsored legislation &mdash; all in one place.</p>
+            <div class="pathway-stats"><span id="pcMembers">12,700+</span> members &middot; <span id="pcVotes">8.3M+</span> vote records &middot; <span id="pcFEC">4.4M+</span> contributions</div>
+            <span class="pathway-link">Explore members &rarr;</span>
+        </a>
+
+        <a href="/explore/regulation.html" class="pathway-card">
+            <div class="pathway-icon">&#9670;</div>
+            <h2>Regulatory Lifecycle</h2>
+            <p>Follow a regulation from proposed rule to final rule. Search dockets, Federal Register documents, and public comments. Find what's open for comment right now.</p>
+            <div class="pathway-stats"><span id="pcDockets">86K+</span> dockets &middot; <span id="pcFR">993K+</span> FR docs &middot; <span id="pcComments">3.1M+</span> comments</div>
+            <span class="pathway-link">Explore regulations &rarr;</span>
+        </a>
+
+        <a href="/explore/lobbying.html" class="pathway-card">
+            <div class="pathway-icon">&#9733;</div>
+            <h2>Lobbying Explorer</h2>
+            <p>See who's lobbying whom. Search by client, firm, or issue area. Track spending over time and discover lobbyists with prior government positions (revolving door).</p>
+            <div class="pathway-stats"><span id="pcLobbyAct">115K+</span> activities &middot; <span>32</span> issue areas</div>
+            <span class="pathway-link">Explore lobbying &rarr;</span>
+        </a>
+
+        <a href="/explore/legislation.html" class="pathway-card">
+            <div class="pathway-icon">&#9878;</div>
+            <h2>Legislation</h2>
+            <p>Search 167,000+ bills and resolutions from the 93rd&ndash;119th Congress. Browse by policy area, subject tags, and sponsors. See cosponsors, actions, and full legislative history.</p>
+            <div class="pathway-stats"><span id="pcLegislation">167K+</span> bills &middot; <span>27</span> congresses &middot; <span id="pcLegSubjects">1.5M+</span> subject tags</div>
+            <span class="pathway-link">Explore legislation &rarr;</span>
+        </a>
+
+        <a href="/explore/fara.html" class="pathway-card">
+            <div class="pathway-icon">&#9872;</div>
+            <h2>Foreign Agents (FARA)</h2>
+            <p>Explore registered foreign agents under FARA. Search firms representing foreign governments, see which countries they work for, and browse the agents and filings.</p>
+            <div class="pathway-stats"><span id="pcFaraReg">7K+</span> registrants &middot; <span id="pcFaraFP">17K+</span> foreign principals &middot; <span id="pcFaraDocs">151K+</span> documents</div>
+            <span class="pathway-link">Explore FARA &rarr;</span>
+        </a>
+    </div>
+
+    <div class="api-section">
+        <a href="/explore/api.html" class="api-card">
+            <div class="api-icon">{ }</div>
+            <div>
+                <h3>API Documentation</h3>
+                <p>Full JSON API for developers and AI agents. Schema reference, canned queries with parameters, and interactive examples. All data available via SQL or pre-built endpoints.</p>
+            </div>
+        </a>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+
+        function fmt(n) {
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+            return n.toLocaleString();
+        }
+
+        async function loadStats() {
+            try {
+                const sql = `
+                    SELECT
+                        (SELECT COUNT(*) FROM federal_register) AS fr,
+                        (SELECT COUNT(*) FROM comments) AS comments,
+                        (SELECT COUNT(*) FROM congress_members) AS members,
+                        (SELECT COUNT(*) FROM stock_trades) AS trades,
+                        (SELECT COUNT(*) FROM lobbying_activities) AS lobbying,
+                        (SELECT COUNT(*) FROM dockets) AS dockets,
+                        (SELECT COUNT(*) FROM congressional_record) AS speeches,
+                        (SELECT COUNT(*) FROM member_votes) AS votes,
+                        (SELECT COUNT(*) FROM fec_contributions) AS fec,
+                        (SELECT COUNT(*) FROM fara_short_forms) AS fara
+                `;
+                const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+                const resp = await fetch(url);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const r = (data.rows || [])[0];
+                if (!r) return;
+
+                document.getElementById('statFR').textContent = fmt(r.fr);
+                document.getElementById('statComments').textContent = fmt(r.comments);
+                document.getElementById('statMembers').textContent = fmt(r.members);
+                document.getElementById('statLobbying').textContent = fmt(r.lobbying);
+                document.getElementById('statVotes').textContent = fmt(r.votes);
+                document.getElementById('statFEC').textContent = fmt(r.fec);
+                document.getElementById('statFARA').textContent = fmt(r.fara);
+
+                // Update pathway cards
+                document.getElementById('pcMembers').textContent = fmt(r.members);
+                document.getElementById('pcVotes').textContent = fmt(r.votes);
+                document.getElementById('pcFEC').textContent = fmt(r.fec);
+                document.getElementById('pcDockets').textContent = fmt(r.dockets);
+                document.getElementById('pcFR').textContent = fmt(r.fr);
+                document.getElementById('pcComments').textContent = fmt(r.comments);
+                document.getElementById('pcLobbyAct').textContent = fmt(r.lobbying);
+
+                // FARA pathway
+                const faraRegQ = `SELECT COUNT(*) AS c FROM fara_registrants`;
+                const faraFPQ = `SELECT COUNT(*) AS c FROM fara_foreign_principals`;
+                const faraDocQ = `SELECT COUNT(*) AS c FROM fara_registrant_docs`;
+                const [faraRegR, faraFPR, faraDocR] = await Promise.all([
+                    fetch(`${API}.json?sql=${encodeURIComponent(faraRegQ)}&_shape=objects`).then(r=>r.json()),
+                    fetch(`${API}.json?sql=${encodeURIComponent(faraFPQ)}&_shape=objects`).then(r=>r.json()),
+                    fetch(`${API}.json?sql=${encodeURIComponent(faraDocQ)}&_shape=objects`).then(r=>r.json()),
+                ]);
+                if (faraRegR.rows?.[0]) document.getElementById('pcFaraReg').textContent = fmt(faraRegR.rows[0].c);
+                if (faraFPR.rows?.[0]) document.getElementById('pcFaraFP').textContent = fmt(faraFPR.rows[0].c);
+                if (faraDocR.rows?.[0]) document.getElementById('pcFaraDocs').textContent = fmt(faraDocR.rows[0].c);
+
+                // Legislation pathway
+                const legQ = `SELECT COUNT(*) AS c FROM legislation`;
+                const legSubQ = `SELECT COUNT(*) AS c FROM legislation_subjects`;
+                const [legR, legSubR] = await Promise.all([
+                    fetch(`${API}.json?sql=${encodeURIComponent(legQ)}&_shape=objects`).then(r=>r.json()),
+                    fetch(`${API}.json?sql=${encodeURIComponent(legSubQ)}&_shape=objects`).then(r=>r.json()),
+                ]);
+                if (legR.rows?.[0]) document.getElementById('pcLegislation').textContent = fmt(legR.rows[0].c);
+                if (legSubR.rows?.[0]) document.getElementById('pcLegSubjects').textContent = fmt(legSubR.rows[0].c);
+
+            } catch (e) {
+                // Stats fail gracefully — static fallbacks already shown
+            }
+        }
+
+        loadStats();
+    </script>
+</body>
+</html>

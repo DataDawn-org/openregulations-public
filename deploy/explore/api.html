@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Documentation — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Structured data for AI agents -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebAPI",
+        "name": "OpenRegs API",
+        "description": "Federal regulatory data API powered by Datasette. Covers Federal Register documents, regulatory dockets, public comments, congressional members, stock trades, floor speeches, legislation, lobbying disclosures, federal spending, executive orders, and committee assignments. All data is U.S. government public domain.",
+        "url": "https://regs.datadawn.org/openregs",
+        "documentation": "https://regs.datadawn.org/explore/api.html",
+        "provider": {
+            "@type": "Organization",
+            "name": "DataDawn",
+            "url": "https://datadawn.org"
+        },
+        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "termsOfService": "Free for any use. Attribution appreciated but not required.",
+        "endpoints": [
+            {"name": "SQL Query", "url": "https://regs.datadawn.org/openregs.json?sql={SQL}&_shape=objects", "method": "GET"},
+            {"name": "Table Data", "url": "https://regs.datadawn.org/openregs/{table}.json?_shape=objects", "method": "GET"},
+            {"name": "Canned Queries", "url": "https://regs.datadawn.org/openregs/{query_name}.json?{params}", "method": "GET"}
+        ],
+        "datasets": [
+            {"name": "federal_register", "description": "Federal Register documents (1994-present)", "rows": 993703, "key": "document_number"},
+            {"name": "dockets", "description": "Regulatory dockets from Regulations.gov", "rows": 86706, "key": "id"},
+            {"name": "documents", "description": "Regulatory documents within dockets", "rows": 727510, "key": "id", "foreignKeys": ["docket_id → dockets.id", "agency_id → agency_map.regs_code"]},
+            {"name": "comments", "description": "Public comments on regulatory documents", "rows": 3181491, "key": "id", "foreignKeys": ["docket_id → dockets.id"]},
+            {"name": "congress_members", "description": "Current and historical Congress members", "rows": 12763, "key": "bioguide_id"},
+            {"name": "stock_trades", "description": "Congressional stock trading disclosures", "rows": 95621, "foreignKeys": ["bioguide_id → congress_members.bioguide_id"]},
+            {"name": "congressional_record", "description": "Floor speeches and proceedings", "rows": 878583, "key": "granule_id"},
+            {"name": "crec_speakers", "description": "Speaker-to-speech mapping", "rows": 944216, "foreignKeys": ["granule_id → congressional_record.granule_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "crec_bills", "description": "Links between floor speeches and legislation", "rows": 1561719, "foreignKeys": ["granule_id → congressional_record.granule_id", "bill_id → legislation.bill_id"]},
+            {"name": "legislation", "description": "Bills and resolutions", "rows": 144471, "key": "bill_id", "foreignKeys": ["sponsor_bioguide_id → congress_members.bioguide_id"]},
+            {"name": "legislation_cosponsors", "description": "Bill cosponsors", "rows": 1739284, "foreignKeys": ["bill_id → legislation.bill_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "legislation_subjects", "description": "Policy subjects tagged to bills", "rows": 1376600, "foreignKeys": ["bill_id → legislation.bill_id"]},
+            {"name": "legislation_actions", "description": "Legislative action history", "rows": 983114, "foreignKeys": ["bill_id → legislation.bill_id"]},
+            {"name": "committees", "description": "Congressional committees", "rows": 233, "key": "committee_id"},
+            {"name": "committee_memberships", "description": "Committee member assignments", "rows": 3908, "foreignKeys": ["committee_id → committees.committee_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "lobbying_activities", "description": "Lobbying activity records with issue codes and spending", "rows": 115246, "foreignKeys": ["filing_uuid → lobbying_filings.filing_uuid"]},
+            {"name": "lobbying_lobbyists", "description": "Individual lobbyists with covered government positions", "rows": 194151, "foreignKeys": ["filing_uuid → lobbying_activities.filing_uuid"]},
+            {"name": "lobbying_filings", "description": "Filing metadata and reported amounts", "rows": 71064, "key": "filing_uuid"},
+            {"name": "lobbying_issue_codes", "description": "32 lobbying issue area codes", "rows": 32, "key": "code"},
+            {"name": "spending_awards", "description": "Federal grants and contracts from USASpending.gov", "rows": 175504},
+            {"name": "presidential_documents", "description": "Executive Orders and Proclamations", "rows": 5904, "key": "document_number"},
+            {"name": "fr_regs_crossref", "description": "Cross-references between Federal Register and Regulations.gov documents", "rows": 70030},
+            {"name": "member_stats", "description": "Pre-computed member activity counts (trades, speeches, bills)", "rows": 12763, "key": "bioguide_id"},
+            {"name": "cfr_sections", "description": "Code of Federal Regulations sections", "rows": 55000}
+        ],
+        "ftsIndexes": [
+            {"name": "federal_register_fts", "source": "federal_register", "columns": "title, abstract, agency_names"},
+            {"name": "dockets_fts", "source": "dockets", "columns": "title, agency_id"},
+            {"name": "documents_fts", "source": "documents", "columns": "title"},
+            {"name": "comments_fts", "source": "comments", "columns": "title, submitter_name, organization"},
+            {"name": "crec_fts", "source": "congressional_record", "columns": "title, full_text"},
+            {"name": "cfr_fts", "source": "cfr_sections", "columns": "heading, content"}
+        ]
+    }
+    </script>
+
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .page-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .page-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .page-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .content {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 3rem 4rem;
+        }
+
+        .section {
+            margin-top: 3rem;
+        }
+
+        .section h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.5rem;
+            font-weight: 400;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        .section h3 {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--dawn-amber);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+
+        .section p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+
+        code {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85em;
+            background: var(--surface);
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            color: var(--dawn-light);
+        }
+
+        .code-block {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+            position: relative;
+        }
+
+        .code-block pre {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--dawn-light);
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .code-block .copy-btn {
+            position: absolute;
+            top: 0.6rem;
+            right: 0.6rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .code-block .copy-btn:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        /* Schema tables */
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            margin: 0.75rem 0;
+        }
+
+        .schema-table th {
+            text-align: left;
+            padding: 0.6rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .schema-table td {
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .schema-table td:first-child {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--dawn-light);
+        }
+
+        .schema-table tr:hover td { background: var(--surface); }
+
+        .schema-table .count {
+            font-family: 'IBM Plex Mono', monospace;
+            color: var(--dawn-gold);
+        }
+
+        /* Query cards */
+        .query-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .query-card .qc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .query-card .qc-name {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--dawn-amber);
+        }
+
+        .query-card .qc-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            margin-bottom: 0.5rem;
+        }
+
+        .query-card .qc-params {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .query-card .qc-params span {
+            color: var(--dawn-light);
+        }
+
+        .try-btn {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.35rem 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.05em;
+        }
+
+        .try-btn:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .try-result {
+            display: none;
+            background: var(--night);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.75rem;
+            overflow-x: auto;
+        }
+
+        .try-result.visible { display: block; }
+
+        .try-result table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        .try-result th {
+            text-align: left;
+            padding: 0.4rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .try-result td {
+            padding: 0.3rem 0.6rem;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* TOC */
+        .toc {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .toc-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.75rem;
+        }
+
+        .toc a {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.3rem 0;
+            transition: color 0.3s;
+        }
+
+        .toc a:hover { color: var(--dawn-gold); }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .page-header { padding: 2.5rem 1.5rem 1.5rem; }
+            .content { padding: 0 1.5rem 4rem; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html" class="active">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="page-header">
+        <h1>API documentation</h1>
+        <p>Full JSON API for developers and AI agents. Run any SQL query or use pre-built endpoints. All data is public domain and free to use.</p>
+    </div>
+
+    <div class="content">
+        <div class="toc">
+            <div class="toc-title">Contents</div>
+            <a href="#quickstart">Quick Start</a>
+            <a href="#response">Response Format</a>
+            <a href="#schema">Database Schema</a>
+            <a href="#relationships">Table Relationships</a>
+            <a href="#queries">Pre-built Queries (72 endpoints)</a>
+            <a href="#fts">Full-Text Search</a>
+            <a href="#cross">Cross-Dataset Queries</a>
+            <a href="#explore">Interactive Explore Pages</a>
+            <a href="#usage">Usage Guidelines</a>
+        </div>
+
+        <!-- Quick Start -->
+        <div class="section" id="quickstart">
+            <h2>Quick start</h2>
+            <p>The OpenRegs API is powered by <a href="https://datasette.io" style="color:var(--dawn-amber);">Datasette</a>. You can run arbitrary SQL queries or use pre-built canned queries with parameters.</p>
+
+            <h3>Base URL</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>https://regs.datadawn.org/openregs</pre>
+            </div>
+
+            <h3>Example: Search for a Congress member</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>curl "https://regs.datadawn.org/openregs.json?sql=SELECT+bioguide_id,full_name,party,state,chamber+FROM+congress_members+WHERE+full_name+LIKE+'%25Pelosi%25'&_shape=objects"</pre>
+            </div>
+
+            <h3>Example: Get open comment periods</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>curl "https://regs.datadawn.org/openregs.json?sql=SELECT+id,agency_id,title,comment_end_date+FROM+documents+WHERE+comment_end_date>datetime('now')+AND+withdrawn=0+ORDER+BY+comment_end_date+LIMIT+10&_shape=objects"</pre>
+            </div>
+
+            <h3>Example: Top lobbying clients</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>curl "https://regs.datadawn.org/openregs.json?sql=SELECT+client_name,SUM(income_amount)+AS+total+FROM+lobbying_activities+GROUP+BY+client_name+ORDER+BY+total+DESC+LIMIT+10&_shape=objects"</pre>
+            </div>
+        </div>
+
+        <!-- Response Format -->
+        <div class="section" id="response">
+            <h2>Response format</h2>
+            <p>All endpoints return JSON. Add <code>_shape=objects</code> to get rows as an array of objects (recommended). Without it, rows come as arrays.</p>
+
+            <h3>Pagination</h3>
+            <p>Default limit is 1000 rows (configurable up to 1000). Use <code>LIMIT</code> and <code>OFFSET</code> in SQL, or <code>_size</code> and <code>_next</code> for table endpoints.</p>
+
+            <h3>CORS</h3>
+            <p>CORS is enabled for all origins. You can call the API directly from browser JavaScript.</p>
+
+            <h3>Response shape</h3>
+            <div class="code-block">
+                <pre>{
+  "ok": true,
+  "rows": [
+    {"bioguide_id": "P000197", "full_name": "Nancy Pelosi", "party": "Democrat", ...},
+    ...
+  ],
+  "truncated": false
+}</pre>
+            </div>
+        </div>
+
+        <!-- Schema -->
+        <div class="section" id="schema">
+            <h2>Database schema</h2>
+            <p>The <code>openregs</code> database contains all data in one place. Here are the primary tables:</p>
+
+            <h3>Congress &amp; Members</h3>
+            <table class="schema-table">
+                <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
+                <tbody>
+                    <tr><td>congress_members</td><td>Current and historical Congress members</td><td class="count" id="schMembers">12,763</td><td>bioguide_id, full_name, party, state, chamber, is_current</td></tr>
+                    <tr><td>member_stats</td><td>Pre-computed activity counts per member</td><td class="count">12,763</td><td>bioguide_id, trade_count, speech_count, bills_sponsored</td></tr>
+                    <tr><td>stock_trades</td><td>Congressional stock trading disclosures</td><td class="count" id="schTrades">95,621</td><td>bioguide_id, ticker, transaction_date, transaction_type, amount_range</td></tr>
+                    <tr><td>congressional_record</td><td>Floor speeches and proceedings</td><td class="count" id="schCREC">878,583</td><td>granule_id, date, title, chamber, full_text</td></tr>
+                    <tr><td>crec_speakers</td><td>Speaker-to-speech mapping</td><td class="count">944,216</td><td>granule_id, bioguide_id, speaker_name, party, state</td></tr>
+                    <tr><td>crec_bills</td><td>Links speeches to legislation discussed</td><td class="count">1,561,719</td><td>granule_id, bill_id, bill_type, bill_number</td></tr>
+                    <tr><td>legislation</td><td>Bills and resolutions</td><td class="count" id="schLeg">144,471</td><td>bill_id, title, sponsor_bioguide_id, policy_area, cosponsor_count</td></tr>
+                    <tr><td>legislation_cosponsors</td><td>Bill cosponsors</td><td class="count">1,739,284</td><td>bill_id, bioguide_id, is_original_cosponsor</td></tr>
+                    <tr><td>legislation_subjects</td><td>Policy subjects tagged to bills</td><td class="count">1,376,600</td><td>bill_id, subject</td></tr>
+                    <tr><td>legislation_actions</td><td>Legislative action timeline</td><td class="count">983,114</td><td>bill_id, action_date, text, action_type</td></tr>
+                    <tr><td>committees</td><td>Congressional committees</td><td class="count">233</td><td>committee_id, name, chamber, url</td></tr>
+                    <tr><td>committee_memberships</td><td>Committee member assignments</td><td class="count">3,908</td><td>bioguide_id, committee_id, title, rank</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Regulatory Data</h3>
+            <table class="schema-table">
+                <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
+                <tbody>
+                    <tr><td>federal_register</td><td>FR documents (1994-present)</td><td class="count" id="schFR">993,703</td><td>document_number, title, type, publication_date, agency_names, html_url</td></tr>
+                    <tr><td>dockets</td><td>Regulatory dockets</td><td class="count" id="schDockets">86,706</td><td>id, agency_id, title, docket_type</td></tr>
+                    <tr><td>docket_summary</td><td>Pre-computed docket stats</td><td class="count">26,195</td><td>docket_id, comment_count, doc_count</td></tr>
+                    <tr><td>documents</td><td>Regulatory documents within dockets</td><td class="count" id="schDocs">727,510</td><td>id, docket_id, agency_id, title, document_type, posted_date, comment_end_date</td></tr>
+                    <tr><td>comments</td><td>Public comments on regulations</td><td class="count" id="schComments">3.2M</td><td>id, docket_id, agency_id, submitter_name, submitter_type, organization, posted_date</td></tr>
+                    <tr><td>fr_regs_crossref</td><td>Links FR documents to Regulations.gov</td><td class="count">70,030</td><td>fr_document_number, regs_document_id</td></tr>
+                    <tr><td>presidential_documents</td><td>Executive Orders &amp; Proclamations</td><td class="count" id="schPresDoc">5,904</td><td>document_number, title, document_type, signing_date, executive_order_number</td></tr>
+                    <tr><td>spending_awards</td><td>Federal contracts &amp; grants (USASpending)</td><td class="count" id="schSpending">175,504</td><td>recipient_name, agency, sub_agency, award_amount, award_category, fiscal_year</td></tr>
+                    <tr><td>cfr_sections</td><td>Code of Federal Regulations</td><td class="count">55K+</td><td>title_number, part_number, section_number, heading, content</td></tr>
+                    <tr><td>agency_map</td><td>Maps agency codes across datasets</td><td class="count">5</td><td>regs_code, fr_agency_name</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Lobbying</h3>
+            <table class="schema-table">
+                <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
+                <tbody>
+                    <tr><td>lobbying_activities</td><td>Lobbying activity records with spending</td><td class="count" id="schLobby">115,246</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, income_amount</td></tr>
+                    <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (with revolving door data)</td><td class="count">194,151</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
+                    <tr><td>lobbying_filings</td><td>Filing metadata and reported amounts</td><td class="count">71,064</td><td>filing_uuid, registrant_name, client_name, amount_reported, filing_year</td></tr>
+                    <tr><td>lobbying_issue_codes</td><td>Issue area code reference</td><td class="count">32</td><td>code, description</td></tr>
+                    <tr><td>lobbying_contributions</td><td>Political contributions by lobbyists</td><td class="count">—</td><td>lobbyist_name, recipient_name, amount, contribution_date</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Full-Text Search Indexes</h3>
+            <p>FTS5 indexes are available for fast keyword search. Join to source tables via <code>rowid</code>:</p>
+            <table class="schema-table">
+                <thead><tr><th>FTS Table</th><th>Source Table</th><th>Indexed Columns</th></tr></thead>
+                <tbody>
+                    <tr><td>federal_register_fts</td><td>federal_register</td><td>title, abstract, agency_names</td></tr>
+                    <tr><td>dockets_fts</td><td>dockets</td><td>title, agency_id</td></tr>
+                    <tr><td>documents_fts</td><td>documents</td><td>title</td></tr>
+                    <tr><td>comments_fts</td><td>comments</td><td>title, submitter_name, organization</td></tr>
+                    <tr><td>crec_fts</td><td>congressional_record</td><td>title, full_text</td></tr>
+                    <tr><td>cfr_fts</td><td>cfr_sections</td><td>heading, content</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Relationships -->
+        <div class="section" id="relationships">
+            <h2>Table relationships</h2>
+            <p>Key join paths for cross-dataset queries. All joins use indexed columns.</p>
+
+            <h3>Congress member hub</h3>
+            <div class="code-block">
+                <pre>congress_members.bioguide_id
+  ├── stock_trades.bioguide_id          (trades)
+  ├── crec_speakers.bioguide_id         (speeches)
+  ├── legislation.sponsor_bioguide_id   (sponsored bills)
+  ├── legislation_cosponsors.bioguide_id (cosponsored bills)
+  ├── committee_memberships.bioguide_id  (committees)
+  └── member_stats.bioguide_id          (pre-computed counts)</pre>
+            </div>
+
+            <h3>Legislation hub</h3>
+            <div class="code-block">
+                <pre>legislation.bill_id
+  ├── legislation_cosponsors.bill_id   (cosponsors)
+  ├── legislation_subjects.bill_id     (policy subjects)
+  ├── legislation_actions.bill_id      (action timeline)
+  └── crec_bills.bill_id              (floor speeches about this bill)
+        └── congressional_record.granule_id (speech text)</pre>
+            </div>
+
+            <h3>Regulatory lifecycle</h3>
+            <div class="code-block">
+                <pre>dockets.id
+  ├── documents.docket_id              (regulatory documents)
+  │     └── fr_regs_crossref.regs_document_id → federal_register (FR links)
+  └── comments.docket_id              (public comments)
+
+documents.comment_end_date             (open comment periods: WHERE > datetime('now'))</pre>
+            </div>
+
+            <h3>Lobbying chain</h3>
+            <div class="code-block">
+                <pre>lobbying_activities.filing_uuid
+  ├── lobbying_lobbyists.filing_uuid   (who lobbied)
+  │     └── covered_position           (revolving door: former gov't roles)
+  └── lobbying_issue_codes.code = lobbying_activities.issue_code
+
+Group by client_name for client view, registrant_name for firm view</pre>
+            </div>
+        </div>
+
+        <!-- Pre-built Queries -->
+        <div class="section" id="queries">
+            <h2>Pre-built queries</h2>
+            <p>72 pre-built endpoints with named parameters and optimized SQL. Use <code>.json</code> suffix for JSON output. All accept <code>_shape=objects</code>.</p>
+
+            <h3>Explore endpoints (used by interactive UI)</h3>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_member_search</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_member_search', 'name=Pelosi')">Try it</button>
+                </div>
+                <div class="qc-desc">Search members by name with stock trade, speech, and bill counts</div>
+                <div class="qc-params">Params: <span>name</span> (required) &mdash; <code>GET /openregs/explore_member_search.json?name=Pelosi</code></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_member_profile</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_member_profile', 'bioguide_id=P000197')">Try it</button>
+                </div>
+                <div class="qc-desc">Full member profile with activity counts</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_member_trades</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_member_trades', 'bioguide_id=P000197')">Try it</button>
+                </div>
+                <div class="qc-desc">Stock trades for a specific member</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_member_speeches</span></div>
+                <div class="qc-desc">Floor speeches for a specific member</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_member_bills</span></div>
+                <div class="qc-desc">Legislation sponsored by a member</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_docket_detail</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_docket_detail', 'docket_id=EPA-HQ-OAR-2021-0208')">Try it</button>
+                </div>
+                <div class="qc-desc">Docket info with document and comment counts</div>
+                <div class="qc-params">Params: <span>docket_id</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_docket_documents</span></div>
+                <div class="qc-desc">Documents in a specific docket</div>
+                <div class="qc-params">Params: <span>docket_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_docket_comments</span></div>
+                <div class="qc-desc">Comment stats for a docket grouped by submitter type</div>
+                <div class="qc-params">Params: <span>docket_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_open_comments</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_open_comments', '')">Try it</button>
+                </div>
+                <div class="qc-desc">Documents currently open for public comment</div>
+                <div class="qc-params">No params required</div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_lobbying_client</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_lobbying_client', 'name=Google')">Try it</button>
+                </div>
+                <div class="qc-desc">Search lobbying clients with spending totals</div>
+                <div class="qc-params">Params: <span>name</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_lobbying_activity</span></div>
+                <div class="qc-desc">Lobbying activity records for a specific client</div>
+                <div class="qc-params">Params: <span>client_name</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">explore_lobbying_lobbyists</span></div>
+                <div class="qc-desc">Lobbyists working for a client (with revolving door positions)</div>
+                <div class="qc-params">Params: <span>client_name</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_lobbying_issues</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_lobbying_issues', '')">Try it</button>
+                </div>
+                <div class="qc-desc">All 32 lobbying issue areas with filing counts</div>
+                <div class="qc-params">No params required</div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">explore_revolving_door</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'explore_revolving_door', '')">Try it</button>
+                </div>
+                <div class="qc-desc">Lobbyists with prior government positions</div>
+                <div class="qc-params">No params required</div>
+                <div class="try-result"></div>
+            </div>
+
+            <h3>Search endpoints (full-text search)</h3>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">search_federal_register</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'search_federal_register', 'search=climate+change')">Try it</button>
+                </div>
+                <div class="qc-desc">Full-text search across Federal Register documents</div>
+                <div class="qc-params">Params: <span>search</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">search_dockets</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'search_dockets', 'search=clean+water')">Try it</button>
+                </div>
+                <div class="qc-desc">Full-text search across regulatory dockets</div>
+                <div class="qc-params">Params: <span>search</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_comments</span></div>
+                <div class="qc-desc">Full-text search across public comments</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_congressional_record</span></div>
+                <div class="qc-desc">Full-text search across floor speeches</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_legislation</span></div>
+                <div class="qc-desc">Search bills by title</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_members</span></div>
+                <div class="qc-desc">Search Congress members by name</div>
+                <div class="qc-params">Params: <span>name</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_executive_orders</span></div>
+                <div class="qc-desc">Search Executive Orders and Proclamations</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_spending</span></div>
+                <div class="qc-desc">Search federal spending awards by recipient</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">search_cfr</span></div>
+                <div class="qc-desc">Search Code of Federal Regulations</div>
+                <div class="qc-params">Params: <span>search</span></div>
+            </div>
+
+            <h3>Analysis endpoints</h3>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">most_active_traders</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'most_active_traders', '')">Try it</button>
+                </div>
+                <div class="qc-desc">Congress members ranked by number of stock trades</div>
+                <div class="qc-params">No params required</div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">trades_by_ticker</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'trades_by_ticker', 'ticker=MSFT')">Try it</button>
+                </div>
+                <div class="qc-desc">All Congress members who traded a specific stock</div>
+                <div class="qc-params">Params: <span>ticker</span></div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">most_traded_stocks</span></div>
+                <div class="qc-desc">Most frequently traded stocks across all of Congress</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">committee_trade_activity</span></div>
+                <div class="qc-desc">Stock trades by committee members (useful for conflict-of-interest analysis)</div>
+                <div class="qc-params">Params: <span>committee_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header">
+                    <span class="qc-name">most_commented_dockets</span>
+                    <button class="try-btn" onclick="tryQuery(this, 'most_commented_dockets', '')">Try it</button>
+                </div>
+                <div class="qc-desc">Regulatory dockets ranked by public comment volume</div>
+                <div class="qc-params">No params required</div>
+                <div class="try-result"></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">most_cosponsored_bills</span></div>
+                <div class="qc-desc">Bills with the most cosponsors</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">bipartisan_bills</span></div>
+                <div class="qc-desc">Bills with cross-party cosponsorship</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">top_contractors</span></div>
+                <div class="qc-desc">Top federal contractors by award amount</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">spending_by_agency</span></div>
+                <div class="qc-desc">Federal spending broken down by agency</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">executive_orders</span></div>
+                <div class="qc-desc">All Executive Orders (most recent first)</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">rulemaking_pipeline</span></div>
+                <div class="qc-desc">Track regulations from proposed rule to final rule</div>
+                <div class="qc-params">No params required</div>
+            </div>
+
+            <h3>Lookup endpoints</h3>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">member_profile</span></div>
+                <div class="qc-desc">Comprehensive member profile: trades, speeches, and bills</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">committee_members</span></div>
+                <div class="qc-desc">Members of a specific committee</div>
+                <div class="qc-params">Params: <span>committee_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">member_committees</span></div>
+                <div class="qc-desc">Committees a member serves on</div>
+                <div class="qc-params">Params: <span>bioguide_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">bill_cosponsors</span></div>
+                <div class="qc-desc">All cosponsors of a specific bill</div>
+                <div class="qc-params">Params: <span>bill_id</span> (e.g., 118-hr-3684)</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">floor_debate_for_bill</span></div>
+                <div class="qc-desc">Congressional Record entries discussing a specific bill</div>
+                <div class="qc-params">Params: <span>bill_id</span> (e.g., 118-hr-3684)</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">comments_for_docket</span></div>
+                <div class="qc-desc">Public comments for a specific regulatory docket</div>
+                <div class="qc-params">Params: <span>docket_id</span></div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">cross_reference</span></div>
+                <div class="qc-desc">Find linked Federal Register and Regulations.gov documents</div>
+                <div class="qc-params">Params: <span>fr_doc_number</span> and/or <span>regs_doc_id</span> (provide one or both)</div>
+            </div>
+
+            <div class="query-card">
+                <div class="qc-header"><span class="qc-name">executive_order_lookup</span></div>
+                <div class="qc-desc">Look up a specific Executive Order by number</div>
+                <div class="qc-params">Params: <span>eo_number</span> (e.g., 14067)</div>
+            </div>
+
+            <p style="margin-top:1rem;font-size:0.85rem;">Full list of all 72 endpoints available at <a href="/openregs" style="color:var(--dawn-amber);">/openregs</a> (Datasette homepage).</p>
+        </div>
+
+        <!-- Full-Text Search -->
+        <div class="section" id="fts">
+            <h2>Full-text search</h2>
+            <p>FTS5 tables support phrase matching, boolean operators, and ranking. Join the FTS table to the source table via <code>rowid</code>.</p>
+
+            <h3>Basic phrase search</h3>
+            <div class="code-block">
+                <pre>SELECT d.id, d.title, d.agency_id
+FROM dockets_fts JOIN dockets d ON d.rowid = dockets_fts.rowid
+WHERE dockets_fts MATCH '"clean water"'
+ORDER BY rank LIMIT 20</pre>
+            </div>
+
+            <h3>Boolean operators</h3>
+            <div class="code-block">
+                <pre>-- AND (default): both terms must appear
+MATCH 'climate change'
+
+-- OR: either term
+MATCH 'climate OR environment'
+
+-- NOT: exclude a term
+MATCH 'emissions NOT carbon'
+
+-- Phrase: exact phrase match
+MATCH '"net neutrality"'</pre>
+            </div>
+
+            <h3>Search comments with submitter info</h3>
+            <div class="code-block">
+                <pre>SELECT c.id, c.title, c.submitter_name, c.docket_id, c.posted_date
+FROM comments_fts JOIN comments c ON c.rowid = comments_fts.rowid
+WHERE comments_fts MATCH '"endangered species"'
+ORDER BY rank LIMIT 20</pre>
+            </div>
+        </div>
+
+        <!-- Cross-Dataset Queries -->
+        <div class="section" id="cross">
+            <h2>Cross-dataset queries</h2>
+            <p>The real power of OpenRegs is connecting data across datasets. Here are some useful patterns:</p>
+
+            <h3>Who in Congress trades a stock, and what do they oversee?</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>SELECT cm.full_name, cm.party, cm.state, st.ticker,
+    COUNT(*) AS trades, c.name AS committee
+FROM stock_trades st
+JOIN congress_members cm ON cm.bioguide_id = st.bioguide_id
+LEFT JOIN committee_memberships cmm ON cmm.bioguide_id = cm.bioguide_id
+LEFT JOIN committees c ON c.committee_id = cmm.committee_id
+WHERE st.ticker = 'MSFT'
+GROUP BY cm.bioguide_id, c.committee_id
+ORDER BY trades DESC LIMIT 20</pre>
+            </div>
+
+            <h3>Entity search: find any organization across all datasets</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>-- Lobbying spending
+SELECT client_name, SUM(income_amount) AS total
+FROM lobbying_activities WHERE client_name LIKE '%Boeing%'
+GROUP BY client_name;
+
+-- Federal contracts
+SELECT recipient_name, SUM(award_amount) AS total, COUNT(*) AS awards
+FROM spending_awards WHERE recipient_name LIKE '%Boeing%'
+GROUP BY recipient_name;
+
+-- Regulations mentioning them
+SELECT d.id, d.title, d.agency_id FROM dockets_fts
+JOIN dockets d ON d.rowid = dockets_fts.rowid
+WHERE dockets_fts MATCH 'Boeing' LIMIT 10;</pre>
+            </div>
+
+            <h3>Which bills were discussed most on the floor?</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>SELECT l.bill_id, l.title, l.policy_area,
+    COUNT(DISTINCT cb.granule_id) AS floor_mentions
+FROM crec_bills cb
+JOIN legislation l ON l.bill_id = cb.bill_id
+GROUP BY cb.bill_id
+ORDER BY floor_mentions DESC LIMIT 20</pre>
+            </div>
+
+            <h3>Revolving door: lobbyists with government experience by client</h3>
+            <div class="code-block">
+                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+                <pre>SELECT la.client_name, ll.lobbyist_name, ll.covered_position, la.filing_year
+FROM lobbying_lobbyists ll
+JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid
+WHERE ll.covered_position IS NOT NULL AND ll.covered_position != ''
+  AND la.client_name LIKE '%Pfizer%'
+ORDER BY la.filing_year DESC</pre>
+            </div>
+        </div>
+
+        <!-- Interactive Explore Pages -->
+        <div class="section" id="explore">
+            <h2>Interactive explore pages</h2>
+            <p>If you prefer a visual interface, these pages provide full-featured search, filtering, and drill-down across all datasets:</p>
+
+            <table class="schema-table">
+                <thead><tr><th>Page</th><th>Description</th><th>Features</th></tr></thead>
+                <tbody>
+                    <tr><td><a href="/explore/member.html" style="color:var(--dawn-amber);">Members</a></td><td>Congress member profiles</td><td>Search, stock trades, floor speeches, legislation, committees, ticker drill-down, cosponsors</td></tr>
+                    <tr><td><a href="/explore/regulation.html" style="color:var(--dawn-amber);">Regulations</a></td><td>Regulatory lifecycle explorer</td><td>Dockets, FR docs, comments, open periods, agencies, executive orders, policy areas</td></tr>
+                    <tr><td><a href="/explore/lobbying.html" style="color:var(--dawn-amber);">Lobbying</a></td><td>Lobbying disclosure explorer</td><td>Clients, firms, issue areas, revolving door, spending crossover</td></tr>
+                    <tr><td><a href="/explore/entity.html" style="color:var(--dawn-amber);">Entity</a></td><td>Cross-dataset entity search</td><td>Search any name across lobbying, spending, trades, regulations, legislation</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Usage Guidelines -->
+        <div class="section" id="usage">
+            <h2>Usage guidelines</h2>
+            <p>This API is free and open. We ask that you:</p>
+            <ul style="list-style:none;margin:0.75rem 0;">
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Be reasonable with query volume (no rapid-fire bulk scraping)</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use <code>LIMIT</code> to cap results when exploring</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Prefer canned queries for common operations (they're parameterized and optimized)</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Attribute DataDawn if sharing results publicly (appreciated, not required)</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; All data is U.S. government public domain — no copyright restrictions</li>
+            </ul>
+
+            <h3>Rate Limits</h3>
+            <p>Queries have a 10-second timeout. Maximum 1000 rows per response. No authentication required.</p>
+
+            <h3>For AI Agents</h3>
+            <p>This page includes structured <code>application/ld+json</code> metadata with complete table schemas, row counts, foreign keys, and FTS index descriptions. Recommended approach:</p>
+            <ul style="list-style:none;margin:0.75rem 0;">
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Start with canned queries (72 pre-built endpoints) before writing raw SQL</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use <code>member_stats</code> and <code>docket_summary</code> tables for counts instead of COUNT(*) subqueries</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use FTS tables for keyword search (much faster than LIKE '%...%')</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Join across datasets via <code>bioguide_id</code> (members), <code>docket_id</code> (regulations), <code>filing_uuid</code> (lobbying)</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Always use <code>&_shape=objects</code> for structured JSON output</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Discover all endpoints at <code>/openregs.json</code> (Datasette metadata)</li>
+            </ul>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '';
+        const API = API_BASE + '/openregs';
+
+        function esc(str) {
+            if (str == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+
+        function copyCode(btn) {
+            const pre = btn.parentElement.querySelector('pre');
+            navigator.clipboard.writeText(pre.textContent);
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 1500);
+        }
+
+        async function tryQuery(btn, queryName, params) {
+            const card = btn.closest('.query-card');
+            const resultDiv = card.querySelector('.try-result');
+
+            if (resultDiv.classList.contains('visible')) {
+                resultDiv.classList.remove('visible');
+                btn.textContent = 'Try it';
+                return;
+            }
+
+            btn.textContent = 'Loading...';
+            resultDiv.innerHTML = '';
+
+            try {
+                const url = `${API}/${queryName}.json?${params}&_shape=objects`;
+                const resp = await fetch(url);
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                const rows = data.rows || [];
+
+                if (rows.length === 0) {
+                    resultDiv.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No results</p>';
+                } else {
+                    const cols = Object.keys(rows[0]);
+                    const displayRows = rows.slice(0, 5);
+                    let html = '<table><thead><tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead><tbody>';
+                    html += displayRows.map(r => '<tr>' + cols.map(c => `<td>${esc(String(r[c] ?? ''))}</td>`).join('') + '</tr>').join('');
+                    html += '</tbody></table>';
+                    if (rows.length > 5) html += `<p style="color:var(--text-muted);font-size:0.75rem;margin-top:0.5rem;font-family:'IBM Plex Mono',monospace;">Showing 5 of ${rows.length} rows</p>`;
+                    resultDiv.innerHTML = html;
+                }
+
+                resultDiv.classList.add('visible');
+                btn.textContent = 'Hide';
+
+            } catch (err) {
+                resultDiv.innerHTML = `<p style="color:var(--dawn-rose);font-size:0.85rem;">${esc(err.message)}</p>`;
+                resultDiv.classList.add('visible');
+                btn.textContent = 'Hide';
+            }
+        }
+
+        // Load live row counts
+        async function loadCounts() {
+            try {
+                const sql = `
+                    SELECT
+                        (SELECT COUNT(*) FROM congress_members) AS members,
+                        (SELECT COUNT(*) FROM stock_trades) AS trades,
+                        (SELECT COUNT(*) FROM congressional_record) AS crec,
+                        (SELECT COUNT(*) FROM legislation) AS leg,
+                        (SELECT COUNT(*) FROM federal_register) AS fr,
+                        (SELECT COUNT(*) FROM dockets) AS dockets,
+                        (SELECT COUNT(*) FROM documents) AS docs,
+                        (SELECT COUNT(*) FROM comments) AS comments,
+                        (SELECT COUNT(*) FROM lobbying_activities) AS lobby,
+                        (SELECT COUNT(*) FROM presidential_documents) AS presdoc,
+                        (SELECT COUNT(*) FROM spending_awards) AS spending
+                `;
+                const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+                const resp = await fetch(url);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const r = (data.rows || [])[0];
+                if (!r) return;
+
+                const fmt = n => Number(n).toLocaleString();
+                const el = id => document.getElementById(id);
+                if (el('schMembers')) el('schMembers').textContent = fmt(r.members);
+                if (el('schTrades')) el('schTrades').textContent = fmt(r.trades);
+                if (el('schCREC')) el('schCREC').textContent = fmt(r.crec);
+                if (el('schLeg')) el('schLeg').textContent = fmt(r.leg);
+                if (el('schFR')) el('schFR').textContent = fmt(r.fr);
+                if (el('schDockets')) el('schDockets').textContent = fmt(r.dockets);
+                if (el('schDocs')) el('schDocs').textContent = fmt(r.docs);
+                if (el('schComments')) el('schComments').textContent = fmt(r.comments);
+                if (el('schLobby')) el('schLobby').textContent = fmt(r.lobby);
+                if (el('schPresDoc')) el('schPresDoc').textContent = fmt(r.presdoc);
+                if (el('schSpending')) el('schSpending').textContent = fmt(r.spending);
+            } catch (e) {}
+        }
+
+        loadCounts();
+    </script>
+</body>
+</html>

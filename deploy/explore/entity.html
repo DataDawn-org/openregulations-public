@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Follow the Data — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.5rem 3rem; border-bottom: 1px solid var(--border);
+        }
+        .nav-brand {
+            font-family: 'DM Serif Display', serif; font-size: 1.4rem;
+            color: var(--dawn-gold); text-decoration: none; letter-spacing: 0.02em;
+        }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 400;
+            color: var(--text-muted); text-decoration: none; text-transform: uppercase;
+            letter-spacing: 0.1em; transition: color 0.3s;
+        }
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem; max-width: 900px; margin: 0 auto; text-align: center;
+        }
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 0.75rem;
+        }
+        .search-header p { font-size: 1rem; color: var(--text-secondary); font-weight: 300; line-height: 1.6; }
+
+        .search-container { max-width: 700px; margin: 0 auto; padding: 0 2rem 2rem; }
+        .search-box {
+            display: flex; align-items: center; background: var(--deep);
+            border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem; gap: 0.5rem;
+            transition: border-color 0.3s;
+        }
+        .search-box:focus-within { border-color: var(--dawn-amber); }
+        .search-icon { padding: 0.5rem; color: var(--text-muted); flex-shrink: 0; }
+        .search-box input {
+            flex: 1; background: none; border: none; color: var(--text-primary);
+            font-family: 'Outfit', sans-serif; font-size: 1rem; outline: none; padding: 0.5rem 0;
+        }
+        .search-box input::placeholder { color: var(--text-muted); }
+        .search-btn {
+            padding: 0.6rem 1.5rem; background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none; border-radius: 8px; color: var(--night); font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: opacity 0.3s; white-space: nowrap;
+        }
+        .search-btn:hover { opacity: 0.9; }
+
+        .examples { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+        .example-chip {
+            padding: 0.3rem 0.8rem; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 20px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;
+            transition: all 0.3s; font-family: 'IBM Plex Mono', monospace;
+        }
+        .example-chip:hover { border-color: var(--dawn-amber); color: var(--dawn-gold); }
+
+        .results-area { max-width: 1100px; margin: 0 auto; padding: 0 2rem 3rem; }
+        .results-status {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+            color: var(--text-muted); margin-bottom: 1rem;
+        }
+
+        .section {
+            margin-bottom: 2rem; padding: 1.5rem;
+            background: var(--deep); border: 1px solid var(--border); border-radius: 12px;
+        }
+        .section-header {
+            display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;
+        }
+        .section-icon {
+            width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+            justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+        }
+        .section-title-wrap { flex: 1; }
+        .section-title {
+            font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: var(--text-primary);
+        }
+        .section-subtitle { font-size: 0.8rem; color: var(--text-muted); }
+        .section-badge {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.2rem 0.6rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            color: var(--dawn-gold);
+        }
+        .section-link {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            color: var(--dawn-gold); text-decoration: none;
+        }
+        .section-link:hover { text-decoration: underline; }
+
+        .stat-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem; margin-bottom: 1rem;
+        }
+        .stat-box {
+            background: var(--surface); border-radius: 8px; padding: 0.75rem; text-align: center;
+        }
+        .stat-box .num {
+            font-family: 'IBM Plex Mono', monospace; font-size: 1.2rem;
+            color: var(--dawn-gold); font-weight: 500;
+        }
+        .stat-box .label { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .data-table th {
+            text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-muted);
+            font-weight: 400; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .data-table td {
+            padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .data-table tr:hover { background: var(--surface-hover); }
+        .data-table a { color: var(--dawn-gold); text-decoration: none; }
+        .data-table a:hover { text-decoration: underline; }
+
+        .money { font-family: 'IBM Plex Mono', monospace; color: var(--dawn-gold); white-space: nowrap; }
+        .party-r { color: #ef4444; }
+        .party-d { color: #3b82f6; }
+        .muted { color: var(--text-muted); }
+
+        .empty-state {
+            text-align: center; padding: 4rem 2rem; color: var(--text-muted);
+        }
+        .empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .hint { font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-muted); }
+
+        .loading { text-align: center; padding: 3rem; }
+        .loading-dots { display: inline-flex; gap: 0.3rem; }
+        .loading-dots span {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--dawn-amber);
+            animation: blink 1.4s infinite both;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+        .no-data { color: var(--text-muted); font-size: 0.85rem; font-style: italic; padding: 0.5rem 0; }
+
+        .legal-note {
+            font-size: 0.75rem; color: var(--text-muted); line-height: 1.5;
+            padding: 0.75rem 1rem; background: var(--surface); border-radius: 6px;
+            border-left: 3px solid var(--horizon); margin-top: 1.5rem;
+        }
+
+        footer {
+            padding: 3rem; text-align: center; border-top: 1px solid var(--border);
+        }
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted);
+        }
+        .footer-text a { color: var(--dawn-gold); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+            .nav-links { gap: 1rem; flex-wrap: wrap; }
+            .search-header { padding: 2rem 1rem 1rem; }
+            .search-container { padding: 0 1rem 1rem; }
+            .results-area { padding: 0 1rem 2rem; }
+            .section { padding: 1rem; }
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html" class="active">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Follow the data</h1>
+        <p>Search any organization, company, or name. See every public record in one view — lobbying disclosures, federal contracts, Congressional stock trades, regulations, and legislation.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search any entity..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+        <div class="examples">
+            <span class="example-chip" data-query="Lockheed Martin">Lockheed Martin</span>
+            <span class="example-chip" data-query="Pfizer">Pfizer</span>
+            <span class="example-chip" data-query="Google">Google</span>
+            <span class="example-chip" data-query="ExxonMobil">ExxonMobil</span>
+            <span class="example-chip" data-query="Boeing">Boeing</span>
+        </div>
+    </div>
+
+    <div class="results-area">
+        <div class="results-status" id="resultsStatus"></div>
+        <div id="results">
+            <div class="empty-state">
+                <div class="empty-icon">&#9670;</div>
+                <p>All public records, one search</p>
+                <div class="hint">Enter an organization or company name to see lobbying, spending, trades, and regulatory data</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '';
+        const API = API_BASE + '/openregs';
+
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('resultsStatus');
+
+        function esc(str) {
+            if (str == null) return '';
+            const d = document.createElement('div');
+            d.textContent = String(str);
+            return d.innerHTML;
+        }
+        const typeSlugMap = {hr:'house-bill',s:'senate-bill',hres:'house-resolution',sres:'senate-resolution',hjres:'house-joint-resolution',sjres:'senate-joint-resolution',hconres:'house-concurrent-resolution',sconres:'senate-concurrent-resolution'};
+        function congressUrlFromBill(r) {
+            if (!r.bill_id) return '';
+            return '/explore/legislation.html?detail=' + encodeURIComponent(r.bill_id);
+        }
+        function truncate(str, len) { if (!str) return ''; return str.length > len ? str.slice(0, len) + '...' : str; }
+        function formatNumber(n) { if (n == null) return '0'; return Number(n).toLocaleString(); }
+        function formatMoney(val) {
+            if (val == null || val === '' || val === 0) return '\u2014';
+            const num = Number(val); if (isNaN(num)) return String(val);
+            if (Math.abs(num) >= 1e9) return '$' + (num / 1e9).toFixed(1) + 'B';
+            if (Math.abs(num) >= 1e6) return '$' + (num / 1e6).toFixed(1) + 'M';
+            if (Math.abs(num) >= 1e3) return '$' + (num / 1e3).toFixed(0) + 'K';
+            return '$' + num.toLocaleString();
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || `HTTP ${resp.status}`); }
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        // URL state
+        function readURL() {
+            const p = new URLSearchParams(location.search);
+            if (p.get('q')) { searchInput.value = p.get('q'); doSearch(); }
+        }
+        function writeURL(q) {
+            const p = new URLSearchParams();
+            if (q) p.set('q', q);
+            history.replaceState(null, '', p.toString() ? '?' + p.toString() : location.pathname);
+        }
+
+        searchBtn.addEventListener('click', doSearch);
+        searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+        document.querySelectorAll('.example-chip').forEach(chip => {
+            chip.addEventListener('click', () => { searchInput.value = chip.dataset.query; doSearch(); });
+        });
+
+        async function doSearch() {
+            const q = searchInput.value.trim();
+            if (!q) return;
+            writeURL(q);
+            const qSafe = q.replace(/'/g, "''");
+            const qFTS = q.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
+
+            resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            statusDiv.textContent = 'Searching across all datasets...';
+
+            try {
+                // Fire all queries in parallel — using FTS indexes for speed
+                const [lobbying, spending, trades, dockets, legislation, revdoor, orgComments, fecData, faraData] = await Promise.all([
+                    query(`
+                        SELECT client_name,
+                            SUM(income_amount) AS total_income,
+                            COUNT(*) AS filing_count,
+                            COUNT(DISTINCT registrant_name) AS firm_count,
+                            COUNT(DISTINCT issue_code) AS issue_count,
+                            MIN(filing_year) AS year_from,
+                            MAX(filing_year) AS year_to
+                        FROM lobbying_activities
+                        WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                        GROUP BY client_name
+                        ORDER BY total_income DESC
+                        LIMIT 25
+                    `),
+                    query(`
+                        SELECT agency, recipient_name, award_category,
+                            COUNT(*) AS award_count,
+                            SUM(award_amount) AS total_amount,
+                            MIN(fiscal_year) AS fy_from,
+                            MAX(fiscal_year) AS fy_to
+                        FROM spending_awards
+                        WHERE rowid IN (SELECT rowid FROM spending_awards_fts WHERE spending_awards_fts MATCH '"${qFTS}"')
+                        GROUP BY agency, recipient_name, award_category
+                        ORDER BY total_amount DESC
+                        LIMIT 25
+                    `),
+                    query(`
+                        SELECT st.ticker, st.bioguide_id, cm.full_name, cm.party,
+                            st.transaction_date, st.transaction_type, st.amount_range,
+                            st.asset_description, st.source_url
+                        FROM stock_trades st
+                        JOIN congress_members cm ON cm.bioguide_id = st.bioguide_id
+                        WHERE st.asset_description LIKE '%${qSafe}%' OR st.ticker LIKE '%${qSafe}%'
+                        ORDER BY st.transaction_date DESC
+                        LIMIT 50
+                    `),
+                    query(`
+                        SELECT d.id, d.agency_id, d.title, d.docket_type,
+                            (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
+                            (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+                        FROM dockets d
+                        WHERE d.id IN (
+                            SELECT d2.id FROM dockets_fts JOIN dockets d2 ON d2.rowid = dockets_fts.rowid
+                            WHERE dockets_fts MATCH '"${qFTS}"'
+                            UNION
+                            SELECT doc.docket_id FROM federal_register_fts
+                            JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
+                            JOIN documents doc ON doc.fr_doc_num = fr.document_number
+                            WHERE federal_register_fts MATCH '"${qFTS}"' AND doc.docket_id IS NOT NULL
+                        )
+                        ORDER BY doc_count DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT l.bill_id, l.congress, l.bill_type, l.bill_number, l.title,
+                            l.policy_area, l.introduced_date, l.cosponsor_count,
+                            cm.full_name AS sponsor_name, cm.party AS sponsor_party
+                        FROM legislation l
+                        LEFT JOIN congress_members cm ON cm.bioguide_id = l.sponsor_bioguide_id
+                        WHERE l.rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"${qFTS}"')
+                        ORDER BY l.introduced_date DESC
+                        LIMIT 20
+                    `),
+                    query(`
+                        SELECT ll.lobbyist_name, ll.covered_position,
+                            la.client_name, la.registrant_name, la.filing_year
+                        FROM lobbying_lobbyists ll
+                        JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid
+                        WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' AND ll.covered_position != 'N/A'
+                            AND la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                        ORDER BY la.filing_year DESC
+                        LIMIT 25
+                    `),
+                    query(`
+                        SELECT c.id, c.title, c.submitter_name, c.agency_id, c.docket_id, c.posted_date,
+                               cd.comment_text, cd.subtype, cd.attachment_count
+                        FROM comments c
+                        JOIN comment_details cd ON cd.id = c.id
+                        WHERE c.rowid IN (SELECT rowid FROM comments_fts WHERE comments_fts MATCH '"${qFTS}"')
+                        ORDER BY cd.comment_text IS NOT NULL DESC, c.posted_date DESC
+                        LIMIT 15
+                    `),
+                    query(`
+                        SELECT employer,
+                            total_amount AS total_given,
+                            donation_count AS contribution_count,
+                            unique_states,
+                            min_cycle AS first_cycle,
+                            max_cycle AS last_cycle
+                        FROM fec_employer_totals
+                        WHERE rowid IN (SELECT rowid FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"')
+                        ORDER BY total_amount DESC
+                        LIMIT 15
+                    `),
+                    query(`
+                        SELECT r.registration_number, r.name, r.termination_date,
+                            (SELECT GROUP_CONCAT(DISTINCT fp.country) FROM fara_foreign_principals fp WHERE fp.registration_number = r.registration_number) AS countries,
+                            (SELECT COUNT(*) FROM fara_foreign_principals fp WHERE fp.registration_number = r.registration_number) AS principal_count,
+                            (SELECT COUNT(*) FROM fara_short_forms sf WHERE sf.registration_number = r.registration_number) AS agent_count
+                        FROM fara_registrants r
+                        WHERE r.rowid IN (SELECT rowid FROM fara_registrants_fts WHERE fara_registrants_fts MATCH '"${qFTS}"')
+                        ORDER BY r.termination_date IS NOT NULL, principal_count DESC
+                        LIMIT 15
+                    `)
+                ]);
+
+                const totalHits = lobbying.length + spending.length + trades.length + dockets.length + legislation.length + revdoor.length + orgComments.length + fecData.length + faraData.length;
+                statusDiv.innerHTML = `Found data in <span style="color:var(--dawn-gold);">${[lobbying.length && 'lobbying', spending.length && 'spending', fecData.length && 'campaign finance', faraData.length && 'foreign agents', trades.length && 'trades', dockets.length && 'regulations', orgComments.length && 'comments', legislation.length && 'legislation', revdoor.length && 'revolving door'].filter(Boolean).join(', ')}</span>`;
+
+                if (totalHits === 0) {
+                    resultsDiv.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">&empty;</div>
+                            <p>No records found for "${esc(q)}"</p>
+                            <div class="hint">Try a company name, ticker symbol, or topic</div>
+                        </div>`;
+                    return;
+                }
+
+                let html = '';
+
+                // === LOBBYING ===
+                if (lobbying.length > 0) {
+                    const lobbyTotal = lobbying.reduce((s, r) => s + (r.total_income || 0), 0);
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(245,158,11,0.15);color:var(--dawn-amber);">&#9733;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Lobbying Disclosures</div>
+                                <div class="section-subtitle">${formatNumber(lobbying.length)} clients &middot; ${formatMoney(lobbyTotal)} total reported</div>
+                            </div>
+                            <a class="section-link" href="/explore/lobbying.html?q=${encodeURIComponent(q)}">View all &rarr;</a>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Client</th><th>Reported Income</th><th>Filings</th><th>Firms</th><th>Years</th></tr></thead>
+                            <tbody>${lobbying.map(r => `<tr>
+                                <td><a href="/explore/lobbying.html?q=${encodeURIComponent(r.client_name)}&client=${encodeURIComponent(r.client_name)}">${esc(r.client_name)}</a></td>
+                                <td class="money">${formatMoney(r.total_income)}</td>
+                                <td>${formatNumber(r.filing_count)}</td>
+                                <td>${r.firm_count}</td>
+                                <td class="muted">${r.year_from}\u2013${r.year_to}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === FEDERAL SPENDING ===
+                if (spending.length > 0) {
+                    const spendTotal = spending.reduce((s, r) => s + (r.total_amount || 0), 0);
+                    const awardTotal = spending.reduce((s, r) => s + (r.award_count || 0), 0);
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(59,130,246,0.15);color:#60a5fa;">$</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Federal Contracts &amp; Grants</div>
+                                <div class="section-subtitle">${formatNumber(awardTotal)} awards &middot; ${formatMoney(spendTotal)} total</div>
+                            </div>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Recipient</th><th>Agency</th><th>Type</th><th>Awards</th><th>Total Amount</th><th>Years</th></tr></thead>
+                            <tbody>${spending.map(r => `<tr>
+                                <td>${esc(r.recipient_name)}</td>
+                                <td class="muted">${esc(r.agency)}</td>
+                                <td class="muted">${esc(r.award_category || '')}</td>
+                                <td>${formatNumber(r.award_count)}</td>
+                                <td class="money">${formatMoney(r.total_amount)}</td>
+                                <td class="muted">FY${r.fy_from}\u2013${r.fy_to}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === CAMPAIGN FINANCE (employer aggregates) ===
+                if (fecData.length > 0) {
+                    const fecTotal = fecData.reduce((s, r) => s + (r.total_given || 0), 0);
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(251,146,60,0.15);color:#fb923c;">&#9733;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Campaign Finance (FEC)</div>
+                                <div class="section-subtitle">${formatNumber(fecData.length)} employers &middot; ${formatMoney(fecTotal)} total contributions</div>
+                            </div>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Employer</th><th>Total Given</th><th>Donations</th><th>States</th><th>Cycles</th></tr></thead>
+                            <tbody>${fecData.map(r => `<tr>
+                                <td>${esc(truncate(r.employer, 60))}</td>
+                                <td class="money">${formatMoney(r.total_given)}</td>
+                                <td>${formatNumber(r.contribution_count)}</td>
+                                <td>${r.unique_states}</td>
+                                <td class="muted">${r.first_cycle}${r.first_cycle !== r.last_cycle ? '\u2013' + r.last_cycle : ''}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === FARA (FOREIGN AGENTS) ===
+                if (faraData.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8;">&#9872;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Foreign Agents (FARA)</div>
+                                <div class="section-subtitle">${formatNumber(faraData.length)} FARA registrant${faraData.length !== 1 ? 's' : ''}</div>
+                            </div>
+                            <a class="section-link" href="/explore/fara.html?q=${encodeURIComponent(q)}">View all &rarr;</a>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Status</th><th>Registrant</th><th>Countries</th><th>Principals</th><th>Agents</th></tr></thead>
+                            <tbody>${faraData.map(r => {
+                                const active = !r.termination_date;
+                                const badge = active
+                                    ? '<span style="color:#4ade80;font-size:0.7rem;">ACTIVE</span>'
+                                    : '<span style="color:#f87171;font-size:0.7rem;">TERM.</span>';
+                                return `<tr>
+                                    <td>${badge}</td>
+                                    <td><a href="/explore/fara.html?q=${encodeURIComponent(r.name)}&detail=${encodeURIComponent(r.registration_number)}">${esc(r.name)}</a></td>
+                                    <td class="muted">${esc(truncate(r.countries || '', 50))}</td>
+                                    <td>${r.principal_count}</td>
+                                    <td>${r.agent_count}</td>
+                                </tr>`;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === STOCK TRADES ===
+                if (trades.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(34,197,94,0.15);color:#4ade80;">&#8645;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Congressional Stock Trades</div>
+                                <div class="section-subtitle">${formatNumber(trades.length)} trades by members of Congress</div>
+                            </div>
+                            <a class="section-link" href="/explore/member.html?q=${encodeURIComponent(q)}&filter=all">View members &rarr;</a>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Date</th><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Asset</th><th></th></tr></thead>
+                            <tbody>${trades.map(r => {
+                                const pClass = r.party === 'Republican' ? 'party-r' : r.party === 'Democrat' ? 'party-d' : '';
+                                return `<tr>
+                                    <td class="muted" style="white-space:nowrap;">${esc(r.transaction_date)}</td>
+                                    <td><a class="${pClass}" href="/explore/member.html?member=${encodeURIComponent(r.bioguide_id)}">${esc(r.full_name)}</a></td>
+                                    <td style="font-family:'IBM Plex Mono',monospace;color:var(--dawn-gold);">${esc(r.ticker || '')}</td>
+                                    <td class="muted">${esc(r.transaction_type || '')}</td>
+                                    <td class="muted" style="white-space:nowrap;">${esc(r.amount_range || '')}</td>
+                                    <td class="muted">${esc(truncate(r.asset_description, 60))}</td>
+                                    <td>${r.source_url ? '<a href="' + esc(r.source_url) + '" target="_blank" rel="noopener" style="color:var(--dawn-amber);text-decoration:none;font-size:0.75rem;">Source &rarr;</a>' : ''}</td>
+                                </tr>`;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === REVOLVING DOOR ===
+                if (revdoor.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(168,85,247,0.15);color:#c084fc;">&#8634;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Revolving Door</div>
+                                <div class="section-subtitle">${formatNumber(revdoor.length)} lobbyists with prior government positions</div>
+                            </div>
+                            <a class="section-link" href="/explore/lobbying.html?q=${encodeURIComponent(q)}&tab=revdoor">View all &rarr;</a>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Lobbyist</th><th>Former Position</th><th>Client</th><th>Firm</th><th>Year</th></tr></thead>
+                            <tbody>${revdoor.map(r => `<tr>
+                                <td>${esc(r.lobbyist_name)}</td>
+                                <td class="muted">${esc(truncate(r.covered_position, 60))}</td>
+                                <td><a href="/explore/lobbying.html?q=${encodeURIComponent(r.client_name)}&client=${encodeURIComponent(r.client_name)}">${esc(r.client_name)}</a></td>
+                                <td class="muted">${esc(r.registrant_name)}</td>
+                                <td class="muted">${r.filing_year}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === REGULATIONS ===
+                if (dockets.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(239,68,68,0.15);color:#f87171;">&#9783;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Regulations &amp; Dockets</div>
+                                <div class="section-subtitle">${formatNumber(dockets.length)} dockets found</div>
+                            </div>
+                            <a class="section-link" href="/explore/regulation.html?q=${encodeURIComponent(q)}">View all &rarr;</a>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Docket</th><th>Agency</th><th>Title</th><th>Comments</th><th>Docs</th></tr></thead>
+                            <tbody>${dockets.map(r => `<tr>
+                                <td style="white-space:nowrap;"><a href="/explore/regulation.html?docket=${encodeURIComponent(r.id)}">${esc(r.id)}</a></td>
+                                <td class="muted">${esc(r.agency_id)}</td>
+                                <td>${esc(truncate(r.title, 100))}</td>
+                                <td>${formatNumber(r.comment_count)}</td>
+                                <td>${formatNumber(r.doc_count)}</td>
+                            </tr>`).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // === PUBLIC COMMENTS ===
+                if (orgComments.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8;">&#9993;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Public Comments</div>
+                                <div class="section-subtitle">${formatNumber(orgComments.length)} comments with full text</div>
+                            </div>
+                            <a class="section-link" href="/explore/regulation.html?q=${encodeURIComponent(q)}&tab=comments">View all &rarr;</a>
+                        </div>`;
+                    orgComments.forEach(c => {
+                        html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:0.5rem;">
+                            <div style="display:flex;justify-content:space-between;align-items:start;gap:1rem;margin-bottom:0.5rem;">
+                                <div style="font-size:0.85rem;color:var(--text-primary);">${esc(truncate(c.title || c.submitter_name || 'Comment', 150))}</div>
+                                <span class="agency-badge" style="flex-shrink:0;">${esc(c.agency_id)}</span>
+                            </div>
+                            <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.5rem;">
+                                ${c.subtype ? esc(c.subtype) + ' &middot; ' : ''}${esc(c.posted_date || '')} &middot;
+                                <a href="/explore/regulation.html?docket=${encodeURIComponent(c.docket_id)}" style="color:var(--dawn-amber);text-decoration:none;">${esc(c.docket_id)}</a>
+                                ${c.attachment_count > 0 ? ' &middot; ' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') : ''}
+                            </div>
+                            ${c.comment_text ? '<div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;">' + esc(truncate(c.comment_text, 400)) + '</div>' : ''}
+                        </div>`;
+                    });
+                    html += `</div>`;
+                }
+
+                // === LEGISLATION ===
+                if (legislation.length > 0) {
+                    html += `<div class="section">
+                        <div class="section-header">
+                            <div class="section-icon" style="background:rgba(251,191,36,0.15);color:var(--dawn-gold);">&#9734;</div>
+                            <div class="section-title-wrap">
+                                <div class="section-title">Legislation</div>
+                                <div class="section-subtitle">${formatNumber(legislation.length)} bills found</div>
+                            </div>
+                        </div>
+                        <table class="data-table">
+                            <thead><tr><th>Bill</th><th>Title</th><th>Sponsor</th><th>Area</th><th>Introduced</th></tr></thead>
+                            <tbody>${legislation.map(r => {
+                                const pClass = r.sponsor_party === 'Republican' ? 'party-r' : r.sponsor_party === 'Democrat' ? 'party-d' : '';
+                                const cgUrl = congressUrlFromBill(r);
+                                return `<tr>
+                                    <td style="white-space:nowrap;font-family:'IBM Plex Mono',monospace;">${cgUrl ? '<a href="' + esc(cgUrl) + '">' + esc(r.bill_type || '') + r.bill_number + '</a>' : esc(r.bill_type || '') + (r.bill_number || '')}</td>
+                                    <td>${esc(truncate(r.title, 100))}</td>
+                                    <td class="${pClass}">${esc(r.sponsor_name || '')}</td>
+                                    <td class="muted">${esc(r.policy_area || '')}</td>
+                                    <td class="muted" style="white-space:nowrap;">${esc(r.introduced_date || '')}</td>
+                                </tr>`;
+                            }).join('')}</tbody>
+                        </table>
+                    </div>`;
+                }
+
+                // Legal note
+                html += `<div class="legal-note">
+                    All data shown is from publicly available government sources: Senate Office of Public Records (lobbying),
+                    USASpending.gov (contracts/grants), House/Senate financial disclosures (stock trades),
+                    Regulations.gov (dockets/comments), Congress.gov (legislation), and the Federal Register.
+                    DataDawn aggregates and displays this information as filed — we do not editorialize or draw conclusions.
+                </div>`;
+
+                resultsDiv.innerHTML = html;
+
+            } catch (err) {
+                resultsDiv.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&#9888;</div>
+                        <p>Error searching</p>
+                        <div class="hint">${esc(err.message)}</div>
+                    </div>`;
+            }
+        }
+
+        readURL();
+        searchInput.focus();
+    </script>
+</body>
+</html>
