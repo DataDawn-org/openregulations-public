@@ -231,6 +231,96 @@
             background: rgba(245, 158, 11, 0.06);
         }
 
+        .agency-guide {
+            margin-bottom: 2rem;
+        }
+
+        .agency-guide h2 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.3rem;
+            font-weight: 400;
+            color: var(--dawn-gold);
+            margin-bottom: 0.3rem;
+        }
+
+        .agency-guide .guide-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1.2rem;
+        }
+
+        .agency-category {
+            margin-bottom: 1.2rem;
+        }
+
+        .agency-category-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .agency-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 0.6rem;
+        }
+
+        .agency-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.8rem 1rem;
+            cursor: pointer;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .agency-chip:hover {
+            border-color: rgba(245, 158, 11, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .agency-chip .chip-code {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: var(--dawn-amber);
+            background: rgba(245, 158, 11, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            min-width: 3.5rem;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .agency-chip .chip-info {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .agency-chip .chip-name {
+            font-size: 0.82rem;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .agency-chip .chip-desc {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .results-area {
             max-width: 900px;
             margin: 2rem auto;
@@ -869,7 +959,11 @@
                 }
 
                 statusDiv.innerHTML = `<span class="count">${display.length}${hasMore ? '+' : ''}</span> results`;
-                resultsDiv.innerHTML = display.map(r => renderCard(r)).join('');
+                let guideHtml = '';
+                if (currentTab === 'agencies' && !currentQuery && currentOffset === 0) {
+                    guideHtml = renderAgencyGuide();
+                }
+                resultsDiv.innerHTML = guideHtml + display.map(r => renderCard(r)).join('');
 
                 paginationDiv.style.display = 'flex';
                 prevBtn.disabled = currentOffset === 0;
@@ -947,6 +1041,17 @@
             'Department of Health and Human Services': 'FDA',
             'Department of the Interior': 'FWS',
             'Department of Agriculture': 'APHIS',
+            'Department of Energy': 'DOE',
+            'Securities and Exchange Commission': 'SEC',
+            'Department of Transportation': 'FAA',
+            'Department of Commerce': 'NOAA',
+            'Federal Communications Commission': 'FCC',
+            'Nuclear Regulatory Commission': 'NRC',
+            'Department of Defense': 'DOD',
+            'Department of Labor': 'DOL',
+            'Department of Housing and Urban Development': 'HUD',
+            'Department of Education': 'ED',
+            'Department of Veterans Affairs': 'VA',
         };
 
         async function searchAgencies(q) {
@@ -1232,6 +1337,72 @@
             } catch (err) {
                 detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
             }
+        }
+
+        function renderAgencyGuide() {
+            const categories = [
+                {
+                    label: 'Environment & Energy',
+                    agencies: [
+                        { code: 'EPA', name: 'Environmental Protection Agency', desc: 'Air, water, chemicals, waste, pesticides' },
+                        { code: 'DOE', name: 'Department of Energy', desc: 'Energy policy, nuclear security, national labs' },
+                        { code: 'NRC', name: 'Nuclear Regulatory Commission', desc: 'Nuclear power plants and materials' },
+                        { code: 'BLM', name: 'Bureau of Land Management', desc: 'Public lands, oil & gas leasing, mining' },
+                        { code: 'NOAA', name: 'National Oceanic & Atmospheric Admin', desc: 'Fisheries, weather, marine sanctuaries' },
+                        { code: 'FWS', name: 'Fish & Wildlife Service', desc: 'Endangered species, wildlife refuges' },
+                    ]
+                },
+                {
+                    label: 'Health & Safety',
+                    agencies: [
+                        { code: 'FDA', name: 'Food & Drug Administration', desc: 'Drugs, food safety, medical devices' },
+                        { code: 'CMS', name: 'Centers for Medicare & Medicaid', desc: 'Medicare, Medicaid, ACA marketplace' },
+                        { code: 'APHIS', name: 'Animal & Plant Health Inspection', desc: 'Animal welfare, plant health, imports' },
+                        { code: 'USDA', name: 'Department of Agriculture', desc: 'Farm programs, nutrition, food inspection' },
+                    ]
+                },
+                {
+                    label: 'Finance & Commerce',
+                    agencies: [
+                        { code: 'SEC', name: 'Securities & Exchange Commission', desc: 'Securities markets, investor protection' },
+                        { code: 'FCC', name: 'Federal Communications Commission', desc: 'Telecom, broadcasting, internet, spectrum' },
+                        { code: 'DOL', name: 'Department of Labor', desc: 'Wages, workplace safety, pensions, unions' },
+                    ]
+                },
+                {
+                    label: 'Transportation & Defense',
+                    agencies: [
+                        { code: 'FAA', name: 'Federal Aviation Administration', desc: 'Aviation safety, airspace, drones' },
+                        { code: 'DOT', name: 'Department of Transportation', desc: 'Highways, rail, pipelines, auto safety' },
+                        { code: 'DOD', name: 'Department of Defense', desc: 'Military procurement, DFARS regulations' },
+                    ]
+                }
+            ];
+
+            let html = '<div class="agency-guide">';
+            html += '<h2>Federal Agency Guide</h2>';
+            html += '<p class="guide-subtitle">Key regulatory agencies and what they oversee. Click any agency to explore its dockets, rules, and spending.</p>';
+
+            for (const cat of categories) {
+                html += '<div class="agency-category">';
+                html += `<div class="agency-category-label">${cat.label}</div>`;
+                html += '<div class="agency-grid">';
+                for (const a of cat.agencies) {
+                    const safeName = Object.entries(AGENCY_REGS_MAP).find(([,v]) => v === a.code)?.[0] || a.name;
+                    html += `
+                        <div class="agency-chip" onclick="openAgency('${safeName.replace(/'/g, "\\'")}', '${a.code}')">
+                            <span class="chip-code">${a.code}</span>
+                            <div class="chip-info">
+                                <span class="chip-name">${a.name}</span>
+                                <span class="chip-desc">${a.desc}</span>
+                            </div>
+                        </div>`;
+                }
+                html += '</div></div>';
+            }
+
+            html += '</div>';
+            return html;
         }
 
         function renderAgencyCard(r) {
