@@ -1,11 +1,13 @@
-# OpenRegs Data Documentation
+# OpenRegulations
 
 A comprehensive database of U.S. federal government data: regulations, legislation, congressional floor speeches, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending. All from official government sources. All public domain.
 
-**Build command**: `python3 scripts/05_build_database.py`
-**Deploy command**: `bash deploy/deploy.sh`
+Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ Crabdaddy ([Claude Code](https://docs.anthropic.com/en/docs/claude-code)) 🦀
+
 **Live instance**: https://regs.datadawn.org/
 **Explore pages**: https://regs.datadawn.org/explore/
+**Build command**: `python3 scripts/05_build_database.py`
+**Deploy command**: `bash deploy/deploy.sh`
 
 ## Data at a Glance
 
@@ -422,7 +424,7 @@ Cross-reference table linking Federal Register documents to Regulations.gov docu
 
 ### cfr_sections
 
-Current regulatory text from the Electronic Code of Federal Regulations (5 titles).
+Current regulatory text from the Electronic Code of Federal Regulations (19 titles).
 
 | Column | Description |
 |---|---|
@@ -906,3 +908,13 @@ These are defined in `deploy/metadata.json`. The metadata also configures facets
 8. **5 agencies only** — Dockets, documents, and comments cover EPA, FDA, USDA, FWS, and APHIS. The Federal Register table covers all 444 agencies.
 
 9. **Cross-reference coverage** — 70,030 of 727,510 Regulations.gov documents (9.6%) are linked to Federal Register records. Most supporting materials and older documents lack a `fr_doc_num` field. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata, but the majority of documents simply don't have FR document numbers.
+
+---
+
+## License
+
+This project is licensed under [Creative Commons Zero v1.0 Universal](LICENSE). All U.S. government-sourced data is in the public domain.
+
+Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ Crabdaddy ([Claude Code](https://docs.anthropic.com/en/docs/claude-code)) 🦀
+
+A [DataDawn](https://datadawn.org) project.
