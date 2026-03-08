@@ -737,7 +737,14 @@
                 parts.push(`(full_name LIKE '%${q}%' OR ticker LIKE '%${q}%' OR speech_title LIKE '%${q}%')`);
             }
             if (currentTxn !== 'all') {
-                parts.push(`transaction_type = '${sqlEsc(currentTxn)}'`);
+                const txnMap = {
+                    'Purchase': "transaction_type IN ('Purchase','P')",
+                    'Sale': "transaction_type IN ('S')",
+                    'Sale (Full)': "transaction_type IN ('Sale (Full)')",
+                    'Sale (Partial)': "transaction_type IN ('Sale (Partial)','S (partial)')",
+                    'Exchange': "transaction_type IN ('Exchange','E')"
+                };
+                parts.push(txnMap[currentTxn] || `transaction_type = '${sqlEsc(currentTxn)}'`);
             }
             if (currentDays !== 'all') {
                 switch (currentDays) {
@@ -763,7 +770,8 @@
 
         function tradeBadgeClass(t) {
             if (!t) return '';
-            return t.toLowerCase().startsWith('purchase') ? 'purchase' : 'sale';
+            const u = t.trim().toUpperCase();
+            return (u === 'P' || u.startsWith('PURCHASE')) ? 'purchase' : 'sale';
         }
 
         function truncate(s, len) {

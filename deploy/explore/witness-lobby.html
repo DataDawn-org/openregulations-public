@@ -878,15 +878,24 @@
 
         async function fetchAndMerge() {
             const where = buildWhere();
-            const sql = `
-                SELECT organization, hearings_testified, lobby_filings,
-                       total_lobby_income, first_hearing, last_hearing, lobby_issues
-                FROM witness_lobby_overlap
-                WHERE ${where}
-                ORDER BY hearings_testified DESC
-            `;
-            const rows = await query(sql);
-            allMergedRows = sortRows(mergeRows(rows));
+            const batchSize = 1000;
+            let allRows = [];
+            let offset = 0;
+            while (true) {
+                const sql = `
+                    SELECT organization, hearings_testified, lobby_filings,
+                           total_lobby_income, first_hearing, last_hearing, lobby_issues
+                    FROM witness_lobby_overlap
+                    WHERE ${where}
+                    ORDER BY hearings_testified DESC
+                    LIMIT ${batchSize} OFFSET ${offset}
+                `;
+                const rows = await query(sql);
+                allRows = allRows.concat(rows);
+                if (rows.length < batchSize) break;
+                offset += batchSize;
+            }
+            allMergedRows = sortRows(mergeRows(allRows));
         }
 
         async function doSearch() {
