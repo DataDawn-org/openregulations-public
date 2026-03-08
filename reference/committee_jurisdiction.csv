@@ -1,0 +1,28 @@
+committee_id,committee_name,chamber,jurisdiction_desc,sic_codes,jurisdiction_tier,notes
+HSAG,House Agriculture,"House","Agriculture, commodity markets, forestry, nutrition programs","0100-0999",primary,USDA oversight; crop insurance; CFTC; SNAP
+HSAS,House Armed Services,"House","Defense contractors, aerospace, shipbuilding, military electronics","3480-3499,3720-3729,3760-3769,3795,3812",primary,DoD procurement; weapons systems; military readiness
+HSED,House Education and Workforce,"House","Education services, workforce training","8200-8299",primary,K-12; higher ed; OSHA; workforce development
+HSIF,House Energy and Commerce — Energy,"House","Oil/gas extraction, petroleum refining, utilities","1311-1389,2911,2999,4911-4991",primary,DOE; FERC; pipeline regulation; grid policy
+HSIF,House Energy and Commerce — Health,"House","Pharmaceuticals, medical devices, hospitals","2830-2836,3841-3851,8000-8099",primary,FDA; NIH; CDC; public health; drug approval
+HSIF,House Energy and Commerce — Telecom,"House","Telecommunications, broadcasting","4812-4899",primary,FCC; broadband; spectrum; net neutrality
+HSBA,House Financial Services,"House","Banks, savings institutions, securities, insurance, REITs","6000-6199,6200-6299,6300-6399,6500-6599,6798-6799",primary,Fed; SEC; FDIC; CFPB; HUD housing finance
+HSHM,House Homeland Security,"House","Cybersecurity services, security guard services","7371-7382",primary,DHS; CISA; TSA; border security
+HSJU,House Judiciary,"House","Legal services, private prisons, firearms manufacturing","8111,7382,3484,3489",primary,DOJ; antitrust; immigration courts; IP/patent; ATF
+HSII,House Natural Resources,"House","Mining, oil/gas on public lands, fishing, forestry","1000-1499,0800-0899,0900-0971",primary,Interior; BLM; FWS; public lands; offshore energy
+HSSY,House Science Space and Technology,"House","Aerospace R&D, search/navigation instruments","3760-3769,3812,8711-8713",primary,NASA; NSF; NIST; NOAA; R&D policy
+HSPW,House Transportation and Infrastructure,"House","Airlines, railroads, trucking, water transport, heavy construction","4011-4013,4210-4231,4400-4499,4512-4581,1600-1699",primary,FAA; FHWA; FRA; FEMA; Army Corps; Coast Guard
+HSVR,House Veterans Affairs,"House","VA hospitals, outpatient care","8011,8049,8062,8069",primary,VA healthcare; disability; GI Bill
+HSWM,House Ways and Means,"House","Tax preparation, customs brokers","7291,4731",primary,IRS; trade policy; Medicare; Social Security — jurisdiction is cross-cutting so SIC mapping is limited
+SSAF,Senate Agriculture Nutrition and Forestry,"Senate","Agriculture, commodity markets, forestry, nutrition programs","0100-0999",primary,Same as House Agriculture
+SSAS,Senate Armed Services,"Senate","Defense contractors, aerospace, shipbuilding, military electronics","3480-3499,3720-3729,3760-3769,3795,3812",primary,Same as House Armed Services
+SSBK,Senate Banking Housing and Urban Affairs,"Senate","Banks, savings institutions, securities, insurance, REITs","6000-6199,6200-6299,6300-6399,6500-6599,6798-6799",primary,Same as House Financial Services
+SSCM,Senate Commerce Science and Transportation,"Senate","Airlines, railroads, telecom, broadcasting, water transport","4011-4013,4400-4499,4512-4581,4812-4899",primary,FCC; FAA; NHTSA; FTC consumer protection
+SSEG,Senate Energy and Natural Resources,"Senate","Oil/gas extraction, mining, petroleum refining, utilities","1000-1499,1311-1389,2911,2999,4911-4991",primary,DOE; FERC; NRC; public lands energy; mining
+SSEV,Senate Environment and Public Works,"Senate","Environmental services, sanitary services, heavy construction","4952-4959,4953,1600-1699,9511-9512",primary,EPA; Clean Air/Water Act; Superfund; highways
+SSFI,Senate Finance,"Senate","Health insurance carriers, tax preparation","6311-6399,7291",primary,IRS; CMS; Medicare/Medicaid; trade — jurisdiction is cross-cutting so SIC mapping is limited
+SSHR,Senate Health Education Labor and Pensions,"Senate","Pharmaceuticals, medical devices, hospitals, education","2830-2836,3841-3851,8000-8099,8200-8299",primary,FDA; NIH; OSHA; public health; education
+SSGA,Senate Homeland Security and Governmental Affairs,"Senate","Cybersecurity services, security services, government IT","7371-7382",primary,DHS; federal workforce; procurement; FEMA
+SSJU,Senate Judiciary,"Senate","Legal services, private prisons, firearms manufacturing","8111,7382,3484,3489",primary,Same as House Judiciary
+SSVA,Senate Veterans Affairs,"Senate","VA hospitals, outpatient care","8011,8049,8062,8069",primary,Same as House Veterans Affairs
+SLIN,Senate Intelligence,"Senate","Defense electronics, cybersecurity, surveillance tech","3812,3699,7371-7379",primary,CIA; NSA; intelligence community — select committee not standing
+HLIG,House Intelligence,"House","Defense electronics, cybersecurity, surveillance tech","3812,3699,7371-7379",primary,CIA; NSA; intelligence community — select committee not standing

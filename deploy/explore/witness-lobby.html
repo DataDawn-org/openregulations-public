@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Witness-Lobby Overlap — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.5rem;
+            color: var(--dawn-gold);
+            font-weight: 500;
+        }
+
+        .stat-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 0.25rem;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 800px;
+            margin: 1.5rem auto 0;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: all 0.3s;
+            border-radius: 6px;
+        }
+
+        .chip:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .issue-filters {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            max-width: 800px;
+            margin: 1rem auto 0;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .issue-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            transition: all 0.3s;
+            border-radius: 20px;
+        }
+
+        .issue-chip:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .issue-chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .more-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            right: 0;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.4rem 0;
+            z-index: 100;
+            min-width: 200px;
+            max-height: 320px;
+            overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        .more-menu.open { display: block; }
+
+        .more-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            background: none;
+            border: none;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            letter-spacing: 0.03em;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .more-item:hover {
+            background: var(--surface-hover);
+            color: var(--dawn-gold);
+        }
+
+        .more-item.active {
+            color: var(--dawn-gold);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .results {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+        }
+
+        .status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+            cursor: pointer;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .card-badges {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .badge-hearings {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(59,130,246,0.15); color: #60a5fa;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .badge-lobby {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(168,85,247,0.15); color: #c084fc;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .meta-item span { color: var(--dawn-gold); }
+
+        .card-issues {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+            margin-top: 0.6rem;
+        }
+
+        .issue-tag {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            letter-spacing: 0.04em;
+        }
+
+        .load-more {
+            display: block; width: 100%; padding: 0.8rem; margin-top: 1rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            color: var(--dawn-amber); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            cursor: pointer; text-align: center;
+        }
+        .load-more:hover { background: var(--surface-hover); }
+
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+        .detail-overlay.open { display: block; }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            overflow-y: auto;
+            z-index: 1001;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+        .detail-panel.open { transform: translateX(0); }
+
+        .detail-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1.5rem 2rem 0;
+            transition: color 0.3s;
+        }
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-header {
+            padding: 1rem 2rem 1rem;
+        }
+
+        .detail-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-subtitle {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .detail-content { padding: 2rem; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.8rem;
+        }
+
+        .detail-item .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .detail-item .value {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-top: 0.3rem;
+        }
+
+        .detail-item .value.large {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.3rem;
+            color: var(--dawn-gold);
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        .cross-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+        .cross-link:hover {
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .detail-issues {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .detail-issue-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+        }
+
+        .detail-issue-chip .issue-name {
+            color: var(--text-muted);
+            font-size: 0.6rem;
+            margin-left: 0.3rem;
+        }
+
+        .doc-link { color: var(--dawn-gold); text-decoration: none; }
+        .doc-link:hover { text-decoration: underline; }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 3rem 1.5rem 1.5rem; }
+            .stats-bar { gap: 1.5rem; padding: 0 1.5rem; flex-wrap: wrap; }
+            .stat-value { font-size: 1.2rem; }
+            .search-container { padding: 0 1.5rem; }
+            .controls { padding: 0 1.5rem; }
+            .issue-filters { padding: 0 1.5rem; }
+            .results { padding: 1rem 1.5rem; }
+            .detail-grid { grid-template-columns: 1fr; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/hearings.html">Hearings</a>
+            <a href="/explore/nominations.html">Nominations</a>
+            <a href="/explore/research.html">Research</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/contributions.html">Contributions</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Witness-Lobby Overlap</h1>
+        <p>Organizations that testified as witnesses at congressional hearings and also appear as lobbying clients. Explore the intersection of testimony and lobbying activity.</p>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+            <div class="stat-value" id="statOrgs">--</div>
+            <div class="stat-label">Organizations</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="statHearings">--</div>
+            <div class="stat-label">Total Hearings</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="statFilings">--</div>
+            <div class="stat-label">Lobby Filings</div>
+        </div>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search by organization name..." autofocus>
+            <button class="search-btn" onclick="doSearch()">Search</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="sort-controls" id="sortControls">
+            <button class="chip active" data-sort="hearings">Most Hearings</button>
+            <button class="chip" data-sort="filings">Most Filings</button>
+            <button class="chip" data-sort="income">Highest Income</button>
+            <button class="chip" data-sort="alpha">A-Z</button>
+        </div>
+    </div>
+
+    <div class="issue-filters" id="issueFilters">
+        <button class="issue-chip active" data-issue="all">All Issues</button>
+        <button class="issue-chip" data-issue="HCR">Health</button>
+        <button class="issue-chip" data-issue="ENG">Energy</button>
+        <button class="issue-chip" data-issue="ENV">Environment</button>
+        <button class="issue-chip" data-issue="DEF">Defense</button>
+        <button class="issue-chip" data-issue="TRD">Trade</button>
+        <button class="issue-chip" data-issue="EDU">Education</button>
+        <div class="more-dropdown" style="position:relative; display:inline-block;">
+            <button class="issue-chip" id="moreIssuesBtn">More &#9662;</button>
+            <div class="more-menu" id="moreMenu">
+                <button class="more-item" data-issue="BUD">Budget/Appropriations</button>
+                <button class="more-item" data-issue="TAX">Taxation</button>
+                <button class="more-item" data-issue="TRA">Transportation</button>
+                <button class="more-item" data-issue="FIN">Financial Institutions</button>
+                <button class="more-item" data-issue="AGR">Agriculture</button>
+                <button class="more-item" data-issue="LBR">Labor/Antitrust</button>
+                <button class="more-item" data-issue="GOV">Government Issues</button>
+                <button class="more-item" data-issue="NAT">Natural Resources</button>
+                <button class="more-item" data-issue="HOM">Homeland Security</button>
+                <button class="more-item" data-issue="SCI">Science/Technology</button>
+                <button class="more-item" data-issue="TEC">Telecommunications</button>
+                <button class="more-item" data-issue="IMM">Immigration</button>
+                <button class="more-item" data-issue="MMM">Medicare/Medicaid</button>
+                <button class="more-item" data-issue="FUE">Fuel/Gas/Oil</button>
+                <button class="more-item" data-issue="INS">Insurance</button>
+                <button class="more-item" data-issue="FOR">Foreign Relations</button>
+                <button class="more-item" data-issue="VET">Veterans</button>
+                <button class="more-item" data-issue="CPI">Computer Industry</button>
+                <button class="more-item" data-issue="CAW">Clean Air &amp; Water</button>
+                <button class="more-item" data-issue="HOU">Housing</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="results" id="results">
+        <div class="empty-state">Loading organizations...</div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" onclick="closeDetail()">&larr; Back to results</button>
+            <div id="detailHeader" class="detail-header"></div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+        const PAGE_SIZE = 50;
+        let currentSort = 'hearings';
+        let currentIssue = 'all';
+        let currentOffset = 0;
+        let currentQuery = '';
+
+        const ISSUE_NAMES = {
+            ACC:'Accounting',ADV:'Advertising',AER:'Aerospace',AGR:'Agriculture',
+            ALC:'Alcohol/Drug Abuse',ANI:'Animals',APP:'Apparel/Textiles',ART:'Arts/Entertainment',
+            AUT:'Automotive',AVI:'Aviation/Airlines',BAN:'Banking',BEV:'Beverage Industry',
+            BNK:'Bankruptcy',BUD:'Budget/Appropriations',CAW:'Clean Air & Water',CDT:'Commodities',
+            CHM:'Chemicals',CIV:'Civil Rights',COM:'Communications/Broadcasting',CON:'Constitution',
+            CPI:'Computer Industry',CPT:'Copyright/Patent',CSP:'Consumer Issues',DEF:'Defense',
+            DIS:'Disaster Planning',DOC:'District of Columbia',ECN:'Economics',EDU:'Education',
+            ENG:'Energy/Nuclear',ENV:'Environment',FAM:'Family Issues',FIN:'Financial Institutions',
+            FIR:'Firearms',FOO:'Food Industry',FOR:'Foreign Relations',FUE:'Fuel/Gas/Oil',
+            GAM:'Gaming/Gambling',GOV:'Government Issues',HCR:'Health Issues',HOM:'Homeland Security',
+            HOU:'Housing',IMM:'Immigration',IND:'Indian/Native American',INS:'Insurance',
+            INT:'Intelligence',LAW:'Law Enforcement',LBR:'Labor/Antitrust',MAN:'Manufacturing',
+            MAR:'Marine/Maritime',MED:'Medical Research',MIA:'Media/Publishing',MMM:'Medicare/Medicaid',
+            MON:'Minting/Money',NAT:'Natural Resources',PHA:'Pharmacy',POS:'Postal',
+            REL:'Religion',RES:'Real Estate',RET:'Retirement',ROD:'Roads/Highway',
+            RRR:'Railroads',SCI:'Science/Technology',SMB:'Small Business',SPO:'Sports/Athletics',
+            TAR:'Tariff',TAX:'Taxation',TEC:'Telecommunications',TOB:'Tobacco',
+            TOR:'Torts',TOU:'Travel/Tourism',TRA:'Transportation',TRD:'Trade',
+            TRU:'Trucking/Shipping',UNM:'Unemployment',URB:'Urban Development',UTI:'Utilities',
+            VET:'Veterans',WAS:'Waste',WEL:'Welfare'
+        };
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
+
+        function normalizeName(name) {
+            return (name || '').replace(/[.,]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+        }
+
+        function mergeRows(rows) {
+            const map = new Map();
+            for (const r of rows) {
+                const key = normalizeName(r.organization);
+                if (map.has(key)) {
+                    const m = map.get(key);
+                    m.hearings_testified += (r.hearings_testified || 0);
+                    m.lobby_filings += (r.lobby_filings || 0);
+                    m.total_lobby_income += (r.total_lobby_income || 0);
+                    if (r.first_hearing && (!m.first_hearing || r.first_hearing < m.first_hearing)) m.first_hearing = r.first_hearing;
+                    if (r.last_hearing && (!m.last_hearing || r.last_hearing > m.last_hearing)) m.last_hearing = r.last_hearing;
+                    const existingIssues = new Set((m.lobby_issues || '').split(',').map(s => s.trim()).filter(Boolean));
+                    (r.lobby_issues || '').split(',').map(s => s.trim()).filter(Boolean).forEach(i => existingIssues.add(i));
+                    m.lobby_issues = [...existingIssues].join(',');
+                } else {
+                    map.set(key, { ...r });
+                }
+            }
+            return [...map.values()];
+        }
+
+        function fmtNum(n) {
+            if (n == null) return '\u2014';
+            if (n >= 1e9) return '$' + (n/1e9).toFixed(1) + 'B';
+            if (n >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K';
+            return '$' + Number(n).toLocaleString();
+        }
+
+        function fmtCount(n) {
+            if (n == null) return '\u2014';
+            if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+            return Number(n).toLocaleString();
+        }
+
+        function fmtMoney(n) {
+            if (n == null || n === 0) return '\u2014';
+            return '$' + Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Query failed: ${resp.status}`);
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function getParam(k) { return new URLSearchParams(location.search).get(k); }
+        function setParams(params) {
+            const u = new URLSearchParams(location.search);
+            for (const [k,v] of Object.entries(params)) {
+                if (v === null || v === undefined || v === '') u.delete(k);
+                else u.set(k, v);
+            }
+            const str = u.toString();
+            history.replaceState(null, '', str ? '?' + str : location.pathname);
+        }
+
+        // Load summary stats (updated after merge for accurate org count)
+        function updateStats() {
+            if (!allMergedRows.length) return;
+            let totalH = 0, totalF = 0;
+            for (const r of allMergedRows) {
+                totalH += (r.hearings_testified || 0);
+                totalF += (r.lobby_filings || 0);
+            }
+            document.getElementById('statOrgs').textContent = fmtCount(allMergedRows.length);
+            document.getElementById('statHearings').textContent = fmtCount(totalH);
+            document.getElementById('statFilings').textContent = fmtCount(totalF);
+        }
+
+        async function loadStats() {
+            try {
+                const rows = await query(`
+                    SELECT COUNT(*) AS orgs,
+                           SUM(hearings_testified) AS hearings,
+                           SUM(lobby_filings) AS filings
+                    FROM witness_lobby_overlap
+                `);
+                if (rows.length) {
+                    document.getElementById('statOrgs').textContent = fmtCount(rows[0].orgs);
+                    document.getElementById('statHearings').textContent = fmtCount(rows[0].hearings);
+                    document.getElementById('statFilings').textContent = fmtCount(rows[0].filings);
+                }
+            } catch (e) { /* stats are optional */ }
+        }
+
+        function buildOrderBy() {
+            switch (currentSort) {
+                case 'hearings': return 'hearings_testified DESC';
+                case 'filings': return 'lobby_filings DESC';
+                case 'income': return 'total_lobby_income DESC';
+                case 'alpha': return 'organization ASC';
+                default: return 'hearings_testified DESC';
+            }
+        }
+
+        function buildWhere() {
+            const parts = ['1=1'];
+            if (currentQuery) {
+                parts.push(`organization LIKE '%${sqlEsc(currentQuery)}%'`);
+            }
+            if (currentIssue !== 'all') {
+                parts.push(`(',' || lobby_issues || ',') LIKE '%,${sqlEsc(currentIssue)},%'`);
+            }
+            return parts.join(' AND ');
+        }
+
+        // Cache all merged rows for client-side pagination
+        let allMergedRows = [];
+
+        function sortRows(rows) {
+            const copy = [...rows];
+            switch (currentSort) {
+                case 'hearings': return copy.sort((a, b) => (b.hearings_testified || 0) - (a.hearings_testified || 0));
+                case 'filings': return copy.sort((a, b) => (b.lobby_filings || 0) - (a.lobby_filings || 0));
+                case 'income': return copy.sort((a, b) => (b.total_lobby_income || 0) - (a.total_lobby_income || 0));
+                case 'alpha': return copy.sort((a, b) => (a.organization || '').localeCompare(b.organization || ''));
+                default: return copy.sort((a, b) => (b.hearings_testified || 0) - (a.hearings_testified || 0));
+            }
+        }
+
+        async function fetchAndMerge() {
+            const where = buildWhere();
+            const sql = `
+                SELECT organization, hearings_testified, lobby_filings,
+                       total_lobby_income, first_hearing, last_hearing, lobby_issues
+                FROM witness_lobby_overlap
+                WHERE ${where}
+                ORDER BY hearings_testified DESC
+            `;
+            const rows = await query(sql);
+            allMergedRows = sortRows(mergeRows(rows));
+        }
+
+        async function doSearch() {
+            currentQuery = document.getElementById('searchInput').value.trim();
+            currentOffset = 0;
+            setParams({
+                q: currentQuery || null,
+                sort: currentSort === 'hearings' ? null : currentSort,
+                issue: currentIssue === 'all' ? null : currentIssue
+            });
+
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            try {
+                await fetchAndMerge();
+                if (!currentQuery && currentIssue === 'all') updateStats();
+                await loadResults(0);
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function loadResults(offset) {
+            currentOffset = offset;
+
+            const page = allMergedRows.slice(offset, offset + PAGE_SIZE);
+            const hasMore = offset + PAGE_SIZE < allMergedRows.length;
+
+            if (!page.length && offset === 0) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No organizations found matching your criteria.</div>';
+                return;
+            }
+
+            let html = '';
+            if (offset === 0) {
+                html += `<div class="status"><span class="count">${fmtCount(allMergedRows.length)}</span> organizations found</div>`;
+            }
+
+            for (const r of page) {
+                const issues = r.lobby_issues ? r.lobby_issues.split(',').slice(0, 8) : [];
+                const extraCount = r.lobby_issues ? r.lobby_issues.split(',').length - 8 : 0;
+
+                html += `
+                    <div class="result-card" onclick="openDetail('${esc(sqlEsc(r.organization))}')">
+                        <div class="card-header">
+                            <div class="card-title">${esc(r.organization)}</div>
+                            <div class="card-badges">
+                                <span class="badge-hearings">${r.hearings_testified} hearing${r.hearings_testified !== 1 ? 's' : ''}</span>
+                                <span class="badge-lobby">${r.lobby_filings} filing${r.lobby_filings !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                        <div class="card-meta">
+                            <div class="meta-item">Lobby income: <span>${fmtMoney(r.total_lobby_income)}</span></div>
+                            <div class="meta-item">${esc(r.first_hearing)} to ${esc(r.last_hearing)}</div>
+                        </div>
+                        ${issues.length ? `<div class="card-issues">${issues.map(c => `<span class="issue-tag">${esc(c.trim())}</span>`).join('')}${extraCount > 0 ? `<span class="issue-tag">+${extraCount} more</span>` : ''}</div>` : ''}
+                    </div>`;
+            }
+
+            if (hasMore) {
+                html += `<button class="load-more" onclick="loadMore(${offset + PAGE_SIZE})">Load more organizations</button>`;
+            }
+
+            if (offset === 0) {
+                document.getElementById('results').innerHTML = html;
+            } else {
+                document.getElementById('results').querySelector('.load-more')?.remove();
+                document.getElementById('results').insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        async function loadMore(offset) {
+            try { await loadResults(offset); } catch (e) { /* fail silently */ }
+        }
+
+        // Sort controls — re-sort cached merged data without refetching
+        document.querySelectorAll('#sortControls .chip').forEach(c => {
+            c.addEventListener('click', () => {
+                document.querySelectorAll('#sortControls .chip').forEach(x => x.classList.remove('active'));
+                c.classList.add('active');
+                currentSort = c.dataset.sort;
+                currentOffset = 0;
+                setParams({ sort: currentSort === 'hearings' ? null : currentSort });
+                allMergedRows = sortRows(allMergedRows);
+                loadResults(0).catch(() => {});
+            });
+        });
+
+        // Issue filter — top-level chips
+        function selectIssue(code, fromDropdown) {
+            // Clear all active states
+            document.querySelectorAll('#issueFilters .issue-chip').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('#moreMenu .more-item').forEach(x => x.classList.remove('active'));
+
+            if (fromDropdown) {
+                // Highlight the "More" button and the selected dropdown item
+                document.getElementById('moreIssuesBtn').classList.add('active');
+                document.querySelector(`.more-item[data-issue="${code}"]`)?.classList.add('active');
+            } else {
+                // Highlight the clicked top-level chip
+                document.querySelector(`.issue-chip[data-issue="${code}"]`)?.classList.add('active');
+            }
+
+            document.getElementById('moreMenu').classList.remove('open');
+            currentIssue = code;
+            currentOffset = 0;
+            setParams({ issue: currentIssue === 'all' ? null : currentIssue });
+            doSearch();
+        }
+
+        document.querySelectorAll('#issueFilters > .issue-chip').forEach(c => {
+            c.addEventListener('click', () => selectIssue(c.dataset.issue, false));
+        });
+
+        // "More" dropdown toggle
+        document.getElementById('moreIssuesBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('moreMenu').classList.toggle('open');
+        });
+
+        // Dropdown items
+        document.querySelectorAll('#moreMenu .more-item').forEach(c => {
+            c.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectIssue(c.dataset.issue, true);
+            });
+        });
+
+        // Close dropdown on outside click
+        document.addEventListener('click', () => {
+            document.getElementById('moreMenu').classList.remove('open');
+        });
+
+        document.getElementById('searchInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        // Detail panel — uses merged data when available, falls back to DB query
+        async function openDetail(org) {
+            document.getElementById('detailOverlay').classList.add('open');
+            document.getElementById('detailPanel').classList.add('open');
+            document.getElementById('detailContent').innerHTML = '<div class="status">Loading...</div>';
+            setParams({ detail: org });
+
+            try {
+                // Try to find in cached merged data first
+                let r = allMergedRows.find(row => row.organization === org);
+
+                if (!r) {
+                    // Fallback: fetch from DB and merge any variants
+                    const rows = await query(`
+                        SELECT organization, hearings_testified, lobby_filings,
+                               total_lobby_income, first_hearing, last_hearing, lobby_issues
+                        FROM witness_lobby_overlap
+                        WHERE organization LIKE '%${sqlEsc(org.replace(/[%_]/g, ''))}%'
+                    `);
+                    const merged = mergeRows(rows);
+                    r = merged.find(row => normalizeName(row.organization) === normalizeName(org)) || merged[0];
+                }
+
+                if (!r) {
+                    document.getElementById('detailContent').innerHTML = '<div class="status">Organization not found</div>';
+                    return;
+                }
+                const issues = r.lobby_issues ? r.lobby_issues.split(',') : [];
+
+                document.getElementById('detailHeader').innerHTML = `
+                    <div class="detail-title">${esc(r.organization)}</div>
+                    <div class="detail-subtitle">
+                        ${r.hearings_testified} hearing${r.hearings_testified !== 1 ? 's' : ''}
+                        &middot; ${r.lobby_filings} lobby filing${r.lobby_filings !== 1 ? 's' : ''}
+                        &middot; ${fmtMoney(r.total_lobby_income)} total lobby income
+                    </div>
+                `;
+
+                let html = '<div class="detail-grid">';
+                html += `<div class="detail-item"><div class="label">Hearings Testified</div><div class="value large">${r.hearings_testified}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Lobby Filings</div><div class="value large">${r.lobby_filings}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Total Lobby Income</div><div class="value large">${fmtNum(r.total_lobby_income)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">First Hearing</div><div class="value">${esc(r.first_hearing)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Last Hearing</div><div class="value">${esc(r.last_hearing)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Issue Areas</div><div class="value large">${issues.length}</div></div>`;
+                html += '</div>';
+
+                if (issues.length) {
+                    html += '<div class="section-title">Lobbying Issue Areas</div>';
+                    html += '<div class="detail-issues">';
+                    for (const code of issues) {
+                        const c = code.trim();
+                        const name = ISSUE_NAMES[c] || c;
+                        html += `<div class="detail-issue-chip">${esc(c)}<span class="issue-name">${esc(name)}</span></div>`;
+                    }
+                    html += '</div>';
+                }
+
+                html += '<div class="section-title">Explore This Organization</div>';
+                html += '<div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-top:0.5rem">';
+                html += `<a class="cross-link" href="/explore/lobbying.html?q=${encodeURIComponent(r.organization)}">Lobbying Explorer &rarr;</a>`;
+                html += `<a class="cross-link" href="/explore/hearings.html?q=${encodeURIComponent(r.organization)}">Hearings Explorer &rarr;</a>`;
+                html += `<a class="cross-link" href="/explore/entity.html?q=${encodeURIComponent(r.organization)}">Entity Explorer &rarr;</a>`;
+                html += '</div>';
+
+                html += '<div class="section-title">Raw Data</div>';
+                html += '<div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-top:0.5rem">';
+                html += `<a class="cross-link" href="${API}/witness_lobby_overlap?organization=${encodeURIComponent(r.organization)}" target="_blank">View in Database &rarr;</a>`;
+                html += '</div>';
+
+                document.getElementById('detailContent').innerHTML = html;
+            } catch (e) {
+                document.getElementById('detailContent').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function closeDetail() {
+            document.getElementById('detailOverlay').classList.remove('open');
+            document.getElementById('detailPanel').classList.remove('open');
+            setParams({ detail: null });
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeDetail();
+        });
+
+        // Init from URL state
+        (function init() {
+            const q = getParam('q');
+            const sort = getParam('sort');
+            const issue = getParam('issue');
+            const detail = getParam('detail');
+
+            if (sort) {
+                currentSort = sort;
+                document.querySelectorAll('#sortControls .chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.sort === sort);
+                });
+            }
+
+            if (issue) {
+                currentIssue = issue;
+                const topChip = document.querySelector(`#issueFilters > .issue-chip[data-issue="${issue}"]`);
+                const moreItem = document.querySelector(`#moreMenu .more-item[data-issue="${issue}"]`);
+                document.querySelectorAll('#issueFilters .issue-chip').forEach(x => x.classList.remove('active'));
+                if (topChip) {
+                    topChip.classList.add('active');
+                } else if (moreItem) {
+                    document.getElementById('moreIssuesBtn').classList.add('active');
+                    moreItem.classList.add('active');
+                }
+            }
+
+            if (q) {
+                document.getElementById('searchInput').value = q;
+            }
+
+            loadStats();
+            doSearch();
+
+            if (detail) {
+                openDetail(detail);
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -320,6 +320,82 @@ CREATE INDEX IF NOT EXISTS idx_lobby_lob_covered ON lobbying_lobbyists(covered_p
 CREATE INDEX IF NOT EXISTS idx_lobby_contrib_year ON lobbying_contributions(filing_year);
 CREATE INDEX IF NOT EXISTS idx_lobby_contrib_recipient ON lobbying_contributions(recipient_name);
 
+-- Lobbying-to-legislation cross-reference (bill refs extracted from specific_issues text)
+CREATE TABLE IF NOT EXISTS lobbying_bills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filing_uuid TEXT NOT NULL,
+    bill_congress INTEGER,
+    bill_type TEXT,
+    bill_number INTEGER,
+    bill_id TEXT,
+    client_name TEXT,
+    issue_code TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_lb_bill ON lobbying_bills(bill_id);
+CREATE INDEX IF NOT EXISTS idx_lb_filing ON lobbying_bills(filing_uuid);
+CREATE INDEX IF NOT EXISTS idx_lb_client ON lobbying_bills(client_name);
+
+-- Committee-sector reference (maps committees to regulated industries and tickers)
+CREATE TABLE IF NOT EXISTS committee_sectors (
+    committee_id TEXT NOT NULL,
+    committee_name TEXT,
+    chamber TEXT,
+    regulated_sectors TEXT,
+    example_tickers TEXT,
+    gics_sectors TEXT,
+    sic_ranges TEXT,
+    notes TEXT,
+    PRIMARY KEY (committee_id)
+);
+
+-- Committee jurisdiction with tiered SIC mapping (primary/secondary/tertiary)
+CREATE TABLE IF NOT EXISTS committee_jurisdiction (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    committee_id TEXT NOT NULL,
+    committee_name TEXT,
+    chamber TEXT,
+    jurisdiction_desc TEXT,
+    sic_codes TEXT,
+    jurisdiction_tier TEXT DEFAULT 'primary',
+    notes TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cj_committee ON committee_jurisdiction(committee_id);
+CREATE INDEX IF NOT EXISTS idx_cj_tier ON committee_jurisdiction(jurisdiction_tier);
+
+-- Expanded SIC ranges from committee_jurisdiction (for efficient range matching)
+CREATE TABLE IF NOT EXISTS committee_sic_ranges (
+    committee_id TEXT NOT NULL,
+    sic_start INTEGER NOT NULL,
+    sic_end INTEGER NOT NULL,
+    jurisdiction_tier TEXT DEFAULT 'primary'
+);
+CREATE INDEX IF NOT EXISTS idx_csr_sic ON committee_sic_ranges(sic_start, sic_end);
+CREATE INDEX IF NOT EXISTS idx_csr_committee ON committee_sic_ranges(committee_id);
+
+-- Ticker-to-SIC mapping from SEC EDGAR
+CREATE TABLE IF NOT EXISTS ticker_sic (
+    ticker TEXT PRIMARY KEY,
+    cik TEXT,
+    company_name TEXT,
+    sic_code TEXT,
+    sic_description TEXT,
+    exchange TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ts_sic ON ticker_sic(sic_code);
+
+-- Lobbying issue-to-agency reference (maps lobbying issue codes to agencies and committees)
+CREATE TABLE IF NOT EXISTS lobbying_issue_agencies (
+    issue_code TEXT NOT NULL,
+    issue_description TEXT,
+    primary_agencies TEXT,
+    secondary_agencies TEXT,
+    regs_gov_agency_prefixes TEXT,
+    federal_register_agency_slugs TEXT,
+    related_committee_ids TEXT,
+    notes TEXT,
+    PRIMARY KEY (issue_code)
+);
+
 -- Congressional legislation (from Congress.gov API)
 CREATE TABLE IF NOT EXISTS legislation (
     bill_id TEXT PRIMARY KEY,
@@ -550,6 +626,204 @@ CREATE TABLE IF NOT EXISTS legislation_cosponsors (
 CREATE INDEX IF NOT EXISTS idx_lc_bioguide ON legislation_cosponsors(bioguide_id);
 CREATE INDEX IF NOT EXISTS idx_lc_bill ON legislation_cosponsors(bill_id);
 CREATE INDEX IF NOT EXISTS idx_lc_original ON legislation_cosponsors(is_original_cosponsor);
+
+-- CBO cost estimates (extracted from Congress.gov bill data)
+CREATE TABLE IF NOT EXISTS cbo_cost_estimates (
+    bill_id TEXT NOT NULL,
+    pub_date TEXT,
+    title TEXT,
+    description TEXT,
+    url TEXT,
+    FOREIGN KEY (bill_id) REFERENCES legislation(bill_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cbo_bill ON cbo_cost_estimates(bill_id);
+
+-- Committee hearings (from GovInfo CHRG collection)
+CREATE TABLE IF NOT EXISTS hearings (
+    package_id TEXT PRIMARY KEY,
+    title TEXT,
+    chamber TEXT,
+    congress INTEGER,
+    session TEXT,
+    date_issued TEXT,
+    committees TEXT,
+    detail_url TEXT,
+    html_url TEXT,
+    pdf_url TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hear_chamber ON hearings(chamber);
+CREATE INDEX IF NOT EXISTS idx_hear_congress ON hearings(congress);
+CREATE INDEX IF NOT EXISTS idx_hear_date ON hearings(date_issued);
+
+-- Hearing witnesses (normalized from hearings JSON)
+CREATE TABLE IF NOT EXISTS hearing_witnesses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    package_id TEXT NOT NULL REFERENCES hearings(package_id),
+    name TEXT,
+    title TEXT,
+    organization TEXT,
+    location TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hw_package ON hearing_witnesses(package_id);
+CREATE INDEX IF NOT EXISTS idx_hw_name ON hearing_witnesses(name);
+CREATE INDEX IF NOT EXISTS idx_hw_org ON hearing_witnesses(organization) WHERE organization IS NOT NULL AND organization != '';
+
+-- Hearing members (committee members present)
+CREATE TABLE IF NOT EXISTS hearing_members (
+    package_id TEXT NOT NULL REFERENCES hearings(package_id),
+    name TEXT NOT NULL,
+    role TEXT,
+    bioguide_id TEXT,
+    PRIMARY KEY (package_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_hm_name ON hearing_members(name);
+CREATE INDEX IF NOT EXISTS idx_hm_bioguide ON hearing_members(bioguide_id);
+
+-- CRS reports (from Congress.gov API)
+CREATE TABLE IF NOT EXISTS crs_reports (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    publish_date TEXT,
+    update_date TEXT,
+    status TEXT,
+    content_type TEXT,
+    authors TEXT,
+    topics TEXT,
+    summary TEXT,
+    pdf_url TEXT,
+    html_url TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_crs_date ON crs_reports(publish_date);
+CREATE INDEX IF NOT EXISTS idx_crs_status ON crs_reports(status);
+
+-- CRS report related bills
+CREATE TABLE IF NOT EXISTS crs_report_bills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id TEXT NOT NULL REFERENCES crs_reports(id),
+    bill_title TEXT,
+    congress INTEGER,
+    bill_type TEXT,
+    bill_number INTEGER,
+    bill_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_crb_report ON crs_report_bills(report_id);
+CREATE INDEX IF NOT EXISTS idx_crb_bill ON crs_report_bills(bill_id);
+
+-- Executive nominations (from Congress.gov API)
+CREATE TABLE IF NOT EXISTS nominations (
+    id TEXT PRIMARY KEY,
+    congress INTEGER,
+    number INTEGER,
+    part_number TEXT,
+    citation TEXT,
+    description TEXT,
+    organization TEXT,
+    received_date TEXT,
+    authority_date TEXT,
+    is_civilian INTEGER,
+    is_military INTEGER,
+    status TEXT,
+    vote_yea INTEGER,
+    vote_nay INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_nom_congress ON nominations(congress);
+CREATE INDEX IF NOT EXISTS idx_nom_status ON nominations(status);
+CREATE INDEX IF NOT EXISTS idx_nom_date ON nominations(received_date);
+CREATE INDEX IF NOT EXISTS idx_nom_org ON nominations(organization) WHERE organization IS NOT NULL AND organization != '';
+
+-- Nomination actions
+CREATE TABLE IF NOT EXISTS nomination_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nomination_id TEXT NOT NULL REFERENCES nominations(id),
+    action_date TEXT,
+    action_text TEXT,
+    action_type TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_nomact_nom ON nomination_actions(nomination_id);
+
+-- Treaties (from Congress.gov API)
+CREATE TABLE IF NOT EXISTS treaties (
+    id TEXT PRIMARY KEY,
+    congress INTEGER,
+    number INTEGER,
+    title TEXT,
+    topic TEXT,
+    transmitted_date TEXT,
+    in_force_date TEXT,
+    countries TEXT,
+    index_terms TEXT,
+    resolution_text TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_treaty_congress ON treaties(congress);
+CREATE INDEX IF NOT EXISTS idx_treaty_date ON treaties(transmitted_date);
+
+-- Treaty actions
+CREATE TABLE IF NOT EXISTS treaty_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    treaty_id TEXT NOT NULL REFERENCES treaties(id),
+    action_date TEXT,
+    action_text TEXT,
+    action_type TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tact_treaty ON treaty_actions(treaty_id);
+
+-- GAO reports (from GovInfo GAOREPORTS collection)
+CREATE TABLE IF NOT EXISTS gao_reports (
+    package_id TEXT PRIMARY KEY,
+    title TEXT,
+    date_issued TEXT,
+    report_number TEXT,
+    document_type TEXT,
+    doc_class TEXT,
+    abstract TEXT,
+    subjects TEXT,
+    public_laws TEXT,
+    usc_references TEXT,
+    statute_references TEXT,
+    citation TEXT,
+    pdf_url TEXT,
+    html_url TEXT,
+    detail_url TEXT,
+    sudocs TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_gao_date ON gao_reports(date_issued);
+CREATE INDEX IF NOT EXISTS idx_gao_type ON gao_reports(document_type);
+CREATE INDEX IF NOT EXISTS idx_gao_report_num ON gao_reports(report_number);
+
+-- Earmarks / Congressionally Directed Spending
+CREATE TABLE IF NOT EXISTS earmarks (
+    id INTEGER PRIMARY KEY,
+    fiscal_year INTEGER NOT NULL,
+    chamber TEXT NOT NULL,
+    member_name TEXT,
+    member_last TEXT,
+    member_first TEXT,
+    bioguide_id TEXT,
+    party TEXT,
+    state TEXT,
+    district TEXT,
+    subcommittee TEXT,
+    recipient TEXT,
+    project_description TEXT,
+    recipient_address TEXT,
+    amount_requested INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_earmarks_fy ON earmarks(fiscal_year);
+CREATE INDEX IF NOT EXISTS idx_earmarks_chamber ON earmarks(chamber);
+CREATE INDEX IF NOT EXISTS idx_earmarks_bioguide ON earmarks(bioguide_id);
+CREATE INDEX IF NOT EXISTS idx_earmarks_state ON earmarks(state);
+CREATE INDEX IF NOT EXISTS idx_earmarks_amount ON earmarks(amount_requested);
 
 -- Roll call votes (from Congress.gov / House Clerk / Senate.gov)
 CREATE TABLE IF NOT EXISTS roll_call_votes (
@@ -1051,6 +1325,35 @@ WHERE income_amount > 0
 GROUP BY client_name
 ORDER BY total_reported_income DESC;
 
+-- Nomination confirmation rates by congress
+CREATE VIEW IF NOT EXISTS nomination_rates AS
+SELECT
+    congress,
+    COUNT(*) AS total,
+    SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) AS confirmed,
+    SUM(CASE WHEN status = 'Withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
+    SUM(CASE WHEN status = 'Returned' THEN 1 ELSE 0 END) AS returned,
+    SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END) AS rejected,
+    SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
+    ROUND(100.0 * SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS confirm_pct
+FROM nominations
+GROUP BY congress
+ORDER BY congress;
+
+-- Hearing activity by congress and chamber
+CREATE VIEW IF NOT EXISTS hearing_activity AS
+SELECT
+    congress,
+    chamber,
+    COUNT(*) AS hearing_count,
+    COUNT(DISTINCT hw.name) AS unique_witnesses,
+    MIN(h.date_issued) AS earliest,
+    MAX(h.date_issued) AS latest
+FROM hearings h
+LEFT JOIN hearing_witnesses hw ON hw.package_id = h.package_id
+GROUP BY congress, chamber
+ORDER BY congress DESC, chamber;
+
 -- Spending overview by agency (for the expanded 20-agency data)
 CREATE VIEW IF NOT EXISTS spending_by_agency AS
 SELECT
@@ -1134,6 +1437,36 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fara_foreign_principals_fts USING fts5(
 CREATE VIRTUAL TABLE IF NOT EXISTS fec_employer_fts USING fts5(
     employer,
     content='fec_employer_totals', content_rowid='rowid'
+);
+
+-- Full-text search on hearings
+CREATE VIRTUAL TABLE IF NOT EXISTS hearings_fts USING fts5(
+    title, chamber, committees,
+    content='hearings', content_rowid='rowid'
+);
+
+-- Full-text search on CRS reports
+CREATE VIRTUAL TABLE IF NOT EXISTS crs_reports_fts USING fts5(
+    title, authors, topics, summary,
+    content='crs_reports', content_rowid='rowid'
+);
+
+-- Full-text search on nominations
+CREATE VIRTUAL TABLE IF NOT EXISTS nominations_fts USING fts5(
+    description, organization, citation, status,
+    content='nominations', content_rowid='rowid'
+);
+
+-- Full-text search on GAO reports
+CREATE VIRTUAL TABLE IF NOT EXISTS gao_reports_fts USING fts5(
+    title, abstract, subjects, report_number,
+    content='gao_reports', content_rowid='rowid'
+);
+
+-- Full-text search on earmarks
+CREATE VIRTUAL TABLE IF NOT EXISTS earmarks_fts USING fts5(
+    recipient, project_description, member_name, recipient_address,
+    content='earmarks', content_rowid='id'
 );
 """
 
@@ -1776,6 +2109,35 @@ VOTES_DB = BASE_DIR / "votes.db"
 CONGRESS_DIR = BASE_DIR / "congress_gov"
 ECFR_DIR = BASE_DIR / "ecfr"
 CREC_DIR = BASE_DIR / "congressional_record"
+HEARINGS_DIR = BASE_DIR / "hearings"
+CRS_DIR = BASE_DIR / "crs_reports"
+NOMINATIONS_DIR = BASE_DIR / "nominations"
+TREATIES_DIR = BASE_DIR / "treaties"
+GAO_DIR = BASE_DIR / "gao_reports"
+EARMARKS_DB = BASE_DIR / "earmarks" / "earmarks.db"
+
+
+def import_earmarks(conn: sqlite3.Connection):
+    """Import earmarks from earmarks.db via ATTACH."""
+    if not EARMARKS_DB.exists():
+        log.info("Skipping earmarks (no earmarks/earmarks.db)")
+        return 0
+
+    log.info("Importing earmarks...")
+    conn.execute(f"ATTACH DATABASE '{EARMARKS_DB}' AS edb")
+
+    count = conn.execute("""
+        INSERT OR REPLACE INTO earmarks
+        SELECT id, fiscal_year, chamber, member_name, member_last, member_first,
+               bioguide_id, party, state, district, subcommittee,
+               recipient, project_description, recipient_address, amount_requested
+        FROM edb.earmarks
+    """).rowcount
+    log.info(f"  Earmarks: {count:,}")
+
+    conn.commit()
+    conn.execute("DETACH DATABASE edb")
+    return count
 
 
 def import_fara(conn: sqlite3.Connection):
@@ -1990,6 +2352,7 @@ def import_legislation(conn: sqlite3.Connection):
     bill_count = 0
     action_count = 0
     subject_count = 0
+    cbo_count = 0
 
     for congress_dir in sorted(CONGRESS_DIR.glob("congress_*")):
         congress_num = congress_dir.name.split("_")[1]
@@ -2117,9 +2480,22 @@ def import_legislation(conn: sqlite3.Connection):
                     except sqlite3.Error:
                         pass
 
+            # Import CBO cost estimates
+            cbo_estimates = bill.get("cboCostEstimates", [])
+            for est in cbo_estimates:
+                if est.get("url"):
+                    try:
+                        conn.execute(
+                            "INSERT INTO cbo_cost_estimates (bill_id, pub_date, title, description, url) VALUES (?, ?, ?, ?, ?)",
+                            (bill_id, est.get("pubDate", "")[:10], est.get("title"), est.get("description"), est.get("url")),
+                        )
+                        cbo_count += 1
+                    except sqlite3.Error:
+                        pass
+
         conn.commit()
 
-    log.info(f"  Done: {bill_count:,} bills, {action_count:,} actions, {subject_count:,} subjects")
+    log.info(f"  Done: {bill_count:,} bills, {action_count:,} actions, {subject_count:,} subjects, {cbo_count:,} CBO estimates")
     return bill_count
 
 
@@ -2601,7 +2977,8 @@ def import_stock_trades(conn: sqlite3.Connection):
         total += house_tx_count
         log.info(f"  House PTR transactions (parsed): {house_tx_count:,}")
 
-        # Also import filing indexes for non-PTR filings and PTRs we couldn't parse
+        # Import unparsed PTR filings (scanned PDFs we couldn't extract transactions from)
+        # Skip non-PTR filing types (Annual, Candidate, Amendment, etc.) — these aren't trades
         if house_dir.exists():
             index_count = 0
             for fd_file in sorted(house_dir.glob("*.json")):
@@ -2612,8 +2989,10 @@ def import_stock_trades(conn: sqlite3.Connection):
                     continue
                 for filing in filings:
                     doc_id = str(filing.get("doc_id", ""))
-                    # Skip PTR filings that we already have parsed transactions for
-                    if filing.get("filing_type") == "P" and doc_id in parsed_doc_ids:
+                    # Only import PTR filings we couldn't parse (scanned PDFs)
+                    if filing.get("filing_type") != "P":
+                        continue
+                    if doc_id in parsed_doc_ids:
                         continue
                     member_name = filing.get("member_name", "").strip()
                     if not member_name:
@@ -2638,7 +3017,7 @@ def import_stock_trades(conn: sqlite3.Connection):
                         pass
                 conn.commit()
             total += index_count
-            log.info(f"  House filing indexes (non-PTR + unparsed): {index_count:,}")
+            log.info(f"  House filing indexes (unparsed PTRs): {index_count:,}")
     elif house_dir.exists():
         # Fallback: filing indexes only (no parsed PTR data)
         house_count = 0
@@ -2766,6 +3145,351 @@ def import_committees(conn: sqlite3.Connection):
     ).fetchone()[0]
     log.info(f"  Memberships: {member_count:,} ({unique_members} unique members, {chairs} with titles)")
     return member_count
+
+
+def import_hearings(conn: sqlite3.Connection):
+    """Import committee hearings from GovInfo CHRG MODS JSON."""
+    if not HEARINGS_DIR.exists():
+        log.info("Skipping hearings (no hearings/ directory)")
+        return 0
+
+    log.info("Importing committee hearings...")
+    hearing_count = 0
+    witness_count = 0
+    member_count = 0
+
+    for jf in sorted(HEARINGS_DIR.glob("*.json")):
+        try:
+            with open(jf) as f:
+                h = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        pid = h.get("package_id", jf.stem)
+
+        # Committees as JSON string
+        committees = json.dumps(h.get("committees", [])) if h.get("committees") else None
+
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO hearings
+                (package_id, title, chamber, congress, session, date_issued,
+                 committees, detail_url, html_url, pdf_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                pid,
+                h.get("title"),
+                h.get("chamber"),
+                h.get("congress"),
+                h.get("session"),
+                h.get("date_issued"),
+                committees,
+                h.get("detail_url"),
+                h.get("html_url"),
+                h.get("pdf_url"),
+            ))
+            hearing_count += 1
+        except sqlite3.Error:
+            continue
+
+        # Witnesses
+        for w in h.get("witnesses", []):
+            if isinstance(w, dict):
+                name = w.get("name", "")
+                title = w.get("title", "")
+                org = w.get("organization", "")
+                loc = w.get("location", "")
+            else:
+                name = str(w)
+                title = org = loc = ""
+            if name:
+                try:
+                    conn.execute(
+                        "INSERT INTO hearing_witnesses (package_id, name, title, organization, location) VALUES (?, ?, ?, ?, ?)",
+                        (pid, name, title, org, loc),
+                    )
+                    witness_count += 1
+                except sqlite3.Error:
+                    pass
+
+        # Members
+        for m in h.get("members", []):
+            mname = m.get("name", str(m)) if isinstance(m, dict) else str(m)
+            mrole = m.get("role", "") if isinstance(m, dict) else ""
+            if mname:
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO hearing_members (package_id, name, role) VALUES (?, ?, ?)",
+                        (pid, mname, mrole),
+                    )
+                    member_count += 1
+                except sqlite3.Error:
+                    pass
+
+        if hearing_count % 5000 == 0 and hearing_count > 0:
+            conn.commit()
+            log.info(f"  Progress: {hearing_count:,} hearings")
+
+    conn.commit()
+    log.info(f"  Done: {hearing_count:,} hearings, {witness_count:,} witnesses, {member_count:,} members")
+    return hearing_count
+
+
+def import_crs_reports(conn: sqlite3.Connection):
+    """Import CRS reports from Congress.gov JSON."""
+    if not CRS_DIR.exists():
+        log.info("Skipping CRS reports (no crs_reports/ directory)")
+        return 0
+
+    log.info("Importing CRS reports...")
+    report_count = 0
+    bill_ref_count = 0
+
+    for jf in sorted(CRS_DIR.glob("*.json")):
+        try:
+            with open(jf) as f:
+                r = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        rid = r.get("id", jf.stem)
+        authors = ", ".join(r.get("authors", [])) if r.get("authors") else None
+        topics = ", ".join(r.get("topics", [])) if r.get("topics") else None
+
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO crs_reports
+                (id, title, publish_date, update_date, status, content_type,
+                 authors, topics, summary, pdf_url, html_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                rid,
+                r.get("title"),
+                r.get("publishDate"),
+                r.get("updateDate"),
+                r.get("status"),
+                r.get("contentType"),
+                authors,
+                topics,
+                r.get("summary"),
+                r.get("pdf_url"),
+                r.get("html_url"),
+            ))
+            report_count += 1
+        except sqlite3.Error:
+            continue
+
+        # Related bills
+        for bill in r.get("relatedBills", []):
+            congress = bill.get("congress")
+            btype = (bill.get("type") or "").lower()
+            bnumber = bill.get("number")
+            bill_id = f"{congress}-{btype}-{bnumber}" if congress and btype and bnumber else None
+            try:
+                conn.execute(
+                    "INSERT INTO crs_report_bills (report_id, bill_title, congress, bill_type, bill_number, bill_id) VALUES (?, ?, ?, ?, ?, ?)",
+                    (rid, bill.get("title"), congress, btype, bnumber, bill_id),
+                )
+                bill_ref_count += 1
+            except sqlite3.Error:
+                pass
+
+    conn.commit()
+    log.info(f"  Done: {report_count:,} CRS reports, {bill_ref_count:,} bill references")
+    return report_count
+
+
+def import_nominations(conn: sqlite3.Connection):
+    """Import executive nominations from Congress.gov JSON."""
+    if not NOMINATIONS_DIR.exists():
+        log.info("Skipping nominations (no nominations/ directory)")
+        return 0
+
+    log.info("Importing executive nominations...")
+    nom_count = 0
+    action_count = 0
+
+    for jf in sorted(NOMINATIONS_DIR.glob("*.json")):
+        try:
+            with open(jf) as f:
+                n = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        congress = n.get("congress")
+        number = n.get("number")
+        part = n.get("partNumber", "")
+        nom_id = f"{congress}-{number}"
+        if part:
+            nom_id = f"{congress}-{number}-{part}"
+
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO nominations
+                (id, congress, number, part_number, citation, description,
+                 organization, received_date, authority_date,
+                 is_civilian, is_military, status, vote_yea, vote_nay)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                nom_id,
+                congress,
+                number,
+                part,
+                n.get("citation"),
+                n.get("description"),
+                n.get("organization"),
+                n.get("receivedDate"),
+                n.get("authorityDate"),
+                1 if n.get("isCivilian") else 0,
+                1 if n.get("isMilitary") else 0,
+                n.get("status"),
+                n.get("vote_yea"),
+                n.get("vote_nay"),
+            ))
+            nom_count += 1
+        except sqlite3.Error:
+            continue
+
+        # Actions
+        for act in n.get("actions", []):
+            try:
+                conn.execute(
+                    "INSERT INTO nomination_actions (nomination_id, action_date, action_text, action_type) VALUES (?, ?, ?, ?)",
+                    (nom_id, act.get("actionDate"), act.get("text"), act.get("type")),
+                )
+                action_count += 1
+            except sqlite3.Error:
+                pass
+
+        if nom_count % 5000 == 0 and nom_count > 0:
+            conn.commit()
+            log.info(f"  Progress: {nom_count:,} nominations")
+
+    conn.commit()
+    log.info(f"  Done: {nom_count:,} nominations, {action_count:,} actions")
+    return nom_count
+
+
+def import_treaties(conn: sqlite3.Connection):
+    """Import treaties from Congress.gov JSON."""
+    if not TREATIES_DIR.exists():
+        log.info("Skipping treaties (no treaties/ directory)")
+        return 0
+
+    log.info("Importing treaties...")
+    treaty_count = 0
+    action_count = 0
+
+    for jf in sorted(TREATIES_DIR.glob("*.json")):
+        try:
+            with open(jf) as f:
+                t = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        congress = t.get("congress")
+        number = t.get("number")
+        treaty_id = jf.stem  # Already formatted as congress-number[-suffix]
+
+        countries = ", ".join(t.get("countries", [])) if t.get("countries") else None
+        index_terms = ", ".join(t.get("indexTerms", [])) if t.get("indexTerms") else None
+
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO treaties
+                (id, congress, number, title, topic, transmitted_date,
+                 in_force_date, countries, index_terms, resolution_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                treaty_id,
+                congress,
+                number,
+                t.get("title"),
+                t.get("topic"),
+                t.get("transmittedDate"),
+                t.get("inForceDate"),
+                countries,
+                index_terms,
+                t.get("resolutionText"),
+            ))
+            treaty_count += 1
+        except sqlite3.Error:
+            continue
+
+        # Actions
+        for act in t.get("actions", []):
+            try:
+                conn.execute(
+                    "INSERT INTO treaty_actions (treaty_id, action_date, action_text, action_type) VALUES (?, ?, ?, ?)",
+                    (treaty_id, act.get("actionDate"), act.get("text"), act.get("type")),
+                )
+                action_count += 1
+            except sqlite3.Error:
+                pass
+
+    conn.commit()
+    log.info(f"  Done: {treaty_count:,} treaties, {action_count:,} actions")
+    return treaty_count
+
+
+def import_gao_reports(conn: sqlite3.Connection):
+    """Import GAO reports from GovInfo MODS JSON."""
+    if not GAO_DIR.exists():
+        log.info("Skipping GAO reports (no gao_reports/ directory)")
+        return 0
+
+    log.info("Importing GAO reports...")
+    count = 0
+
+    for jf in sorted(GAO_DIR.glob("*.json")):
+        try:
+            with open(jf) as f:
+                g = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        pid = g.get("package_id", jf.stem)
+        subjects = ", ".join(g.get("subjects", [])) if g.get("subjects") else None
+        public_laws = ", ".join(g.get("public_laws", [])) if g.get("public_laws") else None
+        usc_refs = ", ".join(g.get("usc_references", [])) if g.get("usc_references") else None
+        statute_refs = ", ".join(g.get("statute_references", [])) if g.get("statute_references") else None
+
+        try:
+            conn.execute("""
+                INSERT OR REPLACE INTO gao_reports
+                (package_id, title, date_issued, report_number, document_type,
+                 doc_class, abstract, subjects, public_laws, usc_references,
+                 statute_references, citation, pdf_url, html_url, detail_url, sudocs)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                pid,
+                g.get("title"),
+                g.get("date_issued"),
+                g.get("report_number"),
+                g.get("document_type"),
+                g.get("doc_class"),
+                g.get("abstract"),
+                subjects,
+                public_laws,
+                usc_refs,
+                statute_refs,
+                g.get("citation"),
+                g.get("pdf_url"),
+                g.get("html_url"),
+                g.get("detail_url"),
+                g.get("sudocs"),
+            ))
+            count += 1
+        except sqlite3.Error:
+            continue
+
+        if count % 5000 == 0 and count > 0:
+            conn.commit()
+            log.info(f"  Progress: {count:,} GAO reports")
+
+    conn.commit()
+    log.info(f"  Done: {count:,} GAO reports")
+    return count
 
 
 def import_cosponsors(conn: sqlite3.Connection):
@@ -2971,6 +3695,59 @@ def build_crec_junction_tables(conn: sqlite3.Connection):
              f"speaker entries ({unique_bioguides} unique members)")
 
     return speaker_count, bill_count
+
+
+def link_hearing_members(conn: sqlite3.Connection):
+    """Match hearing member names to congress_members bioguide IDs."""
+    log.info("Linking hearing members to congress_members...")
+
+    # Build name lookup from congress_members
+    # Match on full_name, or "FirstName LastName" from first_name+last_name
+    matched = conn.execute("""
+        UPDATE hearing_members SET bioguide_id = (
+            SELECT cm.bioguide_id FROM congress_members cm
+            WHERE cm.full_name = hearing_members.name
+               OR (cm.first_name || ' ' || cm.last_name) = hearing_members.name
+            LIMIT 1
+        )
+        WHERE bioguide_id IS NULL
+    """).rowcount
+
+    # Also try matching with middle initials stripped
+    # e.g., "Benjamin L. Cardin" -> match "Benjamin Cardin"
+    conn.execute("""
+        UPDATE hearing_members SET bioguide_id = (
+            SELECT cm.bioguide_id FROM congress_members cm
+            WHERE REPLACE(REPLACE(cm.full_name, ' ' || SUBSTR(cm.last_name, 1, 0), ''), '  ', ' ') = hearing_members.name
+               OR cm.last_name = SUBSTR(hearing_members.name, INSTR(hearing_members.name, ' ') + 1)
+                  AND cm.first_name = SUBSTR(hearing_members.name, 1, INSTR(hearing_members.name, ' ') - 1)
+            LIMIT 1
+        )
+        WHERE bioguide_id IS NULL
+    """)
+
+    # Try nickname matching — strip middle initial from hearing name
+    conn.execute("""
+        UPDATE hearing_members SET bioguide_id = (
+            SELECT cm.bioguide_id FROM congress_members cm
+            WHERE cm.full_name = TRIM(
+                SUBSTR(hearing_members.name, 1, INSTR(hearing_members.name, ' ') - 1) || ' ' ||
+                CASE
+                    WHEN INSTR(SUBSTR(hearing_members.name, INSTR(hearing_members.name, ' ') + 1), ' ') > 0
+                    THEN SUBSTR(SUBSTR(hearing_members.name, INSTR(hearing_members.name, ' ') + 1),
+                         INSTR(SUBSTR(hearing_members.name, INSTR(hearing_members.name, ' ') + 1), ' ') + 1)
+                    ELSE SUBSTR(hearing_members.name, INSTR(hearing_members.name, ' ') + 1)
+                END
+            )
+            LIMIT 1
+        )
+        WHERE bioguide_id IS NULL
+    """)
+
+    conn.commit()
+    total = conn.execute("SELECT COUNT(*) FROM hearing_members").fetchone()[0]
+    linked = conn.execute("SELECT COUNT(*) FROM hearing_members WHERE bioguide_id IS NOT NULL").fetchone()[0]
+    log.info(f"  Linked {linked:,} / {total:,} hearing members ({100*linked/total:.1f}%) to bioguide IDs")
 
 
 def build_crossref(conn: sqlite3.Connection):
@@ -3189,6 +3966,195 @@ def build_docket_summary(conn: sqlite3.Connection):
     log.info(f"  docket_summary: {conn.execute('SELECT COUNT(*) FROM docket_summary').fetchone()[0]:,} rows")
 
 
+def import_reference_tables(conn: sqlite3.Connection):
+    """Import committee-sector and lobbying-issue reference CSVs."""
+    import csv
+    ref_dir = BASE_DIR / "reference"
+
+    # Committee sectors
+    csv_path = ref_dir / "committee_sectors.csv"
+    if csv_path.exists():
+        conn.execute("DELETE FROM committee_sectors")
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = [(r['committee_id'], r['committee_name'], r['chamber'],
+                     r['regulated_sectors'], r['example_tickers'],
+                     r['gics_sectors'], r['sic_ranges'], r['notes']) for r in reader]
+        conn.executemany(
+            "INSERT OR REPLACE INTO committee_sectors VALUES (?,?,?,?,?,?,?,?)", rows)
+        conn.commit()
+        log.info(f"  committee_sectors: {len(rows)} rows")
+    else:
+        log.warning(f"  {csv_path} not found, skipping")
+
+    # Lobbying issue-to-agency mapping
+    csv_path = ref_dir / "lobbying_issue_agencies.csv"
+    if csv_path.exists():
+        conn.execute("DELETE FROM lobbying_issue_agencies")
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = [(r['issue_code'], r['issue_description'], r['primary_agencies'],
+                     r['secondary_agencies'], r['regs_gov_agency_prefixes'],
+                     r['federal_register_agency_slugs'], r['related_committee_ids'],
+                     r['notes']) for r in reader]
+        conn.executemany(
+            "INSERT OR REPLACE INTO lobbying_issue_agencies VALUES (?,?,?,?,?,?,?,?)", rows)
+        conn.commit()
+        log.info(f"  lobbying_issue_agencies: {len(rows)} rows")
+    else:
+        log.warning(f"  {csv_path} not found, skipping")
+
+    # Committee jurisdiction (tiered SIC mapping)
+    csv_path = ref_dir / "committee_jurisdiction.csv"
+    if csv_path.exists():
+        conn.execute("DELETE FROM committee_jurisdiction")
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            rows = [(r['committee_id'], r['committee_name'], r['chamber'],
+                     r['jurisdiction_desc'], r['sic_codes'],
+                     r['jurisdiction_tier'], r['notes']) for r in reader]
+        conn.executemany(
+            "INSERT INTO committee_jurisdiction (committee_id, committee_name, chamber, jurisdiction_desc, sic_codes, jurisdiction_tier, notes) VALUES (?,?,?,?,?,?,?)",
+            rows)
+        conn.commit()
+        log.info(f"  committee_jurisdiction: {len(rows)} rows")
+
+        # Expand SIC code strings into committee_sic_ranges for efficient matching
+        conn.execute("DELETE FROM committee_sic_ranges")
+        range_count = 0
+        for committee_id, _, _, _, sic_codes, tier, _ in rows:
+            if not sic_codes:
+                continue
+            for part in sic_codes.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                if "-" in part:
+                    start, end = part.split("-", 1)
+                    try:
+                        conn.execute(
+                            "INSERT INTO committee_sic_ranges VALUES (?,?,?,?)",
+                            (committee_id, int(start), int(end), tier))
+                        range_count += 1
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        sic_int = int(part)
+                        conn.execute(
+                            "INSERT INTO committee_sic_ranges VALUES (?,?,?,?)",
+                            (committee_id, sic_int, sic_int, tier))
+                        range_count += 1
+                    except ValueError:
+                        pass
+        conn.commit()
+        log.info(f"  committee_sic_ranges: {range_count} ranges expanded")
+    else:
+        log.warning(f"  {csv_path} not found, skipping")
+
+    # Ticker → SIC mapping from SEC EDGAR
+    sic_path = BASE_DIR / "sec_tickers" / "ticker_sic.json"
+    if sic_path.exists():
+        conn.execute("DELETE FROM ticker_sic")
+        sic_data = json.loads(sic_path.read_text())
+        sic_rows = [(r['ticker'], r.get('cik', ''), r.get('company_name', ''),
+                     r.get('sic_code', ''), r.get('sic_description', ''),
+                     r.get('exchange', '')) for r in sic_data.values()]
+        conn.executemany("INSERT OR REPLACE INTO ticker_sic VALUES (?,?,?,?,?,?)", sic_rows)
+        conn.commit()
+        log.info(f"  ticker_sic: {len(sic_rows)} tickers with SIC codes")
+    else:
+        log.warning(f"  {sic_path} not found, skipping (run 20_sec_ticker_sic.py first)")
+
+
+def build_lobbying_bill_refs(conn: sqlite3.Connection):
+    """Extract bill references from lobbying activity specific_issues text."""
+    log.info("Extracting bill references from lobbying activities...")
+
+    # Pattern matches H.R. 1234, HR 1234, HR1234, S. 1234, S 1234, S1234,
+    # H.J.Res. 56, S.J.Res. 56, H.Con.Res. 14, S.Con.Res. 14, H.Res. 99, S.Res. 99
+    # and variants without dots/spaces
+    bill_pattern = re.compile(
+        r'\b('
+        r'H\.?\s*J\.?\s*Res\.?\s*(\d+)'      # H.J.Res. / HJRes
+        r'|S\.?\s*J\.?\s*Res\.?\s*(\d+)'      # S.J.Res. / SJRes
+        r'|H\.?\s*Con\.?\s*Res\.?\s*(\d+)'    # H.Con.Res. / HConRes
+        r'|S\.?\s*Con\.?\s*Res\.?\s*(\d+)'    # S.Con.Res. / SConRes
+        r'|H\.?\s*Res\.?\s*(\d+)'             # H.Res. / HRes
+        r'|S\.?\s*Res\.?\s*(\d+)'             # S.Res. / SRes
+        r'|H\.?\s*R\.?\s*(\d+)'               # H.R. / HR
+        r'|S\.?\s*(\d+)'                       # S. / S (must be last)
+        r')',
+        re.IGNORECASE
+    )
+
+    # Map group index to bill_type
+    group_type_map = {
+        2: 'hjres', 3: 'sjres', 4: 'hconres', 5: 'sconres',
+        6: 'hres', 7: 'sres', 8: 'hr', 9: 's'
+    }
+
+    conn.execute("DELETE FROM lobbying_bills")
+    conn.commit()
+
+    cursor = conn.execute("""
+        SELECT filing_uuid, filing_year, client_name, issue_code, specific_issues
+        FROM lobbying_activities
+        WHERE specific_issues IS NOT NULL
+    """)
+
+    batch = []
+    total = 0
+    rows_scanned = 0
+
+    for row in cursor:
+        filing_uuid, filing_year, client_name, issue_code, text = row
+        rows_scanned += 1
+
+        # Determine congress from filing year: 2023-2024 = 118th
+        congress = (filing_year - 1789) // 2 + 1 if filing_year else None
+
+        seen = set()  # deduplicate within this row
+        for match in bill_pattern.finditer(text):
+            bill_type = None
+            bill_number = None
+            for grp_idx, btype in group_type_map.items():
+                val = match.group(grp_idx)
+                if val:
+                    bill_type = btype
+                    bill_number = int(val)
+                    break
+
+            if bill_type and bill_number:
+                bill_id = f"{congress}-{bill_type}-{bill_number}" if congress else None
+                dedup_key = (bill_type, bill_number)
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+
+                batch.append((filing_uuid, congress, bill_type, bill_number,
+                              bill_id, client_name, issue_code))
+
+        if len(batch) >= 10000:
+            conn.executemany(
+                "INSERT INTO lobbying_bills (filing_uuid, bill_congress, bill_type, bill_number, bill_id, client_name, issue_code) VALUES (?,?,?,?,?,?,?)",
+                batch
+            )
+            conn.commit()
+            total += len(batch)
+            batch = []
+
+    if batch:
+        conn.executemany(
+            "INSERT INTO lobbying_bills (filing_uuid, bill_congress, bill_type, bill_number, bill_id, client_name, issue_code) VALUES (?,?,?,?,?,?,?)",
+            batch
+        )
+        conn.commit()
+        total += len(batch)
+
+    log.info(f"  Scanned {rows_scanned:,} activity rows, extracted {total:,} bill references")
+
+
 def build_summary_tables(conn: sqlite3.Connection):
     """Build pre-computed summary tables for explore page browse tabs."""
     log.info("Building pre-computed summary tables...")
@@ -3257,6 +4223,236 @@ def build_summary_tables(conn: sqlite3.Connection):
     conn.commit()
     log.info(f"  spending_agency_summary: {conn.execute('SELECT COUNT(*) FROM spending_agency_summary').fetchone()[0]:,} rows")
 
+    # Witness-lobbyist overlap (hearing witnesses who also lobby)
+    conn.execute("DROP TABLE IF EXISTS witness_lobby_overlap")
+    conn.execute("""
+        CREATE TABLE witness_lobby_overlap AS
+        SELECT
+            hw.organization,
+            COUNT(DISTINCT hw.package_id) AS hearings_testified,
+            COUNT(DISTINCT la.filing_uuid) AS lobby_filings,
+            SUM(la.income_amount) AS total_lobby_income,
+            MIN(h.date_issued) AS first_hearing,
+            MAX(h.date_issued) AS last_hearing,
+            GROUP_CONCAT(DISTINCT la.issue_code) AS lobby_issues
+        FROM hearing_witnesses hw
+        JOIN hearings h ON hw.package_id = h.package_id
+        JOIN lobbying_activities la ON UPPER(TRIM(hw.organization)) = UPPER(TRIM(la.client_name))
+        WHERE hw.organization IS NOT NULL AND hw.organization != ''
+        GROUP BY UPPER(TRIM(hw.organization))
+        ORDER BY hearings_testified DESC
+    """)
+    conn.execute("CREATE INDEX idx_wlo_org ON witness_lobby_overlap(organization)")
+    conn.execute("CREATE INDEX idx_wlo_hearings ON witness_lobby_overlap(hearings_testified)")
+    conn.commit()
+    log.info(f"  witness_lobby_overlap: {conn.execute('SELECT COUNT(*) FROM witness_lobby_overlap').fetchone()[0]:,} rows")
+
+    # Commenter-lobbyist overlap (orgs that comment on regs AND lobby)
+    conn.execute("DROP TABLE IF EXISTS commenter_lobby_overlap")
+    conn.execute("""
+        CREATE TABLE commenter_lobby_overlap AS
+        SELECT
+            cd.organization,
+            COUNT(DISTINCT cd.id) AS comments_filed,
+            COUNT(DISTINCT cd.gov_agency) AS agencies_commented,
+            COUNT(DISTINCT la.filing_uuid) AS lobby_filings,
+            SUM(la.income_amount) AS total_lobby_income,
+            GROUP_CONCAT(DISTINCT la.issue_code) AS lobby_issues
+        FROM comment_details cd
+        JOIN lobbying_activities la ON UPPER(TRIM(cd.organization)) = UPPER(TRIM(la.client_name))
+        WHERE cd.organization IS NOT NULL AND cd.organization != ''
+        GROUP BY UPPER(TRIM(cd.organization))
+        ORDER BY comments_filed DESC
+    """)
+    conn.execute("CREATE INDEX idx_clo_org ON commenter_lobby_overlap(organization)")
+    conn.execute("CREATE INDEX idx_clo_comments ON commenter_lobby_overlap(comments_filed)")
+    conn.commit()
+    log.info(f"  commenter_lobby_overlap: {conn.execute('SELECT COUNT(*) FROM commenter_lobby_overlap').fetchone()[0]:,} rows")
+
+    # Lobbying-to-legislation summary (bills most referenced in lobbying filings)
+    conn.execute("DROP TABLE IF EXISTS lobbying_bill_summary")
+    conn.execute("""
+        CREATE TABLE lobbying_bill_summary AS
+        SELECT lb.bill_id, l.title AS bill_title, l.policy_area,
+            COUNT(DISTINCT lb.filing_uuid) AS lobby_filings,
+            COUNT(DISTINCT lb.client_name) AS unique_clients,
+            GROUP_CONCAT(DISTINCT lb.issue_code) AS issue_codes,
+            GROUP_CONCAT(DISTINCT lb.client_name) AS clients
+        FROM lobbying_bills lb
+        LEFT JOIN legislation l ON lb.bill_id = l.bill_id
+        WHERE lb.bill_id IS NOT NULL
+        GROUP BY lb.bill_id
+        ORDER BY lobby_filings DESC
+    """)
+    conn.execute("CREATE UNIQUE INDEX idx_lbs_bill ON lobbying_bill_summary(bill_id)")
+    conn.commit()
+    log.info(f"  lobbying_bill_summary: {conn.execute('SELECT COUNT(*) FROM lobbying_bill_summary').fetchone()[0]:,} rows")
+
+    # Speeches near trades (pre-computed because live query takes 8s+)
+    conn.execute("DROP TABLE IF EXISTS speeches_near_trades")
+    conn.execute("""
+        CREATE TABLE speeches_near_trades AS
+        SELECT cm.full_name, cm.party, cm.state, cm.bioguide_id,
+            st.transaction_date AS trade_date, st.ticker, st.asset_description,
+            st.transaction_type, st.amount_range,
+            cr.date AS speech_date, cr.title AS speech_title,
+            ABS(CAST(julianday(st.transaction_date) - julianday(cr.date) AS INTEGER)) AS days_apart
+        FROM stock_trades st
+        JOIN crec_speakers cs ON st.bioguide_id = cs.bioguide_id
+        JOIN congressional_record cr ON cs.granule_id = cr.granule_id
+        JOIN congress_members cm ON st.bioguide_id = cm.bioguide_id
+        WHERE st.ticker IS NOT NULL AND st.ticker != ''
+            AND st.transaction_date IS NOT NULL AND cr.date IS NOT NULL
+            AND ABS(julianday(st.transaction_date) - julianday(cr.date)) <= 7
+        ORDER BY cm.full_name, st.transaction_date DESC
+    """)
+    conn.execute("CREATE INDEX idx_snt_member ON speeches_near_trades(bioguide_id)")
+    conn.execute("CREATE INDEX idx_snt_ticker ON speeches_near_trades(ticker)")
+    conn.commit()
+    log.info(f"  speeches_near_trades: {conn.execute('SELECT COUNT(*) FROM speeches_near_trades').fetchone()[0]:,} rows")
+
+    # Committee donor summary (pre-computed because live query takes 95s)
+    conn.execute("DROP TABLE IF EXISTS committee_donor_summary")
+    conn.execute("""
+        CREATE TABLE committee_donor_summary AS
+        SELECT c.name AS committee_name, cm.full_name AS member_name,
+            cm.party, cm.state, cm.bioguide_id,
+            fc.cmte_nm AS donor_committee, fc.cmte_id AS donor_cmte_id,
+            SUM(fcon.transaction_amt) AS total_donated,
+            COUNT(*) AS contribution_count
+        FROM committee_memberships cmem
+        JOIN committees c ON cmem.committee_id = c.committee_id
+        JOIN congress_members cm ON cmem.bioguide_id = cm.bioguide_id
+        JOIN fec_candidate_crosswalk xw ON xw.bioguide_id = cm.bioguide_id
+        JOIN fec_contributions fcon ON fcon.cand_id = xw.fec_candidate_id
+        JOIN fec_committees fc ON fc.cmte_id = fcon.cmte_id
+        WHERE cm.is_current = 1
+        GROUP BY cmem.committee_id, cmem.bioguide_id, fcon.cmte_id
+        HAVING total_donated >= 10000
+        ORDER BY total_donated DESC
+    """)
+    conn.execute("CREATE INDEX idx_cds_member ON committee_donor_summary(bioguide_id)")
+    conn.execute("CREATE INDEX idx_cds_committee ON committee_donor_summary(committee_name)")
+    conn.commit()
+    log.info(f"  committee_donor_summary: {conn.execute('SELECT COUNT(*) FROM committee_donor_summary').fetchone()[0]:,} rows")
+
+    # Committee-sector trade conflicts (members trading stocks in sectors their committee regulates)
+    # Uses SIC-range matching via ticker_sic + committee_sic_ranges when available,
+    # falls back to example_tickers matching from committee_sectors
+    conn.execute("DROP TABLE IF EXISTS committee_trade_conflicts")
+    try:
+        has_sic = conn.execute("SELECT COUNT(*) FROM ticker_sic").fetchone()[0] > 0
+        has_ranges = conn.execute("SELECT COUNT(*) FROM committee_sic_ranges").fetchone()[0] > 0
+    except Exception:
+        has_sic = False
+        has_ranges = False
+
+    try:
+        if has_sic and has_ranges:
+            # SIC-based matching (broad coverage)
+            log.info("  Building committee_trade_conflicts via SIC-range matching...")
+            conn.execute("""
+                CREATE TABLE committee_trade_conflicts AS
+                SELECT cm.full_name, cm.party, cm.state, cm.bioguide_id,
+                    cj.committee_name, cj.jurisdiction_desc, cj.jurisdiction_tier,
+                    ts.sic_code, ts.sic_description,
+                    st.transaction_date, st.ticker, st.asset_description,
+                    st.transaction_type, st.amount_range
+                FROM committee_memberships cmem
+                JOIN congress_members cm ON cmem.bioguide_id = cm.bioguide_id
+                JOIN committee_sic_ranges csr ON cmem.committee_id = csr.committee_id
+                JOIN committee_jurisdiction cj ON cmem.committee_id = cj.committee_id
+                    AND cj.jurisdiction_tier = csr.jurisdiction_tier
+                JOIN stock_trades st ON cmem.bioguide_id = st.bioguide_id
+                JOIN ticker_sic ts ON UPPER(st.ticker) = ts.ticker
+                WHERE CAST(ts.sic_code AS INTEGER) BETWEEN csr.sic_start AND csr.sic_end
+                ORDER BY cm.full_name, st.transaction_date DESC
+            """)
+        else:
+            # Fallback: example_tickers matching (limited coverage)
+            log.info("  Building committee_trade_conflicts via ticker matching (no SIC data)...")
+            conn.execute("""
+                CREATE TABLE committee_trade_conflicts AS
+                SELECT cm.full_name, cm.party, cm.state, cm.bioguide_id,
+                    cs.committee_name, cs.regulated_sectors AS jurisdiction_desc,
+                    'primary' AS jurisdiction_tier,
+                    '' AS sic_code, '' AS sic_description,
+                    st.transaction_date, st.ticker, st.asset_description,
+                    st.transaction_type, st.amount_range
+                FROM committee_memberships cmem
+                JOIN congress_members cm ON cmem.bioguide_id = cm.bioguide_id
+                JOIN committee_sectors cs ON cmem.committee_id = cs.committee_id
+                JOIN stock_trades st ON cmem.bioguide_id = st.bioguide_id
+                WHERE st.ticker IS NOT NULL AND st.ticker != ''
+                    AND (',' || cs.example_tickers || ',') LIKE ('%,' || st.ticker || ',%')
+                ORDER BY cm.full_name, st.transaction_date DESC
+            """)
+        conn.execute("CREATE INDEX idx_ctc_member ON committee_trade_conflicts(bioguide_id)")
+        conn.execute("CREATE INDEX idx_ctc_ticker ON committee_trade_conflicts(ticker)")
+        conn.execute("CREATE INDEX idx_ctc_committee ON committee_trade_conflicts(committee_name)")
+        conn.commit()
+        log.info(f"  committee_trade_conflicts: {conn.execute('SELECT COUNT(*) FROM committee_trade_conflicts').fetchone()[0]:,} rows")
+    except Exception as e:
+        log.warning(f"  committee_trade_conflicts: skipped ({e})")
+
+    # Revolving door: former members of Congress who became lobbyists
+    conn.execute("DROP TABLE IF EXISTS revolving_door")
+    try:
+        conn.execute("""
+            CREATE TABLE revolving_door AS
+            WITH position_filter AS (
+                SELECT DISTINCT lobbyist_name, filing_uuid, covered_position
+                FROM lobbying_lobbyists
+                WHERE covered_position IS NOT NULL AND covered_position <> ''
+                AND (
+                    UPPER(covered_position) LIKE '%MEMBER OF CONGRESS%'
+                    OR UPPER(covered_position) LIKE 'U.S. REPRESENTATIVE%'
+                    OR UPPER(covered_position) LIKE 'U.S. SENATOR%'
+                    OR UPPER(covered_position) LIKE 'US SENATOR%'
+                    OR UPPER(covered_position) LIKE 'US REPRESENTATIVE%'
+                    OR UPPER(covered_position) LIKE 'U.S. CONGRESSMAN%'
+                    OR UPPER(covered_position) LIKE 'UNITED STATES REP%'
+                    OR UPPER(covered_position) LIKE 'UNITED STATES SEN%'
+                    OR UPPER(covered_position) LIKE 'FORMER MEMBER%'
+                    OR UPPER(covered_position) LIKE 'MEMBER, U.S.%'
+                    OR UPPER(covered_position) LIKE 'MEMBER U.S.%'
+                    OR UPPER(covered_position) LIKE 'MEMBER OF THE U.S.%'
+                )
+            ),
+            best_member AS (
+                SELECT bioguide_id, full_name, party, state, chamber,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY UPPER(full_name)
+                        ORDER BY bioguide_id DESC
+                    ) AS rn
+                FROM congress_members
+            )
+            SELECT
+                bm.bioguide_id,
+                bm.full_name,
+                bm.party,
+                bm.state,
+                bm.chamber AS congress_chamber,
+                COUNT(DISTINCT la.filing_uuid) AS lobbying_filing_count,
+                COUNT(DISTINCT la.client_name) AS client_count,
+                COUNT(DISTINCT la.registrant_name) AS firm_count,
+                MIN(la.filing_year) AS first_lobbying_year,
+                MAX(la.filing_year) AS last_lobbying_year,
+                SUM(COALESCE(la.income_amount, 0)) AS total_reported_income,
+                GROUP_CONCAT(DISTINCT la.registrant_name) AS lobbying_firms,
+                MIN(pf.covered_position) AS covered_position_sample
+            FROM position_filter pf
+            JOIN best_member bm ON UPPER(bm.full_name) = pf.lobbyist_name AND bm.rn = 1
+            JOIN lobbying_activities la ON pf.filing_uuid = la.filing_uuid
+            GROUP BY bm.bioguide_id
+            ORDER BY lobbying_filing_count DESC
+        """)
+        conn.execute("CREATE INDEX idx_rd_bioguide ON revolving_door(bioguide_id)")
+        conn.commit()
+        log.info(f"  revolving_door: {conn.execute('SELECT COUNT(*) FROM revolving_door').fetchone()[0]:,} rows")
+    except Exception as e:
+        log.warning(f"  revolving_door: skipped ({e})")
+
     log.info("  Summary tables built")
 
 
@@ -3269,9 +4465,11 @@ def build_fts(conn: sqlite3.Connection):
                    "cfr_fts", "crec_fts", "lobbying_fts",
                    "spending_awards_fts", "legislation_fts",
                    "fara_registrants_fts", "fara_foreign_principals_fts",
-                   "fec_employer_fts"]:
+                   "fec_employer_fts",
+                   "hearings_fts", "crs_reports_fts", "nominations_fts",
+                   "gao_reports_fts", "earmarks_fts"]:
         try:
-            source_map = {'cfr_fts': 'cfr_sections', 'crec_fts': 'congressional_record', 'lobbying_fts': 'lobbying_activities', 'spending_awards_fts': 'spending_awards', 'legislation_fts': 'legislation', 'fara_registrants_fts': 'fara_registrants', 'fara_foreign_principals_fts': 'fara_foreign_principals', 'fec_employer_fts': 'fec_employer_totals'}
+            source_map = {'cfr_fts': 'cfr_sections', 'crec_fts': 'congressional_record', 'lobbying_fts': 'lobbying_activities', 'spending_awards_fts': 'spending_awards', 'legislation_fts': 'legislation', 'fara_registrants_fts': 'fara_registrants', 'fara_foreign_principals_fts': 'fara_foreign_principals', 'fec_employer_fts': 'fec_employer_totals', 'hearings_fts': 'hearings', 'crs_reports_fts': 'crs_reports', 'nominations_fts': 'nominations', 'gao_reports_fts': 'gao_reports', 'earmarks_fts': 'earmarks'}
             source_table = source_map.get(table, table.replace('_fts', ''))
             count = conn.execute(f"SELECT COUNT(*) FROM {source_table}").fetchone()[0]
             if count > 0:
@@ -3320,9 +4518,11 @@ def print_stats(conn: sqlite3.Connection):
         ("committees", "Committees"),
         ("committee_memberships", "Committee memberships"),
         ("legislation_cosponsors", "Legislation cosponsors"),
+        ("cbo_cost_estimates", "CBO cost estimates"),
         ("stock_trades", "Stock trades"),
         ("lobbying_filings", "Lobbying filings"),
         ("lobbying_activities", "Lobbying activities"),
+        ("lobbying_bills", "Lobbying bill references"),
         ("lobbying_lobbyists", "Lobbying lobbyists"),
         ("lobbying_contributions", "Lobbying contributions"),
         ("roll_call_votes", "Roll call votes"),
@@ -3335,10 +4535,33 @@ def print_stats(conn: sqlite3.Connection):
         ("fec_employer_to_candidate", "FEC employer→candidate"),
         ("fec_employer_to_party", "FEC employer→party"),
         ("fec_top_occupations", "FEC top occupations"),
+        ("hearings", "Committee hearings"),
+        ("hearing_witnesses", "Hearing witnesses"),
+        ("hearing_members", "Hearing members"),
+        ("crs_reports", "CRS reports"),
+        ("crs_report_bills", "CRS report bill references"),
+        ("nominations", "Executive nominations"),
+        ("nomination_actions", "Nomination actions"),
+        ("treaties", "Treaties"),
+        ("treaty_actions", "Treaty actions"),
+        ("gao_reports", "GAO reports"),
+        ("earmarks", "Earmarks/CDS"),
         ("fara_registrants", "FARA registrants"),
         ("fara_foreign_principals", "FARA foreign principals"),
         ("fara_short_forms", "FARA short forms (agents)"),
         ("fara_registrant_docs", "FARA registrant documents"),
+        ("witness_lobby_overlap", "Witness-lobbyist overlap"),
+        ("commenter_lobby_overlap", "Commenter-lobbyist overlap"),
+        ("lobbying_bill_summary", "Lobbying bill summary"),
+        ("speeches_near_trades", "Speeches near trades"),
+        ("committee_donor_summary", "Committee donor summary"),
+        ("committee_trade_conflicts", "Committee trade conflicts"),
+        ("revolving_door", "Revolving door (members→lobbyists)"),
+        ("committee_sectors", "Committee sector reference"),
+        ("committee_jurisdiction", "Committee jurisdiction (tiered)"),
+        ("committee_sic_ranges", "Committee SIC ranges"),
+        ("ticker_sic", "Ticker SIC codes (SEC EDGAR)"),
+        ("lobbying_issue_agencies", "Lobbying issue-agency reference"),
     ]
 
     for table, label in tables:
@@ -3385,6 +4608,145 @@ def print_stats(conn: sqlite3.Connection):
     log.info(f"\nDatabase size: {size_mb:.1f} MB")
 
 
+def save_build_report(conn: sqlite3.Connection, elapsed_seconds: float):
+    """Save a build report with table counts, deltas from previous build, and metadata."""
+    import json
+    from datetime import datetime, timezone
+
+    report_dir = BASE_DIR / "build_reports"
+    report_dir.mkdir(exist_ok=True)
+
+    now = datetime.now(timezone.utc)
+    timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    filename = now.strftime("%Y%m%d_%H%M%S")
+
+    # Collect all table counts
+    table_counts = {}
+    for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ):
+        table_name = row[0]
+        try:
+            count = conn.execute(f"SELECT COUNT(*) FROM [{table_name}]").fetchone()[0]
+            table_counts[table_name] = count
+        except Exception:
+            table_counts[table_name] = -1
+
+    db_size_bytes = DB_PATH.stat().st_size
+    total_rows = sum(c for c in table_counts.values() if c > 0)
+
+    report = {
+        "timestamp": timestamp,
+        "build_duration_seconds": round(elapsed_seconds, 1),
+        "build_duration_minutes": round(elapsed_seconds / 60, 1),
+        "database_size_bytes": db_size_bytes,
+        "database_size_gb": round(db_size_bytes / (1024**3), 2),
+        "total_tables": len(table_counts),
+        "total_rows": total_rows,
+        "tables": table_counts,
+    }
+
+    # Load previous report for deltas
+    prev_reports = sorted(report_dir.glob("*.json"))
+    prev_report = None
+    if prev_reports:
+        try:
+            prev_report = json.loads(prev_reports[-1].read_text())
+        except Exception:
+            pass
+
+    if prev_report and "tables" in prev_report:
+        prev_tables = prev_report["tables"]
+        deltas = {}
+        for table, count in table_counts.items():
+            if count < 0:
+                continue
+            prev_count = prev_tables.get(table, 0)
+            if prev_count < 0:
+                prev_count = 0
+            delta = count - prev_count
+            if delta != 0:
+                deltas[table] = {"previous": prev_count, "current": count, "delta": delta}
+        # New tables
+        new_tables = [t for t in table_counts if t not in prev_tables and table_counts[t] > 0]
+        # Removed tables
+        removed_tables = [t for t in prev_tables if t not in table_counts]
+
+        report["deltas"] = deltas
+        report["new_tables"] = new_tables
+        report["removed_tables"] = removed_tables
+        report["previous_build"] = prev_report.get("timestamp", "unknown")
+        report["previous_total_rows"] = prev_report.get("total_rows", 0)
+        report["row_delta"] = total_rows - prev_report.get("total_rows", 0)
+        report["size_delta_gb"] = round(
+            (db_size_bytes - prev_report.get("database_size_bytes", 0)) / (1024**3), 2
+        )
+
+    # Save JSON
+    json_path = report_dir / f"{filename}.json"
+    json_path.write_text(json.dumps(report, indent=2))
+    log.info(f"\nBuild report saved: {json_path}")
+
+    # Save human-readable summary
+    lines = [
+        f"# OpenRegs Build Report — {now.strftime('%Y-%m-%d %H:%M UTC')}",
+        "",
+        f"**Build time**: {report['build_duration_minutes']} minutes",
+        f"**Database size**: {report['database_size_gb']} GB",
+        f"**Total tables**: {report['total_tables']}",
+        f"**Total rows**: {total_rows:,}",
+        "",
+    ]
+
+    if prev_report:
+        lines.append(f"**Previous build**: {report.get('previous_build', 'unknown')}")
+        row_delta = report.get("row_delta", 0)
+        sign = "+" if row_delta >= 0 else ""
+        lines.append(f"**Row change**: {sign}{row_delta:,}")
+        lines.append(f"**Size change**: {sign}{report.get('size_delta_gb', 0)} GB")
+        lines.append("")
+
+        if report.get("new_tables"):
+            lines.append("## New Tables")
+            for t in report["new_tables"]:
+                lines.append(f"- `{t}`: {table_counts[t]:,} rows")
+            lines.append("")
+
+        if report.get("removed_tables"):
+            lines.append("## Removed Tables")
+            for t in report["removed_tables"]:
+                lines.append(f"- `{t}`")
+            lines.append("")
+
+        changed = {k: v for k, v in report.get("deltas", {}).items()
+                   if k not in report.get("new_tables", [])}
+        if changed:
+            lines.append("## Changed Tables")
+            lines.append("| Table | Previous | Current | Delta |")
+            lines.append("|-------|----------|---------|-------|")
+            for t, d in sorted(changed.items(), key=lambda x: abs(x[1]["delta"]), reverse=True):
+                sign = "+" if d["delta"] >= 0 else ""
+                lines.append(f"| `{t}` | {d['previous']:,} | {d['current']:,} | {sign}{d['delta']:,} |")
+            lines.append("")
+
+    lines.append("## All Tables")
+    lines.append("| Table | Rows |")
+    lines.append("|-------|------|")
+    for t, c in sorted(table_counts.items()):
+        if c >= 0:
+            lines.append(f"| `{t}` | {c:,} |")
+        else:
+            lines.append(f"| `{t}` | (error) |")
+
+    summary_path = report_dir / f"{filename}.md"
+    summary_path.write_text("\n".join(lines))
+    log.info(f"Build summary saved: {summary_path}")
+
+    # Also save as "latest" for easy access
+    (report_dir / "latest.json").write_text(json.dumps(report, indent=2))
+    (report_dir / "latest.md").write_text("\n".join(lines))
+
+
 def main():
     log.info("=" * 60)
     log.info("BUILDING OPENREGS DATABASE (with enrichments)")
@@ -3423,16 +4785,27 @@ def main():
         import_congress_members(conn)
         import_committees(conn)
         import_stock_trades(conn)
+        import_hearings(conn)
+        import_crs_reports(conn)
+        import_nominations(conn)
+        import_treaties(conn)
+        import_gao_reports(conn)
+        import_earmarks(conn)
         import_cosponsors(conn)
         build_crec_junction_tables(conn)
+        link_hearing_members(conn)
         build_crossref(conn)
         build_agency_map(conn)
         build_views(conn)
         build_member_stats(conn)
         build_docket_summary(conn)
+        import_reference_tables(conn)
+        build_lobbying_bill_refs(conn)
         build_summary_tables(conn)
         build_fts(conn)
         print_stats(conn)
+        elapsed = time.time() - start
+        save_build_report(conn, elapsed)
     finally:
         conn.close()
 

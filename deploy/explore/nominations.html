@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Executive Nominations — OpenRegs Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .filters {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            margin: 1.5rem auto 0;
+            max-width: 800px;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: all 0.3s;
+            border-radius: 6px;
+        }
+
+        .chip:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+            max-width: 800px;
+            margin: 1.5rem auto 0;
+            padding: 0 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.8rem 1.2rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.3s, border-color 0.3s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+
+        .tab:hover { color: var(--text-secondary); }
+        .tab.active { color: var(--dawn-gold); border-bottom-color: var(--dawn-amber); }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .example-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.03em;
+        }
+
+        .example-chip:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .results {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+        }
+
+        .status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+            cursor: pointer;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .meta-item span { color: var(--dawn-gold); }
+
+        .badge-confirmed {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(34,197,94,0.15); color: #4ade80;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .badge-withdrawn {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(239,68,68,0.15); color: #f87171;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .badge-returned {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(245,158,11,0.15); color: #fbbf24;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .badge-pending {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(100,116,139,0.2); color: #94a3b8;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .badge-rejected {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(239,68,68,0.25); color: #ef4444;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+
+        .congress-badge {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(245,158,11,0.08); color: var(--dawn-gold);
+            letter-spacing: 0.05em;
+        }
+
+        .browse-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            cursor: pointer;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+        .browse-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+        .browse-name { font-size: 0.95rem; color: var(--text-primary); }
+        .browse-count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-gold);
+            flex-shrink: 0;
+        }
+        .browse-sub {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
+        }
+
+        /* Progress bar for confirmation rates */
+        .rate-bar {
+            display: flex;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+            background: var(--surface);
+        }
+        .rate-bar .confirmed { background: #4ade80; }
+        .rate-bar .withdrawn { background: #f87171; }
+        .rate-bar .returned { background: #fbbf24; }
+        .rate-bar .rejected { background: #ef4444; }
+
+        .load-more {
+            display: block; width: 100%; padding: 0.8rem; margin-top: 1rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            color: var(--dawn-amber); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            cursor: pointer; text-align: center;
+        }
+        .load-more:hover { background: var(--surface-hover); }
+
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+        .detail-overlay.open { display: block; }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            overflow-y: auto;
+            z-index: 1001;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+        .detail-panel.open { transform: translateX(0); }
+
+        .detail-inner { max-width: 1200px; margin: 0 auto; }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1.5rem 2rem 0;
+            transition: color 0.3s;
+        }
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-header { padding: 1rem 2rem 1rem; }
+
+        .detail-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-subtitle {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .detail-content { padding: 2rem; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.8rem;
+        }
+
+        .detail-item .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .detail-item .value {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-top: 0.3rem;
+        }
+
+        .detail-item .value.large {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.3rem;
+            color: var(--dawn-gold);
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        .doc-link { color: var(--dawn-gold); text-decoration: none; }
+        .doc-link:hover { text-decoration: underline; }
+
+        .timeline { display: flex; flex-direction: column; gap: 0.5rem; }
+        .timeline-item {
+            display: flex; gap: 1rem; padding: 0.75rem;
+            background: var(--surface); border-radius: 6px;
+        }
+        .timeline-date {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem; color: var(--text-muted);
+            min-width: 6rem; flex-shrink: 0;
+        }
+        .timeline-text { font-size: 0.85rem; color: var(--text-secondary); font-weight: 300; line-height: 1.4; }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 3rem 1.5rem 1.5rem; }
+            .search-container { padding: 0 1.5rem; }
+            .filters { padding: 0 1.5rem; }
+            .tabs { padding: 0 1.5rem; }
+            .results { padding: 1rem 1.5rem; }
+            .detail-grid { grid-template-columns: 1fr; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/hearings.html">Hearings</a>
+            <a href="/explore/nominations.html" class="active">Nominations</a>
+            <a href="/explore/research.html">Research</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/contributions.html">Contributions</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Executive Nominations</h1>
+        <p>Search presidential nominations to the Senate from Congress 100 to present. Track confirmation rates, vote tallies, and nomination actions.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search nominations by name, position, or organization..." autofocus>
+            <button class="search-btn" onclick="doSearch()">Search</button>
+        </div>
+        <div class="examples" id="examples">
+            <span class="example-chip" onclick="exSearch('Ambassador')">Ambassador</span>
+            <span class="example-chip" onclick="exSearch('Federal Judge')">Federal Judge</span>
+            <span class="example-chip" onclick="exSearch('Secretary')">Secretary</span>
+            <span class="example-chip" onclick="exSearch('Department of Defense')">Department of Defense</span>
+            <span class="example-chip" onclick="exSearch('EPA')">EPA</span>
+        </div>
+    </div>
+
+    <div class="filters" id="filters">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="Confirmed">Confirmed</button>
+        <button class="chip" data-filter="Withdrawn">Withdrawn</button>
+        <button class="chip" data-filter="Returned">Returned</button>
+        <button class="chip" data-filter="civilian">Civilian Only</button>
+    </div>
+
+    <div class="tabs" id="mainTabs">
+        <button class="tab active" data-tab="nominations">Nominations</button>
+        <button class="tab" data-tab="rates">Confirmation Rates</button>
+        <button class="tab" data-tab="recent">Recently Confirmed</button>
+    </div>
+
+    <div class="results" id="results">
+        <div class="empty-state">Search for nominations or browse confirmation rates by Congress.</div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" onclick="closeDetail()">&larr; Back to results</button>
+            <div id="detailHeader" class="detail-header"></div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+        let currentTab = 'nominations';
+        let currentFilter = 'all';
+        let currentOffset = 0;
+        const PAGE_SIZE = 30;
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function ord(n) { const s=["th","st","nd","rd"],v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+        function fmt(n) {
+            if (n == null) return '\u2014';
+            if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+            if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+            return Number(n).toLocaleString();
+        }
+        function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
+
+        function statusBadge(status) {
+            if (!status) return '<span class="badge-pending">Unknown</span>';
+            const s = status.toLowerCase();
+            if (s === 'confirmed') return '<span class="badge-confirmed">Confirmed</span>';
+            if (s === 'withdrawn') return '<span class="badge-withdrawn">Withdrawn</span>';
+            if (s === 'returned') return '<span class="badge-returned">Returned</span>';
+            if (s === 'rejected') return '<span class="badge-rejected">Rejected</span>';
+            return '<span class="badge-pending">' + esc(status) + '</span>';
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Query failed: ${resp.status}`);
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function getParam(k) { return new URLSearchParams(location.search).get(k); }
+        function setParams(params) {
+            const u = new URLSearchParams(location.search);
+            for (const [k,v] of Object.entries(params)) {
+                if (v === null || v === undefined || v === '') u.delete(k);
+                else u.set(k, v);
+            }
+            history.replaceState(null, '', '?' + u.toString());
+        }
+
+        function exSearch(term) {
+            document.getElementById('searchInput').value = term;
+            doSearch();
+        }
+
+        // Filter chips
+        document.querySelectorAll('.chip').forEach(c => {
+            c.addEventListener('click', () => {
+                document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+                c.classList.add('active');
+                currentFilter = c.dataset.filter;
+                currentOffset = 0;
+                setParams({ filter: currentFilter === 'all' ? null : currentFilter });
+                if (currentTab === 'nominations') doSearch();
+            });
+        });
+
+        // Main tabs
+        document.querySelectorAll('#mainTabs .tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                currentTab = t.dataset.tab;
+                currentOffset = 0;
+                setParams({ tab: currentTab === 'nominations' ? null : currentTab });
+                handleTab();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        function handleTab() {
+            switch (currentTab) {
+                case 'nominations': doSearch(); break;
+                case 'rates': loadConfirmationRates(); break;
+                case 'recent': loadRecentConfirmed(); break;
+            }
+        }
+
+        function buildFilterWhere() {
+            const parts = [];
+            if (currentFilter === 'Confirmed') parts.push("n.status = 'Confirmed'");
+            if (currentFilter === 'Withdrawn') parts.push("n.status = 'Withdrawn'");
+            if (currentFilter === 'Returned') parts.push("n.status = 'Returned'");
+            if (currentFilter === 'civilian') parts.push('n.is_civilian = 1');
+            return parts.length ? ' AND ' + parts.join(' AND ') : '';
+        }
+
+        async function doSearch() {
+            if (currentTab !== 'nominations') {
+                currentTab = 'nominations';
+                document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'nominations'));
+            }
+            const q = document.getElementById('searchInput').value.trim();
+            setParams({ q: q || null, filter: currentFilter === 'all' ? null : currentFilter });
+
+            document.getElementById('examples').style.display = q ? 'none' : 'flex';
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            try {
+                await searchNominations(q, 0);
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function searchNominations(q, offset) {
+            currentOffset = offset;
+            let where = '1=1';
+            const filterW = buildFilterWhere();
+
+            if (q) {
+                where = `(n.description LIKE '%${sqlEsc(q)}%' OR n.organization LIKE '%${sqlEsc(q)}%' OR n.citation LIKE '%${sqlEsc(q)}%')`;
+            }
+
+            const sql = `
+                SELECT n.id, n.congress, n.citation, n.description, n.organization,
+                       n.received_date, n.status, n.is_civilian, n.vote_yea, n.vote_nay
+                FROM nominations n
+                WHERE ${where} ${filterW}
+                ORDER BY n.received_date DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
+            `;
+
+            const rows = await query(sql);
+            const hasMore = rows.length > PAGE_SIZE;
+            if (hasMore) rows.pop();
+
+            if (!rows.length && offset === 0) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No nominations found. Try a different search term.</div>';
+                return;
+            }
+
+            let html = '';
+            if (offset === 0) {
+                const countQ = `SELECT COUNT(*) AS c FROM nominations n WHERE ${where} ${filterW}`;
+                try {
+                    const [countRow] = await query(countQ);
+                    html += `<div class="status"><span class="count">${fmt(countRow.c)}</span> nominations found</div>`;
+                } catch (e) {
+                    html += `<div class="status">Results</div>`;
+                }
+            }
+
+            for (const r of rows) {
+                const badge = statusBadge(r.status);
+                const voteStr = (r.vote_yea != null && r.vote_nay != null) ? `Vote: ${r.vote_yea}\u2013${r.vote_nay}` : '';
+                html += `
+                    <div class="result-card" onclick="openNomination('${esc(r.id)}')">
+                        <div class="card-header">
+                            <div>
+                                ${badge} <span class="congress-badge">${ord(r.congress)}</span>
+                            </div>
+                            <div class="meta-item">${esc(r.received_date)}</div>
+                        </div>
+                        <div class="card-title">${esc(r.description || r.citation || 'Untitled nomination')}</div>
+                        <div class="card-meta">
+                            ${r.organization ? '<div class="meta-item">' + esc(r.organization) + '</div>' : ''}
+                            ${voteStr ? '<div class="meta-item"><span>' + esc(voteStr) + '</span></div>' : ''}
+                            ${r.is_civilian ? '<div class="meta-item">Civilian</div>' : ''}
+                        </div>
+                    </div>`;
+            }
+
+            if (hasMore) {
+                html += `<button class="load-more" onclick="loadMore(${offset + PAGE_SIZE})">Load more nominations</button>`;
+            }
+
+            if (offset === 0) {
+                document.getElementById('results').innerHTML = html;
+            } else {
+                document.getElementById('results').querySelector('.load-more')?.remove();
+                document.getElementById('results').insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        async function loadMore(offset) {
+            const q = document.getElementById('searchInput').value.trim();
+            try { await searchNominations(q, offset); } catch (e) { /* fail silently */ }
+        }
+
+        async function loadConfirmationRates() {
+            document.getElementById('examples').style.display = 'none';
+            document.getElementById('results').innerHTML = '<div class="status">Loading confirmation rates...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT congress, COUNT(*) AS total,
+                           SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) AS confirmed,
+                           SUM(CASE WHEN status = 'Withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
+                           SUM(CASE WHEN status = 'Returned' THEN 1 ELSE 0 END) AS returned,
+                           SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END) AS rejected,
+                           ROUND(100.0 * SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS confirm_pct
+                    FROM nominations
+                    GROUP BY congress
+                    ORDER BY congress DESC
+                `);
+
+                let html = `<div class="status"><span class="count">${rows.length}</span> congresses with nominations</div>`;
+                for (const r of rows) {
+                    const confW = r.total > 0 ? (r.confirmed / r.total * 100) : 0;
+                    const withW = r.total > 0 ? (r.withdrawn / r.total * 100) : 0;
+                    const retW = r.total > 0 ? (r.returned / r.total * 100) : 0;
+                    const rejW = r.total > 0 ? (r.rejected / r.total * 100) : 0;
+
+                    html += `
+                        <div class="browse-card" onclick="filterByCongress(${r.congress})">
+                            <div style="flex:1">
+                                <div class="browse-name">${ord(r.congress)} Congress</div>
+                                <div class="browse-sub">
+                                    ${fmt(r.total)} total &middot;
+                                    <span style="color:#4ade80">${fmt(r.confirmed)} confirmed</span> &middot;
+                                    <span style="color:#f87171">${fmt(r.withdrawn)} withdrawn</span> &middot;
+                                    <span style="color:#fbbf24">${fmt(r.returned)} returned</span>
+                                    ${r.rejected > 0 ? ' &middot; <span style="color:#ef4444">' + r.rejected + ' rejected</span>' : ''}
+                                </div>
+                                <div class="rate-bar">
+                                    <div class="confirmed" style="width:${confW}%"></div>
+                                    <div class="withdrawn" style="width:${withW}%"></div>
+                                    <div class="returned" style="width:${retW}%"></div>
+                                    <div class="rejected" style="width:${rejW}%"></div>
+                                </div>
+                            </div>
+                            <div class="browse-count">${r.confirm_pct}%</div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function filterByCongress(congress) {
+            document.getElementById('searchInput').value = '';
+            currentTab = 'nominations';
+            currentFilter = 'all';
+            document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === 'all'));
+            document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'nominations'));
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            query(`
+                SELECT n.id, n.congress, n.citation, n.description, n.organization,
+                       n.received_date, n.status, n.is_civilian, n.vote_yea, n.vote_nay
+                FROM nominations n
+                WHERE n.congress = ${congress}
+                ORDER BY n.received_date DESC
+                LIMIT 50
+            `).then(rows => {
+                let html = `<div class="status"><span class="count">${rows.length}</span> nominations in ${ord(congress)} Congress</div>`;
+                for (const r of rows) {
+                    const badge = statusBadge(r.status);
+                    const voteStr = (r.vote_yea != null && r.vote_nay != null) ? `Vote: ${r.vote_yea}\u2013${r.vote_nay}` : '';
+                    html += `
+                        <div class="result-card" onclick="openNomination('${esc(r.id)}')">
+                            <div class="card-header">
+                                <div>${badge} <span class="congress-badge">${ord(r.congress)}</span></div>
+                                <div class="meta-item">${esc(r.received_date)}</div>
+                            </div>
+                            <div class="card-title">${esc(r.description || r.citation || 'Untitled')}</div>
+                            <div class="card-meta">
+                                ${r.organization ? '<div class="meta-item">' + esc(r.organization) + '</div>' : ''}
+                                ${voteStr ? '<div class="meta-item"><span>' + esc(voteStr) + '</span></div>' : ''}
+                            </div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            }).catch(e => {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            });
+        }
+
+        async function loadRecentConfirmed() {
+            document.getElementById('examples').style.display = 'none';
+            document.getElementById('results').innerHTML = '<div class="status">Loading recently confirmed...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT n.id, n.citation, n.description, n.organization,
+                           n.received_date, n.status, n.vote_yea, n.vote_nay, n.congress
+                    FROM nominations n
+                    WHERE n.status = 'Confirmed'
+                    ORDER BY n.received_date DESC
+                    LIMIT 100
+                `);
+
+                let html = `<div class="status"><span class="count">${rows.length}</span> recently confirmed nominations</div>`;
+                for (const r of rows) {
+                    const voteStr = (r.vote_yea != null && r.vote_nay != null) ? `Vote: ${r.vote_yea}\u2013${r.vote_nay}` : '';
+                    html += `
+                        <div class="result-card" onclick="openNomination('${esc(r.id)}')">
+                            <div class="card-header">
+                                <div>
+                                    <span class="badge-confirmed">Confirmed</span>
+                                    <span class="congress-badge">${ord(r.congress)}</span>
+                                </div>
+                                <div class="meta-item">${esc(r.received_date)}</div>
+                            </div>
+                            <div class="card-title">${esc(r.description || r.citation || 'Untitled')}</div>
+                            <div class="card-meta">
+                                ${r.organization ? '<div class="meta-item">' + esc(r.organization) + '</div>' : ''}
+                                ${voteStr ? '<div class="meta-item"><span>' + esc(voteStr) + '</span></div>' : ''}
+                            </div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        // Detail panel
+        async function openNomination(nomId) {
+            document.getElementById('detailOverlay').classList.add('open');
+            document.getElementById('detailPanel').classList.add('open');
+            document.getElementById('detailContent').innerHTML = '<div class="status">Loading...</div>';
+            setParams({ detail: nomId });
+
+            try {
+                const [noms, actions] = await Promise.all([
+                    query(`SELECT * FROM nominations WHERE id = '${sqlEsc(nomId)}'`),
+                    query(`SELECT action_date, action_text, action_type FROM nomination_actions WHERE nomination_id = '${sqlEsc(nomId)}' ORDER BY action_date DESC`),
+                ]);
+
+                const n = noms[0];
+                if (!n) {
+                    document.getElementById('detailContent').innerHTML = '<div class="status">Nomination not found</div>';
+                    return;
+                }
+
+                document.getElementById('detailHeader').innerHTML = `
+                    <div style="margin-bottom:0.5rem">
+                        ${statusBadge(n.status)} <span class="congress-badge">${ord(n.congress)} Congress</span>
+                    </div>
+                    <div class="detail-title">${esc(n.description || n.citation || 'Untitled nomination')}</div>
+                    <div class="detail-subtitle">
+                        Received ${esc(n.received_date)}
+                        ${n.organization ? ' &middot; ' + esc(n.organization) : ''}
+                    </div>
+                `;
+
+                let html = '<div class="detail-grid">';
+                html += `<div class="detail-item"><div class="label">Status</div><div class="value">${statusBadge(n.status)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Congress</div><div class="value">${esc(n.congress)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Received</div><div class="value">${esc(n.received_date)}</div></div>`;
+                if (n.vote_yea != null) html += `<div class="detail-item"><div class="label">Vote: Yea</div><div class="value large">${n.vote_yea}</div></div>`;
+                if (n.vote_nay != null) html += `<div class="detail-item"><div class="label">Vote: Nay</div><div class="value large">${n.vote_nay}</div></div>`;
+                if (n.organization) html += `<div class="detail-item"><div class="label">Organization</div><div class="value">${esc(n.organization)}</div></div>`;
+                if (n.citation) html += `<div class="detail-item"><div class="label">Citation</div><div class="value">${esc(n.citation)}</div></div>`;
+                html += `<div class="detail-item"><div class="label">Type</div><div class="value">${n.is_civilian ? 'Civilian' : n.is_military ? 'Military' : 'Unknown'}</div></div>`;
+                html += '</div>';
+
+                if (actions.length) {
+                    html += `<div class="section-title">Action History (${actions.length})</div>`;
+                    html += '<div class="timeline">';
+                    for (const a of actions) {
+                        html += `
+                            <div class="timeline-item">
+                                <div class="timeline-date">${esc(a.action_date || '')}</div>
+                                <div class="timeline-text">${esc(a.action_text)}</div>
+                            </div>`;
+                    }
+                    html += '</div>';
+                }
+
+                html += '<div class="section-title">Links</div>';
+                html += '<div style="display:flex;flex-wrap:wrap;gap:1rem;margin-top:0.5rem">';
+                html += `<a href="/openregs/nominations/${encodeURIComponent(n.id)}" target="_blank" class="doc-link">Raw Record &rarr;</a>`;
+                html += '</div>';
+
+                document.getElementById('detailContent').innerHTML = html;
+            } catch (e) {
+                document.getElementById('detailContent').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function closeDetail() {
+            document.getElementById('detailOverlay').classList.remove('open');
+            document.getElementById('detailPanel').classList.remove('open');
+            setParams({ detail: null });
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeDetail();
+        });
+
+        // Init from URL state
+        (function init() {
+            const q = getParam('q');
+            const tab = getParam('tab');
+            const filter = getParam('filter');
+            const detail = getParam('detail');
+
+            if (filter) {
+                currentFilter = filter;
+                document.querySelectorAll('.chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.filter === filter);
+                });
+            }
+
+            if (tab) {
+                currentTab = tab;
+                document.querySelectorAll('#mainTabs .tab').forEach(t => {
+                    t.classList.toggle('active', t.dataset.tab === tab);
+                });
+            }
+
+            if (q) {
+                document.getElementById('searchInput').value = q;
+                doSearch();
+            } else if (tab && tab !== 'nominations') {
+                handleTab();
+            }
+
+            if (detail) {
+                openNomination(detail);
+            }
+        })();
+    </script>
+</body>
+</html>

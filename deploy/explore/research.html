@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policy Research — OpenRegs Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .tabs {
+            display: flex;
+            gap: 0;
+            max-width: 800px;
+            margin: 1.5rem auto 0;
+            padding: 0 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.8rem 1.2rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.3s, border-color 0.3s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+
+        .tab:hover { color: var(--text-secondary); }
+        .tab.active { color: var(--dawn-gold); border-bottom-color: var(--dawn-amber); }
+
+        .examples {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .example-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 0.03em;
+        }
+
+        .example-chip:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .results {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+        }
+
+        .status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .card-title a {
+            color: inherit;
+            text-decoration: none;
+        }
+        .card-title a:hover { color: var(--dawn-gold); }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .meta-item span { color: var(--dawn-gold); }
+
+        .badge-crs {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(59,130,246,0.15); color: #60a5fa;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .badge-gao {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            background: rgba(168,85,247,0.15); color: #c084fc;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+
+        .subject-tag {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 0.2rem;
+        }
+        .subject-tag:hover {
+            color: var(--dawn-gold);
+            border-color: rgba(245,158,11,0.3);
+        }
+
+        .browse-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            cursor: pointer;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+        .browse-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+        .browse-name { font-size: 0.95rem; color: var(--text-primary); }
+        .browse-count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-gold);
+            flex-shrink: 0;
+        }
+
+        .card-summary {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            line-height: 1.5;
+            margin-top: 0.5rem;
+        }
+
+        .doc-link { color: var(--dawn-gold); text-decoration: none; }
+        .doc-link:hover { text-decoration: underline; }
+
+        .load-more {
+            display: block; width: 100%; padding: 0.8rem; margin-top: 1rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            color: var(--dawn-amber); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            cursor: pointer; text-align: center;
+        }
+        .load-more:hover { background: var(--surface-hover); }
+
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 3rem 1.5rem 1.5rem; }
+            .search-container { padding: 0 1.5rem; }
+            .tabs { padding: 0 1.5rem; }
+            .results { padding: 1rem 1.5rem; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/hearings.html">Hearings</a>
+            <a href="/explore/nominations.html">Nominations</a>
+            <a href="/explore/research.html" class="active">Research</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/contributions.html">Contributions</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Policy Research</h1>
+        <p>Search Congressional Research Service reports and Government Accountability Office reports. Expert analysis and audits of federal policy, programs, and spending.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search CRS and GAO reports by title or topic..." autofocus>
+            <button class="search-btn" onclick="doSearch()">Search</button>
+        </div>
+        <div class="examples" id="examples">
+            <span class="example-chip" onclick="exSearch('immigration')">immigration</span>
+            <span class="example-chip" onclick="exSearch('defense spending')">defense spending</span>
+            <span class="example-chip" onclick="exSearch('Medicare')">Medicare</span>
+            <span class="example-chip" onclick="exSearch('clean energy')">clean energy</span>
+            <span class="example-chip" onclick="exSearch('cybersecurity')">cybersecurity</span>
+            <span class="example-chip" onclick="exSearch('trade')">trade</span>
+        </div>
+    </div>
+
+    <div class="tabs" id="mainTabs">
+        <button class="tab active" data-tab="crs">CRS Reports</button>
+        <button class="tab" data-tab="gao">GAO Reports</button>
+        <button class="tab" data-tab="crs-topics">CRS Topics</button>
+        <button class="tab" data-tab="gao-subjects">GAO Subjects</button>
+        <button class="tab" data-tab="crs-bills">CRS + Bills</button>
+    </div>
+
+    <div class="results" id="results">
+        <div class="empty-state">Search for reports or browse by topic and subject area.</div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+        let currentTab = 'crs';
+        let currentOffset = 0;
+        const PAGE_SIZE = 30;
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function fmt(n) {
+            if (n == null) return '\u2014';
+            if (n >= 1e6) return (n/1e6).toFixed(1)+'M';
+            if (n >= 1e3) return (n/1e3).toFixed(0)+'K';
+            return Number(n).toLocaleString();
+        }
+        function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Query failed: ${resp.status}`);
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function getParam(k) { return new URLSearchParams(location.search).get(k); }
+        function setParams(params) {
+            const u = new URLSearchParams(location.search);
+            for (const [k,v] of Object.entries(params)) {
+                if (v === null || v === undefined || v === '') u.delete(k);
+                else u.set(k, v);
+            }
+            history.replaceState(null, '', '?' + u.toString());
+        }
+
+        function exSearch(term) {
+            document.getElementById('searchInput').value = term;
+            doSearch();
+        }
+
+        // Main tabs
+        document.querySelectorAll('#mainTabs .tab').forEach(t => {
+            t.addEventListener('click', () => {
+                document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.remove('active'));
+                t.classList.add('active');
+                currentTab = t.dataset.tab;
+                currentOffset = 0;
+                setParams({ tab: currentTab === 'crs' ? null : currentTab });
+                handleTab();
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        function handleTab() {
+            switch (currentTab) {
+                case 'crs': doSearch(); break;
+                case 'gao': doSearch(); break;
+                case 'crs-topics': loadCRSTopics(); break;
+                case 'gao-subjects': loadGAOSubjects(); break;
+                case 'crs-bills': loadCRSBills(); break;
+            }
+        }
+
+        async function doSearch() {
+            if (currentTab !== 'crs' && currentTab !== 'gao') {
+                currentTab = 'crs';
+                document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === 'crs'));
+            }
+            const q = document.getElementById('searchInput').value.trim();
+            setParams({ q: q || null, tab: currentTab === 'crs' ? null : currentTab });
+
+            document.getElementById('examples').style.display = q ? 'none' : 'flex';
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            try {
+                if (currentTab === 'crs') {
+                    await searchCRS(q, 0);
+                } else {
+                    await searchGAO(q, 0);
+                }
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function searchCRS(q, offset) {
+            currentOffset = offset;
+            let where = '1=1';
+
+            if (q) {
+                where = `(c.title LIKE '%${sqlEsc(q)}%' OR c.topics LIKE '%${sqlEsc(q)}%' OR c.summary LIKE '%${sqlEsc(q)}%')`;
+            }
+
+            const sql = `
+                SELECT c.id, c.title, c.publish_date, c.update_date, c.status,
+                       c.authors, c.topics, c.summary, c.pdf_url, c.html_url
+                FROM crs_reports c
+                WHERE ${where}
+                ORDER BY c.publish_date DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
+            `;
+
+            const rows = await query(sql);
+            const hasMore = rows.length > PAGE_SIZE;
+            if (hasMore) rows.pop();
+
+            if (!rows.length && offset === 0) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No CRS reports found. Try a different search term.</div>';
+                return;
+            }
+
+            let html = '';
+            if (offset === 0) {
+                const countQ = `SELECT COUNT(*) AS c FROM crs_reports c WHERE ${where}`;
+                try {
+                    const [countRow] = await query(countQ);
+                    html += `<div class="status"><span class="count">${fmt(countRow.c)}</span> CRS reports found</div>`;
+                } catch (e) {
+                    html += `<div class="status">Results</div>`;
+                }
+            }
+
+            for (const r of rows) {
+                const summary = r.summary ? r.summary.substring(0, 200) + (r.summary.length > 200 ? '...' : '') : '';
+                html += `
+                    <div class="result-card">
+                        <div class="card-header">
+                            <div><span class="badge-crs">CRS</span></div>
+                            <div class="meta-item">${esc(r.publish_date)}</div>
+                        </div>
+                        <div class="card-title">
+                            ${r.html_url ? '<a href="' + esc(r.html_url) + '" target="_blank">' + esc(r.title) + '</a>' :
+                              r.pdf_url ? '<a href="' + esc(r.pdf_url) + '" target="_blank">' + esc(r.title) + '</a>' :
+                              esc(r.title)}
+                        </div>
+                        <div class="card-meta">
+                            ${r.authors ? '<div class="meta-item">' + esc(r.authors) + '</div>' : ''}
+                            ${r.topics ? '<div class="meta-item"><span>' + esc(r.topics) + '</span></div>' : ''}
+                            ${r.status ? '<div class="meta-item">' + esc(r.status) + '</div>' : ''}
+                        </div>
+                        ${summary ? '<div class="card-summary">' + esc(summary) + '</div>' : ''}
+                        <div class="card-meta" style="margin-top:0.5rem">
+                            ${r.html_url ? '<div class="meta-item"><a href="' + esc(r.html_url) + '" target="_blank" class="doc-link">Read report &rarr;</a></div>' : ''}
+                            ${r.pdf_url ? '<div class="meta-item"><a href="' + esc(r.pdf_url) + '" target="_blank" class="doc-link">PDF &rarr;</a></div>' : ''}
+                            <div class="meta-item"><a href="/openregs/crs_reports/${encodeURIComponent(r.id)}" target="_blank" class="doc-link">Raw record &rarr;</a></div>
+                        </div>
+                    </div>`;
+            }
+
+            if (hasMore) {
+                html += `<button class="load-more" onclick="loadMoreCRS(${offset + PAGE_SIZE})">Load more CRS reports</button>`;
+            }
+
+            if (offset === 0) {
+                document.getElementById('results').innerHTML = html;
+            } else {
+                document.getElementById('results').querySelector('.load-more')?.remove();
+                document.getElementById('results').insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        async function loadMoreCRS(offset) {
+            const q = document.getElementById('searchInput').value.trim();
+            try { await searchCRS(q, offset); } catch (e) { /* fail silently */ }
+        }
+
+        async function searchGAO(q, offset) {
+            currentOffset = offset;
+            let where = '1=1';
+
+            if (q) {
+                where = `(g.title LIKE '%${sqlEsc(q)}%' OR g.subjects LIKE '%${sqlEsc(q)}%' OR g.abstract LIKE '%${sqlEsc(q)}%')`;
+            }
+
+            const sql = `
+                SELECT g.package_id, g.title, g.date_issued, g.report_number,
+                       g.document_type, g.abstract, g.subjects, g.pdf_url, g.html_url
+                FROM gao_reports g
+                WHERE ${where}
+                ORDER BY g.date_issued DESC
+                LIMIT ${PAGE_SIZE + 1} OFFSET ${offset}
+            `;
+
+            const rows = await query(sql);
+            const hasMore = rows.length > PAGE_SIZE;
+            if (hasMore) rows.pop();
+
+            if (!rows.length && offset === 0) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No GAO reports found. Try a different search term.</div>';
+                return;
+            }
+
+            let html = '';
+            if (offset === 0) {
+                const countQ = `SELECT COUNT(*) AS c FROM gao_reports g WHERE ${where}`;
+                try {
+                    const [countRow] = await query(countQ);
+                    html += `<div class="status"><span class="count">${fmt(countRow.c)}</span> GAO reports found</div>`;
+                } catch (e) {
+                    html += `<div class="status">Results</div>`;
+                }
+            }
+
+            for (const r of rows) {
+                const abstract = r.abstract ? r.abstract.substring(0, 200) + (r.abstract.length > 200 ? '...' : '') : '';
+                html += `
+                    <div class="result-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="badge-gao">GAO</span>
+                                ${r.report_number ? '<span style="font-family:IBM Plex Mono,monospace;font-size:0.65rem;color:var(--text-muted);margin-left:0.5rem">' + esc(r.report_number) + '</span>' : ''}
+                            </div>
+                            <div class="meta-item">${esc(r.date_issued)}</div>
+                        </div>
+                        <div class="card-title">
+                            ${r.html_url ? '<a href="' + esc(r.html_url) + '" target="_blank">' + esc(r.title) + '</a>' :
+                              r.pdf_url ? '<a href="' + esc(r.pdf_url) + '" target="_blank">' + esc(r.title) + '</a>' :
+                              esc(r.title)}
+                        </div>
+                        <div class="card-meta">
+                            ${r.document_type ? '<div class="meta-item">' + esc(r.document_type) + '</div>' : ''}
+                            ${r.subjects ? '<div class="meta-item"><span>' + esc(r.subjects.substring(0, 100)) + '</span></div>' : ''}
+                        </div>
+                        ${abstract ? '<div class="card-summary">' + esc(abstract) + '</div>' : ''}
+                        <div class="card-meta" style="margin-top:0.5rem">
+                            ${r.html_url ? '<div class="meta-item"><a href="' + esc(r.html_url) + '" target="_blank" class="doc-link">Read report &rarr;</a></div>' : ''}
+                            ${r.pdf_url ? '<div class="meta-item"><a href="' + esc(r.pdf_url) + '" target="_blank" class="doc-link">PDF &rarr;</a></div>' : ''}
+                            <div class="meta-item"><a href="/openregs/gao_reports/${encodeURIComponent(r.package_id)}" target="_blank" class="doc-link">Raw record &rarr;</a></div>
+                        </div>
+                    </div>`;
+            }
+
+            if (hasMore) {
+                html += `<button class="load-more" onclick="loadMoreGAO(${offset + PAGE_SIZE})">Load more GAO reports</button>`;
+            }
+
+            if (offset === 0) {
+                document.getElementById('results').innerHTML = html;
+            } else {
+                document.getElementById('results').querySelector('.load-more')?.remove();
+                document.getElementById('results').insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        async function loadMoreGAO(offset) {
+            const q = document.getElementById('searchInput').value.trim();
+            try { await searchGAO(q, offset); } catch (e) { /* fail silently */ }
+        }
+
+        async function loadCRSTopics() {
+            document.getElementById('examples').style.display = 'none';
+            document.getElementById('results').innerHTML = '<div class="status">Loading CRS topics...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT topics, COUNT(*) AS report_count,
+                           GROUP_CONCAT(DISTINCT status) AS statuses
+                    FROM crs_reports
+                    WHERE topics IS NOT NULL AND topics != ''
+                    GROUP BY topics
+                    ORDER BY report_count DESC
+                    LIMIT 100
+                `);
+
+                let html = `<div class="status"><span class="count">${rows.length}</span> CRS topic areas</div>`;
+                for (const r of rows) {
+                    html += `
+                        <div class="browse-card" data-topic="${esc(r.topics)}" data-type="crs" onclick="searchByTopic(this.dataset.topic, this.dataset.type)">
+                            <div>
+                                <div class="browse-name">${esc(r.topics)}</div>
+                                <div class="meta-item">${r.statuses ? esc(r.statuses) : ''}</div>
+                            </div>
+                            <div class="browse-count">${fmt(r.report_count)} reports</div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        async function loadGAOSubjects() {
+            document.getElementById('examples').style.display = 'none';
+            document.getElementById('results').innerHTML = '<div class="status">Loading GAO subjects...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT subjects, COUNT(*) AS report_count,
+                           MIN(date_issued) AS earliest, MAX(date_issued) AS latest
+                    FROM gao_reports
+                    WHERE subjects IS NOT NULL AND subjects != ''
+                    GROUP BY subjects
+                    ORDER BY report_count DESC
+                    LIMIT 100
+                `);
+
+                let html = `<div class="status"><span class="count">${rows.length}</span> GAO subject areas</div>`;
+                for (const r of rows) {
+                    html += `
+                        <div class="browse-card" data-topic="${esc(r.subjects)}" data-type="gao" onclick="searchByTopic(this.dataset.topic, this.dataset.type)">
+                            <div>
+                                <div class="browse-name">${esc(r.subjects)}</div>
+                                <div class="meta-item">${esc(r.earliest)} to ${esc(r.latest)}</div>
+                            </div>
+                            <div class="browse-count">${fmt(r.report_count)} reports</div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function searchByTopic(topic, source) {
+            document.getElementById('searchInput').value = topic;
+            currentTab = source;
+            document.querySelectorAll('#mainTabs .tab').forEach(x => x.classList.toggle('active', x.dataset.tab === source));
+            doSearch();
+        }
+
+        async function loadCRSBills() {
+            document.getElementById('examples').style.display = 'none';
+            document.getElementById('results').innerHTML = '<div class="status">Loading CRS reports linked to bills...</div>';
+
+            try {
+                const rows = await query(`
+                    SELECT cr.id AS report_id, cr.title AS report_title, cr.publish_date,
+                           cr.topics, cr.html_url, cr.pdf_url,
+                           cb.bill_title, cb.bill_id, cb.congress, cb.bill_type, cb.bill_number
+                    FROM crs_report_bills cb
+                    JOIN crs_reports cr ON cb.report_id = cr.id
+                    WHERE cb.bill_id IS NOT NULL
+                    ORDER BY cr.publish_date DESC
+                    LIMIT 100
+                `);
+
+                if (!rows.length) {
+                    document.getElementById('results').innerHTML = '<div class="empty-state">No CRS reports linked to bills found.</div>';
+                    return;
+                }
+
+                let html = `<div class="status"><span class="count">${rows.length}</span> CRS report-bill links (most recent)</div>`;
+                for (const r of rows) {
+                    html += `
+                        <div class="result-card">
+                            <div class="card-header">
+                                <div><span class="badge-crs">CRS</span></div>
+                                <div class="meta-item">${esc(r.publish_date)}</div>
+                            </div>
+                            <div class="card-title">
+                                ${r.html_url ? '<a href="' + esc(r.html_url) + '" target="_blank">' + esc(r.report_title) + '</a>' : esc(r.report_title)}
+                            </div>
+                            <div class="card-meta">
+                                ${r.topics ? '<div class="meta-item"><span>' + esc(r.topics) + '</span></div>' : ''}
+                            </div>
+                            <div class="card-meta" style="margin-top:0.5rem">
+                                <div class="meta-item">Related bill:
+                                    <a href="/explore/legislation.html?q=${encodeURIComponent(r.bill_id || '')}" class="doc-link">
+                                        ${esc(r.bill_title || r.bill_id || 'Unknown bill')}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        // Init from URL state
+        (function init() {
+            const q = getParam('q');
+            const tab = getParam('tab');
+
+            if (tab) {
+                currentTab = tab;
+                document.querySelectorAll('#mainTabs .tab').forEach(t => {
+                    t.classList.toggle('active', t.dataset.tab === tab);
+                });
+            }
+
+            if (q) {
+                document.getElementById('searchInput').value = q;
+                doSearch();
+            } else if (tab && tab !== 'crs') {
+                handleTab();
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Committee Trade Conflicts — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5rem 3rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-brand {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            letter-spacing: 0.02em;
+        }
+
+        .nav-links { display: flex; gap: 2rem; }
+
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.75rem;
+        }
+
+        .search-header p {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            font-weight: 300;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.5rem;
+            color: var(--dawn-gold);
+            font-weight: 500;
+        }
+
+        .stat-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-top: 0.25rem;
+        }
+
+        .search-container {
+            max-width: 800px;
+            margin: 2rem auto 0;
+            padding: 0 3rem;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 300;
+            padding: 1rem 0.5rem;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none;
+            color: var(--night);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 0.9rem 1.8rem;
+            border-radius: 9px;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: opacity 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 800px;
+            margin: 1.5rem auto 0;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.6rem 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            transition: all 0.3s;
+            border-radius: 6px;
+        }
+
+        .chip:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .filter-row {
+            display: flex;
+            justify-content: center;
+            gap: 0.25rem;
+            max-width: 800px;
+            margin: 1rem auto 0;
+            padding: 0 3rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            letter-spacing: 0.05em;
+            transition: all 0.3s;
+            border-radius: 20px;
+        }
+
+        .filter-chip:hover { color: var(--text-secondary); background: var(--surface-hover); }
+
+        .filter-chip.active {
+            color: var(--dawn-gold);
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .results {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1.5rem 3rem;
+        }
+
+        .status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+        }
+
+        .status .count { color: var(--dawn-gold); }
+
+        .result-card {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.3s, transform 0.2s;
+            cursor: pointer;
+        }
+
+        .result-card:hover {
+            border-color: rgba(245, 158, 11, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.05rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+        }
+
+        .card-badges {
+            display: flex;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .badge-type {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .badge-purchase {
+            background: rgba(34,197,94,0.15); color: #4ade80;
+        }
+
+        .badge-sale {
+            background: rgba(239,68,68,0.15); color: #f87171;
+        }
+
+        .badge-exchange {
+            background: rgba(168,85,247,0.15); color: #c084fc;
+        }
+
+        .badge-party {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem; font-weight: 500;
+            padding: 0.15rem 0.5rem; border-radius: 3px;
+            text-transform: uppercase; letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .badge-democrat {
+            background: rgba(59,130,246,0.15); color: #60a5fa;
+        }
+
+        .badge-republican {
+            background: rgba(239,68,68,0.15); color: #f87171;
+        }
+
+        .badge-independent {
+            background: rgba(168,85,247,0.15); color: #c084fc;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .meta-item {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .meta-item span { color: var(--dawn-gold); }
+
+        .card-sector {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-top: 0.6rem;
+            line-height: 1.4;
+        }
+
+        .card-sector .sector-label { color: var(--text-muted); }
+        .card-sector .sector-value { color: var(--text-secondary); }
+
+        .load-more {
+            display: block; width: 100%; padding: 0.8rem; margin-top: 1rem;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+            color: var(--dawn-amber); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            cursor: pointer; text-align: center;
+        }
+        .load-more:hover { background: var(--surface-hover); }
+
+        .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+
+        .detail-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+        }
+        .detail-overlay.open { display: block; }
+
+        .detail-panel {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            background: var(--night);
+            overflow-y: auto;
+            z-index: 1001;
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+        .detail-panel.open { transform: translateX(0); }
+
+        .detail-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .detail-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 1.5rem 2rem 0;
+            transition: color 0.3s;
+        }
+        .detail-back:hover { color: var(--dawn-gold); }
+
+        .detail-header {
+            padding: 1rem 2rem 1rem;
+        }
+
+        .detail-title {
+            font-family: 'DM Serif Display', serif;
+            font-size: 1.4rem;
+            color: var(--text-primary);
+            line-height: 1.3;
+            margin-bottom: 0.5rem;
+        }
+
+        .detail-subtitle {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.03em;
+        }
+
+        .detail-content { padding: 2rem; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            background: var(--deep);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.8rem;
+        }
+
+        .detail-item .label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .detail-item .value {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-top: 0.3rem;
+        }
+
+        .detail-item .value.large {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.3rem;
+            color: var(--dawn-gold);
+        }
+
+        .section-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 1.5rem 0 0.75rem;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        .cross-link {
+            display: inline-block;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--dawn-gold);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+        .cross-link:hover {
+            border-color: rgba(245, 158, 11, 0.3);
+            background: rgba(245, 158, 11, 0.06);
+        }
+
+        .doc-link { color: var(--dawn-gold); text-decoration: none; }
+        .doc-link:hover { text-decoration: underline; }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2rem 3rem;
+            text-align: center;
+            margin-top: 5rem;
+        }
+
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 0.05em;
+        }
+        .footer-text a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .nav-links { gap: 1rem; }
+            .nav-links a { font-size: 0.65rem; }
+            .search-header { padding: 3rem 1.5rem 1.5rem; }
+            .stats-bar { gap: 1.5rem; padding: 0 1.5rem; flex-wrap: wrap; }
+            .stat-value { font-size: 1.2rem; }
+            .search-container { padding: 0 1.5rem; }
+            .controls { padding: 0 1.5rem; }
+            .filter-row { padding: 0 1.5rem; }
+            .results { padding: 1rem 1.5rem; }
+            .detail-grid { grid-template-columns: 1fr; }
+            footer { padding: 2rem 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/hearings.html">Hearings</a>
+            <a href="/explore/nominations.html">Nominations</a>
+            <a href="/explore/research.html">Research</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/contributions.html">Contributions</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Committee Trade Conflicts</h1>
+        <p>Members of Congress trading stocks in the sectors their committees regulate. SIC codes from SEC EDGAR matched against committee jurisdiction ranges.</p>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+        <div class="stat-item">
+            <div class="stat-value" id="statMembers">--</div>
+            <div class="stat-label">Members</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="statTrades">--</div>
+            <div class="stat-label">Flagged Trades</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="statCommittees">--</div>
+            <div class="stat-label">Committees</div>
+        </div>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search by member, ticker, committee, or sector..." autofocus>
+            <button class="search-btn" onclick="doSearch()">Search</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="sort-controls" id="sortControls">
+            <button class="chip active" data-sort="recent">Recent Trades</button>
+            <button class="chip" data-sort="member">Member A-Z</button>
+            <button class="chip" data-sort="committee">Committee A-Z</button>
+            <button class="chip" data-sort="ticker">Ticker A-Z</button>
+        </div>
+    </div>
+
+    <div class="filter-row" id="typeFilters">
+        <button class="filter-chip active" data-type="all">All</button>
+        <button class="filter-chip" data-type="Purchase">Purchase</button>
+        <button class="filter-chip" data-type="Sale">Sale</button>
+        <button class="filter-chip" data-type="Sale (Full)">Sale (Full)</button>
+        <button class="filter-chip" data-type="Sale (Partial)">Sale (Partial)</button>
+        <button class="filter-chip" data-type="Exchange">Exchange</button>
+    </div>
+
+    <div class="filter-row" id="partyFilters">
+        <button class="filter-chip active" data-party="all">All</button>
+        <button class="filter-chip" data-party="Democrat">Democrat</button>
+        <button class="filter-chip" data-party="Republican">Republican</button>
+        <button class="filter-chip" data-party="Independent">Independent</button>
+    </div>
+
+    <div class="results" id="results">
+        <div class="empty-state">Loading trades...</div>
+    </div>
+
+    <div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-inner">
+            <button class="detail-back" onclick="closeDetail()">&larr; Back to results</button>
+            <div id="detailHeader" class="detail-header"></div>
+            <div class="detail-content" id="detailContent"></div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script>
+        const API = '/openregs';
+        const PAGE_SIZE = 50;
+        let currentSort = 'recent';
+        let currentType = 'all';
+        let currentParty = 'all';
+        let currentOffset = 0;
+        let currentQuery = '';
+        let allRows = [];
+
+        function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+        function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
+
+        function fmtCount(n) {
+            if (n == null) return '\u2014';
+            if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+            return Number(n).toLocaleString();
+        }
+
+        async function query(sql) {
+            const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`Query failed: ${resp.status}`);
+            const data = await resp.json();
+            return data.rows || [];
+        }
+
+        function getParam(k) { return new URLSearchParams(location.search).get(k); }
+        function setParams(params) {
+            const u = new URLSearchParams(location.search);
+            for (const [k,v] of Object.entries(params)) {
+                if (v === null || v === undefined || v === '') u.delete(k);
+                else u.set(k, v);
+            }
+            const str = u.toString();
+            history.replaceState(null, '', str ? '?' + str : location.pathname);
+        }
+
+        function getTypeBadgeClass(type) {
+            if (!type) return 'badge-exchange';
+            const t = type.toLowerCase();
+            if (t.startsWith('purchase')) return 'badge-purchase';
+            if (t.startsWith('sale')) return 'badge-sale';
+            return 'badge-exchange';
+        }
+
+        function getPartyBadgeClass(party) {
+            if (!party) return '';
+            const p = party.toLowerCase();
+            if (p === 'democrat') return 'badge-democrat';
+            if (p === 'republican') return 'badge-republican';
+            return 'badge-independent';
+        }
+
+        function sortRows(rows) {
+            const copy = [...rows];
+            switch (currentSort) {
+                case 'recent': return copy.sort((a, b) => (b.transaction_date || '').localeCompare(a.transaction_date || ''));
+                case 'member': return copy.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+                case 'committee': return copy.sort((a, b) => (a.committee_name || '').localeCompare(b.committee_name || ''));
+                case 'ticker': return copy.sort((a, b) => (a.ticker || '').localeCompare(b.ticker || ''));
+                default: return copy.sort((a, b) => (b.transaction_date || '').localeCompare(a.transaction_date || ''));
+            }
+        }
+
+        function filterRows(rows) {
+            return rows.filter(r => {
+                if (currentType !== 'all' && r.transaction_type !== currentType) return false;
+                if (currentParty !== 'all' && r.party !== currentParty) return false;
+                if (currentQuery) {
+                    const q = currentQuery.toLowerCase();
+                    const searchable = [
+                        r.full_name, r.ticker, r.committee_name,
+                        r.sic_description, r.asset_description
+                    ].map(s => (s || '').toLowerCase()).join(' ');
+                    if (!searchable.includes(q)) return false;
+                }
+                return true;
+            });
+        }
+
+        function updateStats(rows) {
+            const members = new Set();
+            const committees = new Set();
+            for (const r of rows) {
+                if (r.full_name) members.add(r.full_name);
+                if (r.committee_name) committees.add(r.committee_name);
+            }
+            document.getElementById('statMembers').textContent = fmtCount(members.size);
+            document.getElementById('statTrades').textContent = fmtCount(rows.length);
+            document.getElementById('statCommittees').textContent = fmtCount(committees.size);
+        }
+
+        async function fetchAll() {
+            const sql = `
+                SELECT full_name, party, state, committee_name, jurisdiction_desc,
+                       sic_code, sic_description, transaction_date, ticker,
+                       asset_description, transaction_type, amount_range
+                FROM committee_trade_conflicts
+                ORDER BY transaction_date DESC
+            `;
+            allRows = await query(sql);
+        }
+
+        function getDisplayRows() {
+            const filtered = filterRows(allRows);
+            return sortRows(filtered);
+        }
+
+        async function doSearch() {
+            currentQuery = document.getElementById('searchInput').value.trim();
+            currentOffset = 0;
+            setParams({
+                q: currentQuery || null,
+                sort: currentSort === 'recent' ? null : currentSort,
+                type: currentType === 'all' ? null : currentType,
+                party: currentParty === 'all' ? null : currentParty
+            });
+
+            document.getElementById('results').innerHTML = '<div class="status">Searching...</div>';
+
+            try {
+                if (!allRows.length) await fetchAll();
+                const displayRows = getDisplayRows();
+                updateStats(displayRows);
+                renderResults(displayRows, 0);
+            } catch (e) {
+                document.getElementById('results').innerHTML = `<div class="status">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
+        function renderResults(rows, offset) {
+            currentOffset = offset;
+            const page = rows.slice(offset, offset + PAGE_SIZE);
+            const hasMore = offset + PAGE_SIZE < rows.length;
+
+            if (!page.length && offset === 0) {
+                document.getElementById('results').innerHTML = '<div class="empty-state">No trade conflicts found matching your criteria.</div>';
+                return;
+            }
+
+            let html = '';
+            if (offset === 0) {
+                html += `<div class="status"><span class="count">${fmtCount(rows.length)}</span> flagged trades found</div>`;
+            }
+
+            for (const r of page) {
+                const partyState = [r.party, r.state].filter(Boolean).join(', ');
+                html += `
+                    <div class="result-card" onclick="openDetail(${allRows.indexOf(r)})">
+                        <div class="card-header">
+                            <div class="card-title">${esc(r.full_name)}</div>
+                            <div class="card-badges">
+                                <span class="badge-party ${getPartyBadgeClass(r.party)}">${esc(r.party || '')}</span>
+                                <span class="badge-type ${getTypeBadgeClass(r.transaction_type)}">${esc(r.transaction_type || '')}</span>
+                            </div>
+                        </div>
+                        <div class="card-meta">
+                            <div class="meta-item">Ticker: <span>${esc(r.ticker || '\u2014')}</span></div>
+                            <div class="meta-item">Amount: <span>${esc(r.amount_range || '\u2014')}</span></div>
+                            <div class="meta-item">${esc(r.transaction_date || '')}</div>
+                        </div>
+                        <div class="card-meta" style="margin-top:0.25rem">
+                            <div class="meta-item">Committee: <span>${esc(r.committee_name || '')}</span></div>
+                        </div>
+                        <div class="card-sector">
+                            <span class="sector-label">Sector: </span>
+                            <span class="sector-value">${esc(r.sic_description || '\u2014')}</span>
+                        </div>
+                    </div>`;
+            }
+
+            if (hasMore) {
+                html += `<button class="load-more" onclick="loadMore()">Load more trades</button>`;
+            }
+
+            if (offset === 0) {
+                document.getElementById('results').innerHTML = html;
+            } else {
+                document.getElementById('results').querySelector('.load-more')?.remove();
+                document.getElementById('results').insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        function loadMore() {
+            try {
+                const displayRows = getDisplayRows();
+                renderResults(displayRows, currentOffset + PAGE_SIZE);
+            } catch (e) { /* fail silently */ }
+        }
+
+        // Sort controls
+        document.querySelectorAll('#sortControls .chip').forEach(c => {
+            c.addEventListener('click', () => {
+                document.querySelectorAll('#sortControls .chip').forEach(x => x.classList.remove('active'));
+                c.classList.add('active');
+                currentSort = c.dataset.sort;
+                currentOffset = 0;
+                setParams({ sort: currentSort === 'recent' ? null : currentSort });
+                const displayRows = getDisplayRows();
+                renderResults(displayRows, 0);
+            });
+        });
+
+        // Transaction type filter chips
+        document.querySelectorAll('#typeFilters .filter-chip').forEach(c => {
+            c.addEventListener('click', () => {
+                document.querySelectorAll('#typeFilters .filter-chip').forEach(x => x.classList.remove('active'));
+                c.classList.add('active');
+                currentType = c.dataset.type;
+                currentOffset = 0;
+                setParams({ type: currentType === 'all' ? null : currentType });
+                const displayRows = getDisplayRows();
+                updateStats(displayRows);
+                renderResults(displayRows, 0);
+            });
+        });
+
+        // Party filter chips
+        document.querySelectorAll('#partyFilters .filter-chip').forEach(c => {
+            c.addEventListener('click', () => {
+                document.querySelectorAll('#partyFilters .filter-chip').forEach(x => x.classList.remove('active'));
+                c.classList.add('active');
+                currentParty = c.dataset.party;
+                currentOffset = 0;
+                setParams({ party: currentParty === 'all' ? null : currentParty });
+                const displayRows = getDisplayRows();
+                updateStats(displayRows);
+                renderResults(displayRows, 0);
+            });
+        });
+
+        document.getElementById('searchInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch();
+        });
+
+        // Detail panel
+        function openDetail(idx) {
+            const r = allRows[idx];
+            if (!r) return;
+
+            document.getElementById('detailOverlay').classList.add('open');
+            document.getElementById('detailPanel').classList.add('open');
+            setParams({ detail: idx });
+
+            const partyState = [r.party, r.state].filter(Boolean).join(', ');
+
+            document.getElementById('detailHeader').innerHTML = `
+                <div class="detail-title">${esc(r.full_name)} <span style="font-size:0.8em;color:var(--text-muted)">(${esc(partyState)})</span></div>
+                <div class="detail-subtitle">
+                    ${esc(r.transaction_type || '')} &middot; ${esc(r.ticker || '')} &middot; ${esc(r.transaction_date || '')}
+                </div>
+            `;
+
+            let html = '<div class="detail-grid">';
+            html += `<div class="detail-item"><div class="label">Ticker</div><div class="value large">${esc(r.ticker || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">Transaction Type</div><div class="value">${esc(r.transaction_type || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">Amount Range</div><div class="value">${esc(r.amount_range || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">Transaction Date</div><div class="value">${esc(r.transaction_date || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">Party</div><div class="value">${esc(r.party || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">State</div><div class="value">${esc(r.state || '\u2014')}</div></div>`;
+            html += '</div>';
+
+            html += '<div class="section-title">Asset</div>';
+            html += '<div class="detail-grid">';
+            html += `<div class="detail-item" style="grid-column:1/-1"><div class="label">Asset Description</div><div class="value">${esc(r.asset_description || '\u2014')}</div></div>`;
+            html += '</div>';
+
+            html += '<div class="section-title">Committee Jurisdiction Conflict</div>';
+            html += '<div class="detail-grid">';
+            html += `<div class="detail-item" style="grid-column:1/-1"><div class="label">Committee</div><div class="value">${esc(r.committee_name || '\u2014')}</div></div>`;
+            html += `<div class="detail-item" style="grid-column:1/-1"><div class="label">Jurisdiction Description</div><div class="value">${esc(r.jurisdiction_desc || '\u2014')}</div></div>`;
+            html += `<div class="detail-item"><div class="label">SIC Code</div><div class="value large">${esc(r.sic_code || '\u2014')}</div></div>`;
+            html += `<div class="detail-item" style="grid-column:2/-1"><div class="label">SIC Description</div><div class="value">${esc(r.sic_description || '\u2014')}</div></div>`;
+            html += '</div>';
+
+            html += '<div class="section-title">Explore Further</div>';
+            html += '<div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-top:0.5rem">';
+            html += `<a class="cross-link" href="/explore/member.html?q=${encodeURIComponent(r.full_name || '')}">Member Explorer &rarr;</a>`;
+            if (r.ticker) {
+                html += `<a class="cross-link" href="/explore/entity.html?q=${encodeURIComponent(r.ticker)}">Entity Explorer &rarr;</a>`;
+            }
+            html += '</div>';
+
+            html += '<div class="section-title">Raw Data</div>';
+            html += '<div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-top:0.5rem">';
+            html += `<a class="cross-link" href="${API}/committee_trade_conflicts?full_name=${encodeURIComponent(r.full_name || '')}" target="_blank">View in Database &rarr;</a>`;
+            html += '</div>';
+
+            document.getElementById('detailContent').innerHTML = html;
+        }
+
+        function closeDetail() {
+            document.getElementById('detailOverlay').classList.remove('open');
+            document.getElementById('detailPanel').classList.remove('open');
+            setParams({ detail: null });
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeDetail();
+        });
+
+        // Init from URL state
+        (function init() {
+            const q = getParam('q');
+            const sort = getParam('sort');
+            const type = getParam('type');
+            const party = getParam('party');
+            const detail = getParam('detail');
+
+            if (sort) {
+                currentSort = sort;
+                document.querySelectorAll('#sortControls .chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.sort === sort);
+                });
+            }
+
+            if (type) {
+                currentType = type;
+                document.querySelectorAll('#typeFilters .filter-chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.type === type);
+                });
+            }
+
+            if (party) {
+                currentParty = party;
+                document.querySelectorAll('#partyFilters .filter-chip').forEach(c => {
+                    c.classList.toggle('active', c.dataset.party === party);
+                });
+            }
+
+            if (q) {
+                document.getElementById('searchInput').value = q;
+            }
+
+            doSearch();
+
+            if (detail) {
+                // Wait for data to load, then open detail
+                const checkAndOpen = setInterval(() => {
+                    if (allRows.length) {
+                        clearInterval(checkAndOpen);
+                        openDetail(parseInt(detail, 10));
+                    }
+                }, 100);
+            }
+        })();
+    </script>
+</body>
+</html>

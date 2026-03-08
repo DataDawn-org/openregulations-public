@@ -1,6 +1,6 @@
 # OpenRegulations
 
-A comprehensive database of U.S. federal government data: regulations, legislation, congressional floor speeches, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending. All from official government sources. All public domain.
+A comprehensive database of U.S. federal government data: regulations, legislation, congressional floor speeches, committee hearings, CRS reports, executive nominations, treaties, GAO reports, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending. All from official government sources. All public domain.
 
 Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ Crabdaddy ([Claude Code](https://docs.anthropic.com/en/docs/claude-code)) 🦀
 
@@ -32,10 +32,11 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,763 | congress-legislators GitHub |
-| Stock trading disclosures | 95,621 | Senate eFD + House FD PTR PDFs (gov) |
+| Stock trading disclosures | 64,220 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only (non-trade filings excluded) |
 | Lobbying filings | 1,507,321 | Senate LDA API |
 | Lobbying lobbyists | 3,464,421 | Senate LDA API |
 | Lobbying activities | 2,754,579 | Senate LDA API |
+| Lobbying contributions | 3,492,672 | Senate LDA API |
 | FARA registrants | 7,035 | FARA.gov |
 | FARA foreign principals | 17,627 | FARA.gov |
 | FARA registrant documents | 151,348 | FARA.gov |
@@ -47,6 +48,19 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | FR agencies | 444 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
 | APHIS inspections | 110,400 | APHIS Salesforce API |
+| Committee hearings | 46,295 | GovInfo CHRG collection |
+| Hearing witnesses | 108,962 | GovInfo CHRG collection |
+| Hearing member attendance | 319,446 | GovInfo CHRG collection |
+| CRS reports | 13,617 | Congress.gov API |
+| CRS report–bill cross-references | 52,845 | Congress.gov API |
+| Executive nominations | 44,711 | Congress.gov API |
+| Nomination actions | 196,505 | Congress.gov API |
+| Treaties | 785 | Congress.gov API |
+| Treaty actions | 2,184 | Congress.gov API |
+| GAO reports | 16,582 | GovInfo GAOREPORTS collection |
+| Earmarks | 70,826 | House/Senate Appropriations |
+| Lobbying bills (parsed) | 1,258,003 | Derived from lobbying specific_issues text |
+| CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
 | FR ↔ Regs.gov cross-references | 70,030 | Derived |
 
 **Comment coverage by agency:**
@@ -63,7 +77,7 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 
 ## Interactive Explore Pages
 
-The live instance includes 9 interactive explore pages at `regs.datadawn.org/explore/`:
+The live instance includes 21 interactive explore pages at `regs.datadawn.org/explore/`:
 
 | Page | URL | Description |
 |------|-----|-------------|
@@ -72,10 +86,22 @@ The live instance includes 9 interactive explore pages at `regs.datadawn.org/exp
 | Regulations | `/explore/regulation.html` | Federal rulemaking: dockets, documents, comments, CFR text, cross-references |
 | Legislation | `/explore/legislation.html` | 167K+ bills: sponsors, cosponsors, actions, subjects, related floor speeches |
 | Lobbying | `/explore/lobbying.html` | 1.5M+ lobbying filings: clients, registrants, issue areas, government entities |
+| Contributions | `/explore/contributions.html` | Campaign finance: employer donations, candidate fundraising, party flows |
 | FARA | `/explore/fara.html` | Foreign agent registrations: principals, countries, registrant documents |
+| Hearings | `/explore/hearings.html` | Committee hearings: witnesses, member attendance, hearing search |
+| Nominations | `/explore/nominations.html` | Executive nominations: confirmation rates, agency positions, vote tallies |
+| Research | `/explore/research.html` | Cross-domain research: speeches near trades, committee trade conflicts, revolving door, lobbying-legislation overlap |
 | Entity | `/explore/entity.html` | Cross-domain entity search: find any person/org across all datasets |
 | Speech | `/explore/speech.html` | Congressional Record full text: speakers, referenced bills, same-day entries |
 | API | `/explore/api.html` | API documentation and interactive query builder |
+| Witness-Lobby Overlap | `/explore/witness-lobby.html` | Organizations that testify AND lobby Congress |
+| Commenter-Lobby Overlap | `/explore/commenter-lobby.html` | Organizations that comment on rules AND lobby |
+| Committee Stock Trading | `/explore/committee-trades.html` | Stock trades by committee members |
+| Committee Donors | `/explore/committee-donors.html` | PAC donations to committee members |
+| Speeches Near Trades | `/explore/speeches-trades.html` | Floor speeches within 7 days of trades |
+| Committee Trade Conflicts | `/explore/trade-conflicts.html` | Trading in sectors committees regulate |
+| Most Lobbied Bills | `/explore/lobbied-bills.html` | Bills with most lobbying activity |
+| The Revolving Door | `/explore/revolving-door.html` | Former members who became lobbyists |
 
 All pages use the same DataDawn dark theme with self-contained HTML (inline CSS + JS). Data is queried live from the Datasette API.
 
@@ -131,6 +157,40 @@ All pages use the same DataDawn dark theme with self-contained HTML (inline CSS 
 - Roll call votes with individual member positions.
 - Coverage: 101st–119th Congress (1989–present).
 
+**GovInfo CHRG Collection (Committee Hearings)**
+- URL: https://api.govinfo.gov/published?collection=CHRG
+- Free, public, requires a free GovInfo API key.
+- Committee hearing metadata, witness lists, member attendance.
+- Coverage: 1993–present.
+
+**Congress.gov CRS Reports API**
+- URL: https://api.congress.gov/v3/crsreport
+- Requires a free API key.
+- CRS report metadata, summaries, author info, related legislation.
+
+**Congress.gov Nominations API**
+- URL: https://api.congress.gov/v3/nomination
+- Requires a free API key.
+- Executive nominations: nominee info, position, agency, confirmation status, action history.
+- Coverage: Congresses 100–119.
+
+**Congress.gov Treaties API**
+- URL: https://api.congress.gov/v3/treaty
+- Requires a free API key.
+- Treaty metadata, countries/parties, index terms, Senate resolution text, action history.
+- Coverage: Congresses 89–119.
+
+**GovInfo GAOREPORTS Collection (GAO Reports)**
+- URL: https://api.govinfo.gov/published?collection=GAOREPORTS
+- Free, public, requires a free GovInfo API key.
+- GAO report metadata, abstracts, legal references (USC, public laws, statutes at large), subject classifications.
+- Coverage: 1994–2008.
+
+**SEC EDGAR (Ticker-SIC Mapping)**
+- URL: https://www.sec.gov/files/company_tickers.json
+- Free, public, requires `User-Agent` header.
+- Maps stock tickers to SIC industry codes via EDGAR company filings. Used for committee trade conflict detection.
+
 **License**
 - All U.S. government data. Public domain. No copyright restrictions.
 
@@ -183,11 +243,15 @@ Scripts are numbered in execution order. Run from the project root:
 12. python3 scripts/13_senate_efd.py               # ~30 min (Senate stock trades from eFD)
 13. python3 scripts/14_house_fd_ptr.py             # ~2.5 hours (House PTR PDF download + parse)
 14. python3 scripts/15_lobbying_disclosure.py      # ~2 hours (lobbying disclosures from Senate LDA API)
-15. python3 scripts/05_build_database.py           # ~5 minutes (builds from raw JSON + APIs)
-16. bash deploy/deploy.sh                          # ~15 min (uploads to server)
+15. python3 scripts/16_committee_hearings.py       # committee hearings from GovInfo CHRG
+16. python3 scripts/17_crs_reports.py              # CRS reports from Congress.gov API
+17. python3 scripts/18_nominations_treaties.py     # executive nominations + treaties from Congress.gov API
+18. python3 scripts/19_gao_reports.py              # GAO reports from GovInfo GAOREPORTS
+19. python3 scripts/05_build_database.py           # ~5 minutes (builds from raw JSON + APIs)
+20. bash deploy/deploy.sh                          # ~15 min (uploads to server)
 ```
 
-Steps 1-14 download raw data and are idempotent (safe to re-run; state files track progress). Step 15 builds the database from whatever raw data exists. You can run step 15 at any point to get a database from partial data.
+Steps 1-18 download raw data and are idempotent (safe to re-run; state files track progress). Step 19 builds the database from whatever raw data exists. You can run step 19 at any point to get a database from partial data.
 
 **Key architectural constraint**: The Regulations.gov API returns a maximum of **5,000 results per query** (20 pages × 250 per page). This drives the entire download strategy:
 - Script 03 queries by year, then subdivides to months if a year exceeds 5,000
@@ -777,6 +841,155 @@ Individual contributions to federal candidates (4.4M+ records).
 | `state` | Contributor's state |
 | `cycle` | Election cycle |
 
+### hearings
+
+Committee hearings from GovInfo CHRG collection (46,295 hearings, 1993–present).
+
+| Column | Description |
+|---|---|
+| `package_id` (PK) | GovInfo package identifier |
+| `title` | Hearing title |
+| `committee` | Committee name |
+| `chamber` | Senate, House, or Joint |
+| `congress` | Congress number |
+| `session` | Session number |
+| `date` | Hearing date |
+| `jacket_number` | GPO jacket number |
+| `url` | Link to hearing on GovInfo |
+
+### hearing_witnesses
+
+Witnesses who testified at committee hearings.
+
+| Column | Description |
+|---|---|
+| `package_id` | Links to hearings |
+| `witness_name` | Witness name |
+| `organization` | Witness's organization or affiliation |
+| `position` | Witness's title or position |
+
+### hearing_members
+
+Congress members who participated in committee hearings.
+
+| Column | Description |
+|---|---|
+| `package_id` | Links to hearings |
+| `bioguide_id` | Links to congress_members |
+| `member_name` | Member name |
+| `party` | Party affiliation |
+| `state` | State |
+
+### crs_reports
+
+Congressional Research Service reports (13,617 reports).
+
+| Column | Description |
+|---|---|
+| `report_number` (PK) | CRS report number (e.g., "R12345") |
+| `title` | Report title |
+| `summary` | Report summary text |
+| `authors` | Report author(s) |
+| `published_date` | Publication date |
+| `updated_date` | Most recent update date |
+| `url` | Link to report |
+
+### crs_report_bills
+
+Cross-references between CRS reports and legislation.
+
+| Column | Description |
+|---|---|
+| `report_number` | Links to crs_reports |
+| `bill_id` | Links to legislation |
+| `congress` | Congress number |
+| `bill_type` | Bill type (hr, s, etc.) |
+| `bill_number` | Bill number |
+
+### nominations
+
+Executive nominations submitted to the Senate (44,711 nominations, Congresses 100–119).
+
+| Column | Description |
+|---|---|
+| `nomination_id` (PK) | Nomination identifier |
+| `congress` | Congress number |
+| `nominee_name` | Name of nominee |
+| `position` | Position nominated for |
+| `agency` | Agency or department |
+| `received_date` | Date received by Senate |
+| `latest_action_date` | Date of most recent action |
+| `latest_action_text` | Description of most recent action |
+| `confirmed` | 1 if confirmed, 0 otherwise |
+| `vote_yea` | Confirmation vote yea count |
+| `vote_nay` | Confirmation vote nay count |
+
+### nomination_actions
+
+Action history for executive nominations.
+
+| Column | Description |
+|---|---|
+| `nomination_id` | Links to nominations |
+| `action_date` | Date of action |
+| `action_text` | Description of action |
+
+### treaties
+
+Treaties submitted to the Senate (785 treaties, Congresses 89–119).
+
+| Column | Description |
+|---|---|
+| `treaty_id` (PK) | Treaty identifier |
+| `congress` | Congress number |
+| `treaty_number` | Treaty document number |
+| `title` | Treaty title |
+| `country` | Countries or parties involved |
+| `transmitted_date` | Date transmitted to Senate |
+| `index_terms` | Subject index terms |
+| `resolution_text` | Senate resolution text |
+| `latest_action_date` | Date of most recent action |
+| `latest_action_text` | Description of most recent action |
+
+### treaty_actions
+
+Action history for treaties.
+
+| Column | Description |
+|---|---|
+| `treaty_id` | Links to treaties |
+| `action_date` | Date of action |
+| `action_text` | Description of action |
+
+### gao_reports
+
+Government Accountability Office reports (16,582 reports, 1994–2008).
+
+| Column | Description |
+|---|---|
+| `package_id` (PK) | GovInfo package identifier |
+| `title` | Report title |
+| `report_number` | GAO report number |
+| `published_date` | Publication date |
+| `abstract` | Report abstract/summary |
+| `subject_terms` | Subject classifications |
+| `usc_references` | U.S. Code citations |
+| `public_law_references` | Public law citations |
+| `statute_references` | Statutes at Large citations |
+| `url` | Link to report on GovInfo |
+
+### cbo_cost_estimates
+
+Congressional Budget Office cost estimates linked to legislation (~17,200 estimates).
+
+| Column | Description |
+|---|---|
+| `bill_id` | Links to legislation |
+| `title` | Cost estimate title |
+| `pub_date` | Publication date |
+| `description` | Cost estimate description |
+| `url` | Link to CBO cost estimate |
+
 ### Views
 
 | View | Description |
@@ -799,10 +1012,31 @@ Individual contributions to federal candidates (4.4M+ records).
 | `lobbying_by_year` | Lobbying spending aggregated by year |
 | `top_lobbying_clients` | Top lobbying clients by total spending |
 | `spending_by_agency` | Federal spending aggregated by agency |
+| `nomination_rates` | Confirmation rates by congress (total, confirmed, withdrawn, returned) |
+| `hearing_activity` | Hearing counts and unique witnesses by congress and chamber |
 | `fec_employer_totals` | Top employers by total campaign contributions |
 | `fec_employer_to_candidate` | Employer-to-candidate contribution flows |
 | `fec_employer_to_party` | Employer-to-party contribution flows |
 | `fec_top_occupations` | Top occupations by total contributions |
+
+### Pre-computed Research Tables
+
+These materialized tables pre-compute expensive cross-domain joins for the Research explore page:
+
+| Table | Description |
+|-------|-------------|
+| `speeches_near_trades` | Floor speeches within 7 days of a stock trade by the same member |
+| `committee_trade_conflicts` | Trades in stocks whose SIC code falls within the member's committee jurisdiction |
+| `committee_donor_summary` | PAC donations to current committee members |
+| `lobbying_bill_summary` | Bills most frequently referenced in lobbying filings |
+| `witness_lobby_overlap` | Organizations that both testified at hearings and lobbied |
+| `commenter_lobby_overlap` | Organizations that both submitted regulatory comments and lobbied |
+| `revolving_door` | Former members of Congress who became registered lobbyists |
+| `lobbying_issue_summary` | Lobbying activity counts per issue code |
+| `legislation_policy_summary` | Bill counts per policy area |
+| `legislation_sponsor_summary` | Bill counts per sponsor |
+| `spending_agency_summary` | Spending totals per agency |
+| `docket_summary` | Best FR abstract per docket (enriches dockets_fts) |
 
 ### FTS5 Tables
 
@@ -820,6 +1054,10 @@ Full-text search indexes (SQLite FTS5):
 - `fara_registrants_fts` — name, business_name
 - `fara_foreign_principals_fts` — foreign_principal, registrant_name, country
 - `fec_employer_fts` — employer names for contribution search
+- `hearings_fts` — title, chamber, committees
+- `crs_reports_fts` — title, authors, topics, summary
+- `nominations_fts` — description, organization, citation, status
+- `gao_reports_fts` — title, abstract, subjects, report_number
 
 ---
 
@@ -847,6 +1085,11 @@ Full-text search indexes (SQLite FTS5):
 | `scripts/13_senate_efd.py` | Download Senate stock trades from efdsearch.senate.gov (government source) |
 | `scripts/14_house_fd_ptr.py` | Download and parse House PTR PDFs for transaction-level stock trade data |
 | `scripts/15_lobbying_disclosure.py` | Download lobbying disclosure data from Senate LDA API (filings, contributions, lobbyists) |
+| `scripts/16_committee_hearings.py` | Download committee hearing metadata, witnesses, and member attendance from GovInfo CHRG |
+| `scripts/17_crs_reports.py` | Download CRS reports and related legislation from Congress.gov API |
+| `scripts/18_nominations_treaties.py` | Download executive nominations and treaties from Congress.gov API |
+| `scripts/19_gao_reports.py` | Download GAO reports from GovInfo GAOREPORTS collection |
+| `scripts/20_sec_ticker_sic.py` | Download SIC codes for stock tickers from SEC EDGAR for committee trade conflict analysis |
 | `scripts/16_backfill_dockets.py` | Backfill truncated docket lists for EPA/FDA from Regulations.gov |
 | `scripts/build_lis_crosswalk.py` | Build LIS-to-bioguide crosswalk for vote linkage |
 | `scripts/refresh_member_stats.py` | Refresh pre-computed member stats (trades, speeches, votes, bills) |
@@ -868,12 +1111,15 @@ The live instance at regs.datadawn.org includes 80+ pre-built SQL queries across
 - **Cosponsors**: Bill cosponsors (original vs. later), most prolific cosponsors, bipartisan bills
 - **Stock trades**: Trades by member, most active traders, most traded stocks, trades by ticker, member activity timelines
 - **Legislation**: Search bills, browse by policy area, bill detail with actions/subjects
-- **Lobbying**: Search filings, top clients, lobbying by issue area, revolving door (covered positions)
+- **Lobbying**: Search filings, top clients, lobbying by issue area, revolving door (covered positions), bills referenced in lobbying
 - **FARA**: Search registrants, foreign principals by country, registrant documents
 - **Campaign finance**: Contributions by employer, top donors, candidate fundraising, party flows
+- **Hearings**: Committee hearings, witness search, member attendance, witness-lobbyist overlap
+- **Nominations**: Executive nominations, confirmation rates by congress, agency positions
+- **Research**: Speeches near trades, committee trade conflicts (SIC-based), revolving door (former members lobbying), lobbying-legislation overlap, witness-lobby overlap, commenter-lobby overlap
 - **Votes**: Roll call votes, member voting records, party-line analysis
 - **Spending**: Search awards, agency spending summary
-- **Cross-references**: FR ↔ Regulations.gov document links
+- **Cross-references**: FR ↔ Regulations.gov document links, CRS reports ↔ legislation, lobbying ↔ legislation
 
 These are defined in `deploy/metadata.json`. The metadata also configures facets (agency, year, submitter type, document type, chamber) and sort orders for each table.
 
