@@ -1135,6 +1135,26 @@ These are defined in `deploy/metadata.json`. The metadata also configures facets
 
 ---
 
+## Next Rebuild TODO
+
+These items should be addressed in the next `05_build_database.py` rebuild:
+
+1. **Normalize `transaction_type` upstream** — House PTR data uses abbreviated codes (`P`, `S`, `E`, `S (partial)`) while Senate uses full names (`Purchase`, `Sale (Full)`, etc.). Normalize all to full names during build so explore pages don't need client-side translation. Affects: `stock_trades` table, `speeches_near_trades`, `committee_trade_conflicts`.
+
+2. **Fix `committee_donor_summary` subcommittee duplication** — Members who sit on both a parent committee and its subcommittees appear multiple times in the summary table, inflating donation counts. The build should deduplicate by (bioguide_id, fec_committee_id) pair.
+
+3. **Port `_tmp_lobby_clients` optimization into `05_build_database.py`** — The pre-computed temp table with indexed `norm_name` column (currently only in `resume_build.py`) reduced `witness_lobby_overlap` and `commenter_lobby_overlap` build time from 60+ minutes to <1 second. Merge this pattern into the main build script.
+
+4. **Add GAO Oversight connection** — 4,990 GAO reports cite Public Laws in the `public_laws` field. Parse the comma-separated field, cross-reference with `legislation` table, and create a `gao_legislation_overlap` materialized table + explore page.
+
+5. **Add FARA Hearings connection** — 56 FARA registrants matched to hearing witnesses by organization name. Create a `fara_hearing_overlap` materialized table + explore page.
+
+6. **Remove "Independent" party filter from revolving-door page** — Zero matches (one Whig member displays as Independent). Either remove the filter button or fix the underlying party mapping.
+
+7. **Consider adding permanent `name_normalized` columns** to `hearing_witnesses` and lobbying tables for faster cross-reference joins in future rebuilds.
+
+---
+
 ## Known Limitations
 
 1. **Comment details download in progress** — Full comment text requires a separate API call per comment. Script `07_full_comment_details.py` is actively downloading at ~780 req/hr. 42K of 151K priority comments (organizations) downloaded so far. At current rates, the full 3.7M comments would take months — the prioritized approach (organizations first) is the practical strategy.
