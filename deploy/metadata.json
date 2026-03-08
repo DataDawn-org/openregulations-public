@@ -175,28 +175,28 @@
                 "member_votes": {
                     "description_html": "Individual member voting records for 8.3M+ votes. Links to roll_call_votes and congress_members via bioguide_id.",
                     "facets": ["vote_cast"],
-                    "sort_desc": "vote_id"
+                    "sort_desc": "congress"
                 },
                 "comment_details": {
                     "description_html": "Full comment text and metadata for a subset of Regulations.gov comments. Includes submitter type, organization, and attachment info.",
                     "sort_desc": "posted_date"
                 },
                 "fec_candidates": {
-                    "label_column": "candidate_name",
+                    "label_column": "cand_name",
                     "description_html": "FEC candidate records \u2014 64,000+ candidates for federal office with party, state, office, and election cycles.",
-                    "facets": ["candidate_office", "candidate_party", "candidate_state"],
-                    "sort": "candidate_name"
+                    "facets": ["cand_office", "cand_pty_affiliation", "cand_office_st"],
+                    "sort": "cand_name"
                 },
                 "fec_committees": {
-                    "label_column": "committee_name",
+                    "label_column": "cmte_nm",
                     "description_html": "FEC political committees \u2014 PACs, party committees, campaign committees. 155,000+ records.",
-                    "facets": ["committee_type", "committee_party"],
-                    "sort": "committee_name"
+                    "facets": ["cmte_tp", "cmte_pty_affiliation"],
+                    "sort": "cmte_nm"
                 },
                 "fec_contributions": {
                     "description_html": "FEC contributions from committees to candidates. 4.4M+ records with amounts, dates, and election types.",
-                    "facets": ["transaction_type"],
-                    "sort_desc": "contribution_receipt_date"
+                    "facets": ["entity_tp"],
+                    "sort_desc": "transaction_dt"
                 },
                 "fec_candidate_crosswalk": {
                     "description_html": "Maps FEC candidate IDs to bioguide_id, enabling cross-reference between campaign finance and congressional activity."
@@ -218,25 +218,24 @@
                     "sort_desc": "total_amount"
                 },
                 "fara_registrants": {
-                    "label_column": "registrant_name",
+                    "label_column": "name",
                     "description_html": "FARA foreign agent registrants \u2014 firms and individuals registered under the Foreign Agents Registration Act.",
-                    "facets": ["registration_status"],
-                    "sort": "registrant_name"
+                    "sort": "name"
                 },
                 "fara_foreign_principals": {
-                    "label_column": "foreign_principal_name",
+                    "label_column": "foreign_principal",
                     "description_html": "Foreign principals (governments, political parties, foreign entities) represented by FARA registrants. 17,000+ records with country of origin.",
-                    "facets": ["country", "principal_type"],
-                    "sort": "foreign_principal_name"
+                    "facets": ["country"],
+                    "sort": "foreign_principal"
                 },
                 "fara_short_forms": {
                     "description_html": "Individual foreign agents (employees/associates of registrants) registered under FARA. 44,000+ records.",
-                    "sort": "agent_name"
+                    "sort": "last_name"
                 },
                 "fara_registrant_docs": {
                     "description_html": "Documents filed by FARA registrants \u2014 registration statements, supplemental statements, and informational materials. 151,000+ filings.",
                     "facets": ["document_type"],
-                    "sort_desc": "stamped_date"
+                    "sort_desc": "date_stamped"
                 },
                 "lobbying_filings": {
                     "description_html": "Senate Lobbying Disclosure Act filings (1999\u20132026). LD-1 registrations and LD-2 quarterly activity reports. 1.5M+ filings.",
@@ -245,7 +244,7 @@
                 },
                 "lobbying_activities": {
                     "description_html": "Lobbying activity reports by issue area. Each row is one issue area within a quarterly filing, with government entities contacted and description of lobbying activities.",
-                    "facets": ["general_issue_code"],
+                    "facets": ["issue_code"],
                     "sort_desc": "filing_year"
                 },
                 "lobbying_lobbyists": {
@@ -268,6 +267,72 @@
                 },
                 "lis_to_bioguide": {
                     "description_html": "Crosswalk mapping Senate LIS IDs to bioguide_id for 326 senators."
+                },
+                "hearings": {
+                    "label_column": "title",
+                    "description_html": "Committee hearing transcripts from GovInfo (1993\u2013present). Includes committee info, witness testimony, and member attendance.",
+                    "facets": ["chamber", "congress"],
+                    "sort_desc": "date_issued",
+                    "columns": {
+                        "chamber": "HOUSE, SENATE, or JOINT.",
+                        "congress": "Congress number (e.g., 118 for 2023\u20132024).",
+                        "committees": "JSON array of committee names and hierarchies."
+                    }
+                },
+                "hearing_witnesses": {
+                    "label_column": "name",
+                    "description_html": "Witnesses who testified at committee hearings, with parsed name, title, organization, and location.",
+                    "facets": ["organization"],
+                    "sort": "name"
+                },
+                "hearing_members": {
+                    "description_html": "Committee members present at hearings.",
+                    "facets": ["role"],
+                    "sort": "name"
+                },
+                "crs_reports": {
+                    "label_column": "title",
+                    "description_html": "Congressional Research Service reports with summaries, authors, and topic classifications.",
+                    "sort_desc": "publish_date"
+                },
+                "crs_report_bills": {
+                    "description_html": "Cross-references between CRS reports and related legislation. Links CRS analysis to specific bills tracked in the legislation table."
+                },
+                "nominations": {
+                    "label_column": "description",
+                    "description_html": "Executive nominations to the Senate (Congresses 100\u2013119), with confirmation status and vote tallies.",
+                    "facets": ["congress", "status"],
+                    "sort_desc": "received_date",
+                    "columns": {
+                        "status": "Confirmed, Withdrawn, Returned, Rejected, or Pending.",
+                        "is_civilian": "Whether this is a civilian (non-military) nomination.",
+                        "vote_yea": "Yea votes if confirmed by roll call.",
+                        "vote_nay": "Nay votes if confirmed by roll call."
+                    }
+                },
+                "nomination_actions": {
+                    "description_html": "Action history for executive nominations (committee referral, hearings, votes).",
+                    "sort_desc": "action_date"
+                },
+                "treaties": {
+                    "label_column": "title",
+                    "description_html": "Treaties submitted to the Senate (Congresses 89\u2013119), with countries, index terms, and resolution text.",
+                    "facets": ["congress"],
+                    "sort_desc": "transmitted_date"
+                },
+                "treaty_actions": {
+                    "description_html": "Action history for treaties.",
+                    "sort_desc": "action_date"
+                },
+                "gao_reports": {
+                    "label_column": "title",
+                    "description_html": "Government Accountability Office reports (1994\u20132008) with abstracts, legal references, and subject classifications.",
+                    "sort_desc": "date_issued"
+                },
+                "cbo_cost_estimates": {
+                    "label_column": "title",
+                    "description_html": "CBO cost estimates linked to legislation, extracted from Congress.gov bill data.",
+                    "sort_desc": "pub_date"
                 }
             },
             "queries": {
@@ -761,6 +826,91 @@
                     "title": "Votes: Recent Roll Calls",
                     "description": "Most recent roll call votes across both chambers.",
                     "sql": "SELECT date, chamber, question, result, bill_id FROM roll_call_votes ORDER BY date DESC LIMIT 50"
+                },
+                "nomination_confirmation_rates": {
+                    "title": "Nomination Confirmation Rates by Congress",
+                    "description": "Confirmation, withdrawal, return, and rejection rates for presidential nominations by Congress.",
+                    "sql": "SELECT congress, COUNT(*) AS total, SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) AS confirmed, SUM(CASE WHEN status = 'Withdrawn' THEN 1 ELSE 0 END) AS withdrawn, SUM(CASE WHEN status = 'Returned' THEN 1 ELSE 0 END) AS returned, SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END) AS rejected, ROUND(100.0 * SUM(CASE WHEN status = 'Confirmed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS confirm_pct FROM nominations GROUP BY congress ORDER BY congress"
+                },
+                "top_hearing_witnesses": {
+                    "title": "Most Frequent Hearing Witnesses",
+                    "description": "Witnesses who have appeared at the most congressional hearings, with their organization and date range.",
+                    "sql": "SELECT hw.name, hw.organization, COUNT(DISTINCT hw.package_id) AS hearings_count, MIN(h.date_issued) AS first_appearance, MAX(h.date_issued) AS last_appearance FROM hearing_witnesses hw JOIN hearings h ON hw.package_id = h.package_id WHERE hw.name != '' GROUP BY hw.name HAVING hearings_count >= 3 ORDER BY hearings_count DESC LIMIT 100"
+                },
+                "hearings_by_committee": {
+                    "title": "Committee Hearing Activity",
+                    "description": "Number of hearings held by each chamber and Congress, showing committee activity levels over time.",
+                    "sql": "SELECT chamber, congress, COUNT(*) AS hearing_count, MIN(date_issued) AS earliest, MAX(date_issued) AS latest FROM hearings GROUP BY chamber, congress ORDER BY congress DESC, chamber"
+                },
+                "gao_reports_by_subject": {
+                    "title": "GAO Reports by Subject Area",
+                    "description": "Government Accountability Office reports grouped by subject area, ranked by volume.",
+                    "sql": "SELECT subjects, COUNT(*) AS report_count, MIN(date_issued) AS earliest, MAX(date_issued) AS latest FROM gao_reports WHERE subjects IS NOT NULL AND subjects != '' GROUP BY subjects ORDER BY report_count DESC LIMIT 100"
+                },
+                "crs_reports_by_topic": {
+                    "title": "CRS Reports by Topic",
+                    "description": "Congressional Research Service reports grouped by topic, with status breakdown.",
+                    "sql": "SELECT topics, COUNT(*) AS report_count, GROUP_CONCAT(DISTINCT status) AS statuses FROM crs_reports WHERE topics IS NOT NULL AND topics != '' GROUP BY topics ORDER BY report_count DESC LIMIT 100"
+                },
+                "recent_confirmed_nominations": {
+                    "title": "Recently Confirmed Nominations",
+                    "description": "The most recently confirmed presidential nominations, including vote tallies.",
+                    "sql": "SELECT n.citation, n.description, n.organization, n.received_date, n.status, n.vote_yea, n.vote_nay FROM nominations n WHERE n.status = 'Confirmed' ORDER BY n.received_date DESC LIMIT 100"
+                },
+                "treaties_by_country": {
+                    "title": "Treaties by Country",
+                    "description": "Treaties grouped by country, showing topic areas and date ranges.",
+                    "sql": "SELECT countries, COUNT(*) AS treaty_count, GROUP_CONCAT(DISTINCT topic) AS topics, MIN(transmitted_date) AS earliest, MAX(transmitted_date) AS latest FROM treaties WHERE countries IS NOT NULL GROUP BY countries ORDER BY treaty_count DESC"
+                },
+                "witness_lobbyist_overlap": {
+                    "title": "Hearing Witnesses Who Also Lobby Congress",
+                    "description": "Organizations that testified as expert witnesses at congressional hearings while also paying lobbyists. Shows the intersection of public testimony and private influence.",
+                    "sql": "SELECT * FROM witness_lobby_overlap ORDER BY hearings_testified DESC"
+                },
+                "commenter_lobbyist_overlap": {
+                    "title": "Organizations That Comment on Regulations AND Lobby",
+                    "description": "Organizations that submit public comments on regulations while also paying lobbyists — showing dual-channel influence on the same regulatory process.",
+                    "sql": "SELECT * FROM commenter_lobby_overlap ORDER BY comments_filed DESC"
+                },
+                "committee_trading_activity": {
+                    "title": "Stock Trading by Committee Members",
+                    "description": "Members of Congress trading stocks while serving on committees that may oversee related industries. Shows trade counts, tickers, and committee roles.",
+                    "sql": "SELECT cm.full_name, cm.party, cm.state, c.name AS committee_name, cmem.title AS committee_role, COUNT(DISTINCT st.id) AS total_trades, COUNT(DISTINCT st.ticker) AS unique_tickers, SUM(CASE WHEN st.transaction_type LIKE '%Purchase%' THEN 1 ELSE 0 END) AS purchases, SUM(CASE WHEN st.transaction_type LIKE '%Sale%' THEN 1 ELSE 0 END) AS sales, MIN(st.transaction_date) AS first_trade, MAX(st.transaction_date) AS last_trade FROM committee_memberships cmem JOIN committees c ON cmem.committee_id = c.committee_id JOIN congress_members cm ON cmem.bioguide_id = cm.bioguide_id JOIN stock_trades st ON cmem.bioguide_id = st.bioguide_id WHERE st.ticker IS NOT NULL AND st.ticker != '' GROUP BY cmem.bioguide_id, cmem.committee_id HAVING total_trades >= 10 ORDER BY total_trades DESC"
+                },
+                "top_donors_to_committees": {
+                    "title": "Top Campaign Donors to Committee Members",
+                    "description": "Largest campaign contributions to current committee members, showing which PACs and organizations fund members of specific committees.",
+                    "sql": "SELECT committee_name, member_name, party, state, donor_committee, total_donated, contribution_count FROM committee_donor_summary ORDER BY total_donated DESC LIMIT 200"
+                },
+                "speeches_near_trades": {
+                    "title": "Floor Speeches Within 7 Days of Stock Trades",
+                    "description": "Members who gave floor speeches mentioning specific bills within 7 days of making stock trades — a potential indicator of trading on legislative knowledge.",
+                    "sql": "SELECT full_name, party, state, trade_date, ticker, asset_description, transaction_type, amount_range, speech_date, speech_title, days_apart FROM speeches_near_trades ORDER BY full_name, trade_date DESC LIMIT 500"
+                },
+                "most_lobbied_bills": {
+                    "title": "Most Lobbied Bills",
+                    "description": "Bills referenced most often in lobbying disclosure filings, showing which legislation attracts the most lobbying activity.",
+                    "sql": "SELECT bill_id, bill_title, policy_area, lobby_filings, unique_clients, issue_codes FROM lobbying_bill_summary ORDER BY lobby_filings DESC LIMIT 200"
+                },
+                "committee_trade_conflicts": {
+                    "title": "Stock Trades in Committee-Regulated Sectors",
+                    "description": "Members of Congress trading stocks that fall within the sectors regulated by their committee assignments — potential conflicts of interest.",
+                    "sql": "SELECT full_name, party, state, committee_name, jurisdiction_desc, jurisdiction_tier, sic_code, sic_description, transaction_date, ticker, asset_description, transaction_type, amount_range FROM committee_trade_conflicts ORDER BY full_name, transaction_date DESC LIMIT 500"
+                },
+                "revolving_door": {
+                    "title": "The Revolving Door: Former Members Who Became Lobbyists",
+                    "description": "Former members of Congress who registered as lobbyists, matched via name and covered-position disclosures in lobbying filings. Shows filing counts, clients, firms, and years active.",
+                    "sql": "SELECT full_name, party, state, congress_chamber, lobbying_filing_count, client_count, firm_count, first_lobbying_year, last_lobbying_year, total_reported_income, lobbying_firms, covered_position_sample FROM revolving_door ORDER BY lobbying_filing_count DESC LIMIT 300"
+                },
+                "committee_sector_map": {
+                    "title": "Committee Jurisdiction → Regulated Sectors",
+                    "description": "Reference table mapping each congressional committee to the industries, tickers, and GICS/SIC sectors under its jurisdiction.",
+                    "sql": "SELECT committee_id, committee_name, chamber, regulated_sectors, example_tickers, gics_sectors, sic_ranges FROM committee_sectors ORDER BY chamber, committee_name"
+                },
+                "lobbying_issue_agency_map": {
+                    "title": "Lobbying Issue Codes → Agencies & Committees",
+                    "description": "Reference table mapping each lobbying disclosure issue code to the federal agencies and congressional committees with jurisdiction.",
+                    "sql": "SELECT issue_code, issue_description, primary_agencies, regs_gov_agency_prefixes, related_committee_ids, notes FROM lobbying_issue_agencies ORDER BY issue_code"
                 }
             }
         },

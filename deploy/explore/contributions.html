@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campaign Contributions — OpenRegs by DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 3rem; border-bottom: 1px solid var(--border); }
+        .nav-brand { font-family: 'DM Serif Display', serif; font-size: 1.4rem; color: var(--dawn-gold); text-decoration: none; letter-spacing: 0.02em; }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 400; color: var(--text-muted); text-decoration: none; text-transform: uppercase; letter-spacing: 0.1em; transition: color 0.3s; }
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header { padding: 4rem 3rem 2rem; max-width: 900px; margin: 0 auto; text-align: center; }
+        .search-header h1 { font-family: 'DM Serif Display', serif; font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 400; background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
+        .search-header p { font-size: 1rem; color: var(--text-secondary); font-weight: 300; max-width: 600px; margin: 0 auto; }
+
+        .search-container { max-width: 800px; margin: 2rem auto 0; padding: 0 3rem; }
+        .search-box { display: flex; align-items: center; background: var(--deep); border: 1px solid var(--border); border-radius: 12px; padding: 0.25rem; transition: border-color 0.3s, box-shadow 0.3s; }
+        .search-box:focus-within { border-color: rgba(245, 158, 11, 0.4); box-shadow: 0 0 30px rgba(245, 158, 11, 0.08); }
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+        .search-box input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-family: 'Outfit', sans-serif; font-size: 1.1rem; font-weight: 300; padding: 1rem 0.5rem; }
+        .search-box input::placeholder { color: var(--text-muted); }
+        .search-btn { background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose)); border: none; color: var(--night); font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; font-weight: 500; padding: 0.9rem 1.8rem; border-radius: 9px; cursor: pointer; letter-spacing: 0.05em; text-transform: uppercase; transition: opacity 0.2s, transform 0.2s; flex-shrink: 0; }
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .tabs { display: flex; justify-content: center; gap: 0.25rem; margin: 1.5rem auto 0; max-width: 800px; padding: 0 3rem; flex-wrap: wrap; }
+        .tab { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 400; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 0.6rem 1.2rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.08em; transition: all 0.3s; border-radius: 6px; }
+        .tab:hover { color: var(--text-secondary); background: var(--surface-hover); }
+        .tab.active { color: var(--dawn-gold); border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); }
+
+        .examples { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 1.5rem; }
+        .example-chip { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 0.4rem 0.9rem; border-radius: 20px; cursor: pointer; transition: all 0.3s; letter-spacing: 0.03em; }
+        .example-chip:hover { color: var(--dawn-gold); border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.06); }
+
+        .results-area { max-width: 900px; margin: 2rem auto; padding: 0 3rem; }
+        .results-status { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1rem; letter-spacing: 0.05em; min-height: 1.2em; }
+        .results-status .count { color: var(--dawn-gold); }
+
+        .result-card { background: var(--deep); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 0.75rem; transition: border-color 0.3s, transform 0.2s; }
+        .result-card:hover { border-color: rgba(245, 158, 11, 0.2); transform: translateY(-1px); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.5rem; }
+        .card-title { font-family: 'DM Serif Display', serif; font-size: 1.05rem; color: var(--text-primary); line-height: 1.3; }
+        .card-meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+        .meta-item { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-muted); letter-spacing: 0.03em; }
+        .meta-item span { color: var(--dawn-gold); }
+        .money-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 500; color: var(--dawn-gold); background: rgba(245, 158, 11, 0.08); padding: 0.2rem 0.6rem; border-radius: 4px; flex-shrink: 0; }
+
+        .party-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 3px; }
+        .party-badge.dem { background: rgba(59,130,246,0.15); color: #60a5fa; }
+        .party-badge.rep { background: rgba(239,68,68,0.15); color: #f87171; }
+        .party-badge.other { background: var(--surface); color: var(--text-muted); }
+
+        .bar-container { height: 6px; background: var(--surface); border-radius: 3px; margin-top: 0.5rem; overflow: hidden; display: flex; }
+        .bar-dem { background: #60a5fa; height: 100%; }
+        .bar-rep { background: #f87171; height: 100%; }
+        .bar-other { background: var(--text-muted); height: 100%; }
+
+        .pagination { display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem; padding-bottom: 2rem; }
+        .page-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted); background: var(--surface); border: 1px solid var(--border); padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; transition: all 0.3s; }
+        .page-btn:hover:not(:disabled) { color: var(--dawn-gold); border-color: rgba(245, 158, 11, 0.3); }
+        .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .loading { text-align: center; padding: 3rem; }
+        .loading-dots { display: inline-flex; gap: 0.4rem; }
+        .loading-dots span { width: 6px; height: 6px; background: var(--dawn-amber); border-radius: 50%; animation: loadPulse 1.2s ease-in-out infinite; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes loadPulse { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+
+        .empty-state { text-align: center; padding: 4rem 2rem; }
+        .empty-state .empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { color: var(--text-muted); font-size: 0.95rem; font-weight: 300; }
+        .empty-state .hint { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem; opacity: 0.6; }
+
+        .source-note { max-width: 900px; margin: 0 auto; padding: 2rem 3rem 3rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-muted); line-height: 1.7; border-top: 1px solid var(--border); }
+        .source-note a { color: var(--dawn-amber); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .search-header { padding: 3rem 1.5rem 1rem; }
+            .search-container, .results-area, .source-note { padding-left: 1.5rem; padding-right: 1.5rem; }
+            .tabs { padding: 0 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/member.html">Members</a>
+            <a href="/explore/regulation.html">Regulations</a>
+            <a href="/explore/legislation.html">Legislation</a>
+            <a href="/explore/hearings.html">Hearings</a>
+            <a href="/explore/nominations.html">Nominations</a>
+            <a href="/explore/research.html">Research</a>
+            <a href="/explore/lobbying.html">Lobbying</a>
+            <a href="/explore/contributions.html" class="active">Contributions</a>
+            <a href="/explore/fara.html">FARA</a>
+            <a href="/explore/entity.html">Entity</a>
+            <a href="/explore/api.html">API</a>
+            <a href="/openregs">Raw Database</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Campaign Contributions</h1>
+        <p>4.4 million FEC individual contribution records. Search by employer, candidate, or committee.</p>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search by employer name..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="employers">By Employer</div>
+            <div class="tab" data-tab="candidates">Employer &rarr; Candidate</div>
+            <div class="tab" data-tab="parties">Employer &rarr; Party</div>
+            <div class="tab" data-tab="individual">Individual Contributions</div>
+        </div>
+
+        <div class="examples">
+            <span class="example-chip" data-query="Google">Google</span>
+            <span class="example-chip" data-query="Goldman Sachs">Goldman Sachs</span>
+            <span class="example-chip" data-query="Amazon">Amazon</span>
+            <span class="example-chip" data-query="Walmart">Walmart</span>
+            <span class="example-chip" data-query="Microsoft">Microsoft</span>
+            <span class="example-chip" data-query="Boeing">Boeing</span>
+            <span class="example-chip" data-query="Lockheed Martin">Lockheed Martin</span>
+        </div>
+    </div>
+
+    <div class="results-area">
+        <div class="results-status" id="resultsStatus"></div>
+        <div id="results"></div>
+        <div class="pagination" id="pagination" style="display:none;">
+            <button class="page-btn" id="prevBtn" disabled>&larr; Previous</button>
+            <button class="page-btn" id="nextBtn">Next &rarr;</button>
+        </div>
+    </div>
+
+    <div class="source-note">
+        Source: <a href="https://www.fec.gov/data/browse-data/?tab=bulk-data">FEC Bulk Data</a> — Individual contributions to candidates and committees, election cycles 2010-2026.
+        Employer aggregations are pre-computed from individual filings. Employer names are as-reported by contributors (not standardized).
+        <br><br>
+        <a href="/explore/index.html">&larr; Back to OpenRegs</a> &middot; <a href="https://datadawn.org">DataDawn</a>
+    </div>
+
+<script>
+    const API = 'https://regs.datadawn.org/openregs';
+    const PAGE_SIZE = 10;
+    let currentTab = 'employers';
+    let currentQuery = '';
+    let currentOffset = 0;
+    let hasMore = false;
+
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const resultsDiv = document.getElementById('results');
+    const statusDiv = document.getElementById('resultsStatus');
+    const paginationDiv = document.getElementById('pagination');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    const placeholders = {
+        employers: 'Search by employer name...',
+        candidates: 'Search employer to see candidate recipients...',
+        parties: 'Search employer to see party breakdown...',
+        individual: 'Search by employer, candidate, or committee...'
+    };
+
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentTab = tab.dataset.tab;
+            searchInput.placeholder = placeholders[currentTab];
+            if (currentQuery) { currentOffset = 0; doSearch(); }
+        });
+    });
+
+    document.querySelectorAll('.example-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            searchInput.value = chip.dataset.query;
+            currentOffset = 0;
+            doSearch();
+        });
+    });
+
+    searchBtn.addEventListener('click', () => { currentOffset = 0; doSearch(); });
+    searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { currentOffset = 0; doSearch(); } });
+
+    function scrollToResults() { statusDiv.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    prevBtn.addEventListener('click', () => { if (currentOffset >= PAGE_SIZE) { currentOffset -= PAGE_SIZE; doSearch().then(scrollToResults); } });
+    nextBtn.addEventListener('click', () => { if (hasMore) { currentOffset += PAGE_SIZE; doSearch().then(scrollToResults); } });
+
+    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : s; }
+
+    function formatMoney(val) {
+        if (val == null) return '--';
+        const num = Number(val);
+        if (isNaN(num)) return val;
+        if (Math.abs(num) >= 1e9) return '$' + (num / 1e9).toFixed(1) + 'B';
+        if (Math.abs(num) >= 1e6) return '$' + (num / 1e6).toFixed(1) + 'M';
+        if (Math.abs(num) >= 1e3) return '$' + (num / 1e3).toFixed(0) + 'K';
+        return '$' + num.toLocaleString();
+    }
+
+    function formatNumber(n) { return n == null ? '--' : Number(n).toLocaleString(); }
+
+    function partyClass(p) {
+        if (!p) return 'other';
+        if (p.startsWith('DEM') || p === 'D') return 'dem';
+        if (p.startsWith('REP') || p === 'R') return 'rep';
+        return 'other';
+    }
+
+    function partyLabel(p) {
+        if (!p) return '?';
+        if (p.startsWith('DEM') || p === 'D') return 'D';
+        if (p.startsWith('REP') || p === 'R') return 'R';
+        return p.slice(0, 3);
+    }
+
+    function officeLabel(o) {
+        if (o === 'P') return 'President';
+        if (o === 'S') return 'Senate';
+        if (o === 'H') return 'House';
+        return o || '';
+    }
+
+    async function doSearch() {
+        currentQuery = searchInput.value.trim();
+        if (!currentQuery) return;
+
+        resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+        statusDiv.textContent = '';
+        paginationDiv.style.display = 'none';
+
+        const qSafe = currentQuery.replace(/"/g, '""').replace(/'/g, "''");
+        const qFTS = currentQuery.replace(/"/g, '""');
+        let sql, countSql;
+
+        switch (currentTab) {
+            case 'employers':
+                sql = `SELECT employer, donation_count, total_amount, avg_amount, unique_states, min_cycle, max_cycle FROM fec_employer_totals WHERE rowid IN (SELECT rowid FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"') ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"'`;
+                break;
+            case 'candidates':
+                sql = `SELECT employer, cand_name, party, office, state, cycle, donation_count, total_amount, bioguide_id FROM fec_employer_to_candidate WHERE employer LIKE '%${qSafe}%' ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_candidate WHERE employer LIKE '%${qSafe}%'`;
+                break;
+            case 'parties':
+                sql = `SELECT employer, party, cycle, donation_count, total_amount, candidate_count FROM fec_employer_to_party WHERE employer LIKE '%${qSafe}%' ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_party WHERE employer LIKE '%${qSafe}%'`;
+                break;
+            case 'individual':
+                sql = `SELECT cmte_name, cand_name, transaction_dt, transaction_amt, state, employer, occupation, cycle FROM fec_contributions WHERE employer LIKE '%${qSafe}%' ORDER BY transaction_amt DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_contributions WHERE employer LIKE '%${qSafe}%'`;
+                break;
+        }
+
+        const dataUrl = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+        const countUrl = `${API}.json?sql=${encodeURIComponent(countSql)}&_shape=objects`;
+
+        try {
+            const [resp, countResp] = await Promise.all([fetch(dataUrl), fetch(countUrl).catch(() => null)]);
+            if (!resp.ok) { const errData = await resp.json().catch(() => ({})); throw new Error(errData.error || `HTTP ${resp.status}`); }
+            const data = await resp.json();
+            let totalCount = null;
+            if (countResp && countResp.ok) { const cd = await countResp.json(); totalCount = cd.rows && cd.rows[0] ? cd.rows[0].cnt : null; }
+            const rows = data.rows || [];
+            hasMore = rows.length === PAGE_SIZE;
+
+            if (rows.length === 0) {
+                resultsDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">$</div><p>No results for "${esc(currentQuery)}"</p><div class="hint">Try a different employer name or switch tabs</div></div>`;
+                statusDiv.textContent = '0 results';
+                return;
+            }
+
+            const countLabel = totalCount ? Number(totalCount).toLocaleString() : `${rows.length}${hasMore ? '+' : ''}`;
+            const offsetLabel = currentOffset > 0 ? ` (showing ${currentOffset + 1}-${currentOffset + rows.length})` : '';
+            statusDiv.innerHTML = `<span class="count">${countLabel}</span> results${offsetLabel}`;
+
+            let html = '';
+            switch (currentTab) {
+                case 'employers': html = rows.map(renderEmployer).join(''); break;
+                case 'candidates': html = rows.map(renderCandidate).join(''); break;
+                case 'parties': html = rows.map(renderParty).join(''); break;
+                case 'individual': html = rows.map(renderIndividual).join(''); break;
+            }
+            resultsDiv.innerHTML = html;
+            paginationDiv.style.display = 'flex';
+            prevBtn.disabled = currentOffset === 0;
+            nextBtn.disabled = !hasMore;
+        } catch (err) {
+            resultsDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">!</div><p>Error fetching data</p><div class="hint">${esc(err.message)}</div></div>`;
+        }
+    }
+
+    function renderEmployer(r) {
+        return `<div class="result-card">
+            <div class="card-header">
+                <div class="card-title">${esc(r.employer)}</div>
+                <div class="money-badge">${formatMoney(r.total_amount)}</div>
+            </div>
+            <div class="card-meta">
+                <div class="meta-item">Contributions: <span>${formatNumber(r.donation_count)}</span></div>
+                <div class="meta-item">Avg: <span>${formatMoney(r.avg_amount)}</span></div>
+                <div class="meta-item">States: <span>${r.unique_states || '--'}</span></div>
+                <div class="meta-item">Cycles: <span>${r.min_cycle || '?'}-${r.max_cycle || '?'}</span></div>
+            </div>
+        </div>`;
+    }
+
+    function renderCandidate(r) {
+        const pc = partyClass(r.party);
+        const memberLink = r.bioguide_id ? `https://regs.datadawn.org/explore/member.html?id=${r.bioguide_id}` : null;
+        const nameHtml = memberLink
+            ? `<a href="${memberLink}" style="color:inherit;text-decoration:none;" target="_blank">${esc(r.cand_name)}</a>`
+            : esc(r.cand_name);
+        return `<div class="result-card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${esc(r.employer)} &rarr; ${nameHtml}</div>
+                </div>
+                <div class="money-badge">${formatMoney(r.total_amount)}</div>
+            </div>
+            <div class="card-meta">
+                <div class="meta-item"><span class="party-badge ${pc}">${partyLabel(r.party)}</span></div>
+                <div class="meta-item">Office: <span>${officeLabel(r.office)}</span></div>
+                ${r.state ? `<div class="meta-item">State: <span>${esc(r.state)}</span></div>` : ''}
+                <div class="meta-item">Cycle: <span>${r.cycle || '--'}</span></div>
+                <div class="meta-item">Contributions: <span>${formatNumber(r.donation_count)}</span></div>
+            </div>
+        </div>`;
+    }
+
+    function renderParty(r) {
+        const pc = partyClass(r.party);
+        return `<div class="result-card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${esc(r.employer)}</div>
+                </div>
+                <div class="money-badge">${formatMoney(r.total_amount)}</div>
+            </div>
+            <div class="card-meta">
+                <div class="meta-item"><span class="party-badge ${pc}">${esc(r.party)}</span></div>
+                <div class="meta-item">Cycle: <span>${r.cycle || '--'}</span></div>
+                <div class="meta-item">Contributions: <span>${formatNumber(r.donation_count)}</span></div>
+                <div class="meta-item">Candidates: <span>${formatNumber(r.candidate_count)}</span></div>
+            </div>
+        </div>`;
+    }
+
+    function renderIndividual(r) {
+        let dateStr = '--';
+        if (r.transaction_dt && r.transaction_dt.length === 8) {
+            dateStr = r.transaction_dt.slice(0, 2) + '/' + r.transaction_dt.slice(2, 4) + '/' + r.transaction_dt.slice(4);
+        } else if (r.transaction_dt) {
+            dateStr = r.transaction_dt;
+        }
+        return `<div class="result-card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${esc(truncate(r.cmte_name, 70))}</div>
+                    ${r.cand_name ? `<div style="font-size:0.85rem; color:var(--text-secondary); margin-top:0.2rem;">&rarr; ${esc(r.cand_name)}</div>` : ''}
+                </div>
+                <div class="money-badge">${formatMoney(r.transaction_amt)}</div>
+            </div>
+            <div class="card-meta">
+                <div class="meta-item">Date: <span>${dateStr}</span></div>
+                ${r.employer ? `<div class="meta-item">Employer: <span>${esc(truncate(r.employer, 30))}</span></div>` : ''}
+                ${r.occupation ? `<div class="meta-item">Occupation: <span>${esc(truncate(r.occupation, 25))}</span></div>` : ''}
+                ${r.state ? `<div class="meta-item">State: <span>${esc(r.state)}</span></div>` : ''}
+                <div class="meta-item">Cycle: <span>${r.cycle || '--'}</span></div>
+            </div>
+        </div>`;
+    }
+</script>
+
+</body>
+</html>

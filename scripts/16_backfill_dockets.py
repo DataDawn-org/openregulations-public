@@ -1,33 +1,29 @@
 #!/usr/bin/env python3
 """
-Phase 16: Backfill dockets for agencies that exceeded the 5,000-record pagination cap.
+Phase 16: Backfill stub dockets by fetching each one by ID from the Regulations.gov API.
 
-Script 02 downloads dockets with simple pagination but caps at 5,000 results
-(20 pages x 250/page). EPA and FDA both hit this cap. This script subdivides
-by date range (year -> month -> day) to retrieve all dockets.
+The database has ~72K stub dockets (id + agency_id only) that were backfilled from
+documents/comments referencing dockets not yet downloaded. This script fetches the
+full docket record for each stub.
 
-Raw JSON pages are saved to:
-  regulations_gov/dockets_backfill/{AGENCY}/{YEAR}/page_NNNN.json
-  regulations_gov/dockets_backfill/{AGENCY}/{YEAR}/{MM}/page_NNNN.json       (month subdivision)
-  regulations_gov/dockets_backfill/{AGENCY}/{YEAR}/{MM}/d{DD}/page_NNNN.json (day subdivision)
-
-State is tracked in logs/docket_backfill_state.json so the script can safely
-be re-run — completed year/agency combos are skipped.
+Raw JSON saved to: regulations_gov/dockets_backfill/{docket_id}.json
+State tracked in:  logs/docket_backfill_state.json (resumable)
 
 Usage:
-  python3 scripts/16_backfill_dockets.py               # both EPA and FDA
-  python3 scripts/16_backfill_dockets.py --agency EPA   # EPA only
-  python3 scripts/16_backfill_dockets.py --agency FDA   # FDA only
+  python3 scripts/16_backfill_dockets.py                    # all stubs
+  python3 scripts/16_backfill_dockets.py --agency EPA       # EPA stubs only
+  python3 scripts/16_backfill_dockets.py --agency FDA       # FDA stubs only
+  python3 scripts/16_backfill_dockets.py --api-key-2        # use second API key
+  python3 scripts/16_backfill_dockets.py --limit 1000       # stop after N
 """
 
 import argparse
 import json
-import sys
-import time
 import logging
 import signal
-from calendar import monthrange
-from datetime import date
+import sqlite3
+import sys
+import time
 from pathlib import Path
 
 import requests
@@ -38,20 +34,15 @@ from urllib3.util.retry import Retry
 API_BASE = "https://api.regulations.gov/v4"
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = PROJECT_DIR / "scripts" / "config.json"
-DATA_DIR = PROJECT_DIR / "regulations_gov/dockets_backfill"
+DB_PATH = PROJECT_DIR / "openregs.db"
+DATA_DIR = PROJECT_DIR / "regulations_gov" / "dockets_backfill"
 LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "docket_backfill_state.json"
-PROGRESS_FILE = LOG_DIR / "progress.txt"
 
-DEFAULT_AGENCIES = ["EPA", "FDA"]
-PAGE_SIZE = 250
-MAX_PAGE = 20  # API hard limit: page[number] max is 20
-MAX_RESULTS = MAX_PAGE * PAGE_SIZE  # 5,000
-MIN_INTERVAL = 3.6  # seconds between requests (1,000/hr)
-START_YEAR = 1994
+MIN_INTERVAL = 3.6  # seconds between requests (~1,000/hr)
 
 with open(CONFIG_FILE) as f:
-    API_KEY = json.load(f)["regulations_gov_api_key"]
+    _cfg = json.load(f)
 
 # === Logging ===
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -94,13 +85,10 @@ class RateLimiter:
         self.count += 1
 
 
-rate = RateLimiter(MIN_INTERVAL)
-
-
 # === HTTP Session ===
-def create_session():
+def create_session(api_key):
     s = requests.Session()
-    s.headers["X-Api-Key"] = API_KEY
+    s.headers["X-Api-Key"] = api_key
     retry = Retry(
         total=3,
         backoff_factor=5,
@@ -111,18 +99,51 @@ def create_session():
     return s
 
 
-def api_get(session, params):
-    """Rate-limited GET with 429 handling."""
+# === State ===
+def load_state():
+    if STATE_FILE.exists():
+        return json.loads(STATE_FILE.read_text())
+    return {"completed": [], "errors": [], "total_fetched": 0, "started_at": None}
+
+
+def save_state(state):
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    tmp.rename(STATE_FILE)
+
+
+# === Main ===
+def get_stub_dockets(agency=None):
+    """Get docket IDs that are stubs (no title) from the database."""
+    if not DB_PATH.exists():
+        log.error(f"Database not found: {DB_PATH}")
+        return []
+
+    db = sqlite3.connect(str(DB_PATH))
+    query = "SELECT id, agency_id FROM dockets WHERE title IS NULL OR title = ''"
+    if agency:
+        query += f" AND agency_id = '{agency}'"
+    query += " ORDER BY agency_id, id"
+    rows = db.execute(query).fetchall()
+    db.close()
+    return rows
+
+
+def fetch_docket(session, rate, docket_id):
+    """Fetch a single docket by ID."""
     rate.wait()
-    url = f"{API_BASE}/dockets"
-    resp = session.get(url, params=params, timeout=120)
+    url = f"{API_BASE}/dockets/{docket_id}"
+    resp = session.get(url, timeout=120)
 
     if resp.status_code == 429:
         retry_after = int(resp.headers.get("Retry-After", 60))
         log.warning(f"Rate limited (429). Sleeping {retry_after}s...")
         time.sleep(retry_after)
         rate.wait()
-        resp = session.get(url, params=params, timeout=120)
+        resp = session.get(url, timeout=120)
+
+    if resp.status_code == 404:
+        return None  # docket doesn't exist in API
 
     if resp.status_code == 403:
         log.error(f"403 Forbidden — check API key. Response: {resp.text[:500]}")
@@ -132,250 +153,103 @@ def api_get(session, params):
     return resp.json()
 
 
-# === State ===
-def load_state():
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text())
-    return {
-        "completed": {},       # key -> record count (e.g. "EPA:1994" -> 123)
-        "total_dockets": 0,
-        "api_calls": 0,
-        "started_at": None,
-    }
-
-
-def save_state(state):
-    state["api_calls"] = rate.count
-    tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=2))
-    tmp.rename(STATE_FILE)
-
-
-def progress(msg):
-    with open(PROGRESS_FILE, "a") as f:
-        f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
-
-
-# === Download helpers ===
-def paginate(session, agency, date_ge, date_le, output_dir):
-    """
-    Download all pages for a date-filtered docket query.
-    Returns (saved_count, total_elements).
-
-    saved_count is the number of records actually saved.
-    total_elements is the total reported by the API (may exceed saved_count
-    if the pagination cap is hit).
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    params = {
-        "filter[agencyId]": agency,
-        "filter[lastModifiedDate][ge]": date_ge,
-        "filter[lastModifiedDate][le]": date_le,
-        "sort": "lastModifiedDate",
-        "page[size]": PAGE_SIZE,
-        "page[number]": 1,
-    }
-
-    data = api_get(session, params)
-    meta = data.get("meta", {})
-    total_elements = meta.get("totalElements", 0)
-    total_pages = min(meta.get("totalPages", 1), MAX_PAGE)
-
-    if total_elements == 0:
-        return 0, 0
-
-    (output_dir / "page_0001.json").write_text(json.dumps(data))
-    saved = len(data.get("data", []))
-
-    for pg in range(2, total_pages + 1):
-        if _shutdown:
-            break
-        params["page[number]"] = pg
-        try:
-            data = api_get(session, params)
-            (output_dir / f"page_{pg:04d}.json").write_text(json.dumps(data))
-            saved += len(data.get("data", []))
-        except Exception as e:
-            log.error(f"    Page {pg} failed for {date_ge}..{date_le}: {e}")
-            break
-
-    return saved, total_elements
-
-
-def download_day(session, agency, year, month, day, output_dir):
-    """Download dockets for a single day."""
-    date_str = f"{year}-{month:02d}-{day:02d}"
-    day_dir = output_dir / f"d{day:02d}"
-
-    saved, total = paginate(session, agency, date_str, date_str, day_dir)
-
-    if total > MAX_RESULTS:
-        log.warning(
-            f"    [{agency}] {date_str}: single day exceeds cap "
-            f"({total} dockets) — only {saved} saved"
-        )
-
-    return saved
-
-
-def download_month(session, agency, year, month, output_dir):
-    """Download dockets for a single month, subdividing by day if needed."""
-    last_day = monthrange(year, month)[1]
-    m_ge = f"{year}-{month:02d}-01"
-    m_le = f"{year}-{month:02d}-{last_day:02d}"
-    m_dir = output_dir / f"{month:02d}"
-
-    saved, total = paginate(session, agency, m_ge, m_le, m_dir)
-
-    if total <= MAX_RESULTS:
-        return saved
-
-    # Month exceeds cap — subdivide by day
-    log.info(
-        f"    [{agency}] {year}-{month:02d} has {total} dockets — "
-        f"subdividing by day"
-    )
-    day_total = 0
-    for day in range(1, last_day + 1):
-        if _shutdown:
-            return day_total
-        if date(year, month, day) > date.today():
-            break
-        try:
-            count = download_day(session, agency, year, month, day, m_dir)
-            day_total += count
-        except Exception as e:
-            log.error(f"    [{agency}] {year}-{month:02d}-{day:02d} failed: {e}")
-
-    log.info(
-        f"    [{agency}] {year}-{month:02d}: {day_total} dockets via daily "
-        f"subdivision (API reported {total})"
-    )
-    return day_total
-
-
-def download_year(session, agency, year, state):
-    """
-    Download all dockets for an agency+year. Subdivides by month (then day)
-    if the year exceeds the pagination cap.
-    """
-    state_key = f"{agency}:{year}"
-    if state_key in state["completed"]:
-        prev = state["completed"][state_key]
-        log.info(f"  [{agency}] {year}: already done ({prev} dockets)")
-        return prev
-
-    last_day = monthrange(year, 12)[1]
-    date_ge = f"{year}-01-01"
-    date_le = f"{year}-12-{last_day:02d}"
-    year_dir = DATA_DIR / agency / str(year)
-
-    # First, try the whole year as one query
-    saved, total = paginate(session, agency, date_ge, date_le, year_dir)
-
-    if total <= MAX_RESULTS:
-        # Year fits within pagination cap — done
-        state["completed"][state_key] = saved
-        state["total_dockets"] += saved
-        save_state(state)
-        if saved > 0:
-            log.info(f"  [{agency}] {year}: {saved} dockets")
-        return saved
-
-    # Year exceeds cap — subdivide by month
-    log.info(
-        f"  [{agency}] {year} has {total} dockets — subdividing by month"
-    )
-    month_total = 0
-    for m in range(1, 13):
-        if _shutdown:
-            break
-        if date(year, m, 1) > date.today():
-            break
-        try:
-            count = download_month(session, agency, year, m, year_dir)
-            month_total += count
-        except Exception as e:
-            log.error(f"  [{agency}] {year}-{m:02d} failed: {e}")
-
-    if not _shutdown:
-        state["completed"][state_key] = month_total
-        state["total_dockets"] += month_total
-        save_state(state)
-        log.info(
-            f"  [{agency}] {year}: {month_total} dockets via subdivision "
-            f"(API reported {total})"
-        )
-
-    return month_total
-
-
-# === Main ===
 def main():
     parser = argparse.ArgumentParser(
-        description="Backfill dockets for agencies that exceeded the 5,000-record pagination cap."
+        description="Backfill stub dockets by fetching each by ID from Regulations.gov."
     )
-    parser.add_argument(
-        "--agency",
-        choices=["EPA", "FDA"],
-        help="Only backfill this agency (default: both EPA and FDA)",
-    )
+    parser.add_argument("--agency", help="Only backfill this agency (e.g., EPA, FDA)")
+    parser.add_argument("--api-key-2", action="store_true", help="Use second API key")
+    parser.add_argument("--limit", type=int, default=0, help="Stop after N dockets")
     args = parser.parse_args()
 
-    agencies = [args.agency] if args.agency else DEFAULT_AGENCIES
-    current_year = date.today().year
+    api_key = _cfg["regulations_gov_api_key_2"] if args.api_key_2 else _cfg["regulations_gov_api_key"]
 
-    log.info("=" * 60)
-    log.info("DOCKET BACKFILL — Recovering truncated docket lists")
-    log.info(f"Agencies: {', '.join(agencies)}")
-    log.info(f"Year range: {START_YEAR}–{current_year}")
-    log.info(f"Rate limit: {MIN_INTERVAL}s between requests ({int(3600 / MIN_INTERVAL)}/hr)")
-    log.info(f"Output: {DATA_DIR}")
-    log.info("=" * 60)
-    progress(f"Docket backfill: STARTING — agencies={','.join(agencies)}")
+    # Get stub docket list
+    stubs = get_stub_dockets(args.agency)
+    log.info(f"Found {len(stubs):,} stub dockets" + (f" for {args.agency}" if args.agency else ""))
 
+    if not stubs:
+        log.info("No stub dockets to backfill!")
+        return
+
+    # Load state for resume
     state = load_state()
     if not state["started_at"]:
         state["started_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        save_state(state)
 
-    session = create_session()
+    completed_set = set(state["completed"])
+    pending = [(did, aid) for did, aid in stubs if did not in completed_set]
+    log.info(f"Already completed: {len(completed_set):,}, pending: {len(pending):,}")
 
-    for agency in agencies:
+    if args.limit:
+        pending = pending[:args.limit]
+        log.info(f"Limited to {args.limit} dockets")
+
+    if not pending:
+        log.info("All stubs already backfilled!")
+        return
+
+    # Setup
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    rate = RateLimiter(MIN_INTERVAL)
+    session = create_session(api_key)
+    errors = 0
+    fetched = 0
+    start_time = time.time()
+
+    log.info(f"Starting backfill: {len(pending):,} dockets at ~{int(3600/MIN_INTERVAL)}/hr")
+    log.info(f"Estimated time: {len(pending) * MIN_INTERVAL / 3600:.1f} hours")
+
+    for i, (docket_id, agency_id) in enumerate(pending):
         if _shutdown:
             break
-        log.info(f"\n{'=' * 40}")
-        log.info(f"Agency: {agency}")
-        log.info(f"{'=' * 40}")
-        progress(f"Docket backfill: starting {agency}")
 
-        agency_total = 0
-        for year in range(START_YEAR, current_year + 1):
-            if _shutdown:
+        try:
+            data = fetch_docket(session, rate, docket_id)
+
+            if data is None:
+                # 404 — docket doesn't exist
+                state["errors"].append(docket_id)
+                errors += 1
+            else:
+                # Save the raw JSON
+                outfile = DATA_DIR / f"{docket_id}.json"
+                outfile.write_text(json.dumps(data, indent=2))
+                fetched += 1
+
+            state["completed"].append(docket_id)
+            state["total_fetched"] = fetched
+
+        except Exception as e:
+            errors += 1
+            state["errors"].append(docket_id)
+            log.warning(f"Error for {docket_id}: {e}")
+            if errors > 50:
+                log.error("Too many consecutive errors, stopping")
                 break
-            try:
-                count = download_year(session, agency, year, state)
-                agency_total += count
-            except Exception as e:
-                log.error(f"  [{agency}] {year} FAILED: {e}")
 
-        log.info(f"  [{agency}] Total dockets: {agency_total}")
-        progress(
-            f"Docket backfill: {agency} done — {agency_total} dockets"
-        )
+        # Progress every 200
+        if (i + 1) % 200 == 0:
+            elapsed = time.time() - start_time
+            rate_hr = (i + 1) / (elapsed / 3600) if elapsed > 0 else 0
+            remaining = (len(pending) - i - 1) / rate_hr if rate_hr > 0 else 0
+            log.info(
+                f"  {i+1:,}/{len(pending):,} processed | "
+                f"{fetched:,} fetched, {errors} errors | "
+                f"{rate_hr:.0f}/hr | ~{remaining:.1f}hr remaining"
+            )
+            save_state(state)
 
-    # Summary
-    log.info("=" * 60)
+    # Final save
+    save_state(state)
+
+    elapsed = time.time() - start_time
     status = "Interrupted" if _shutdown else "Complete"
-    log.info(f"DOCKET BACKFILL — {status}")
-    log.info(f"Total dockets: {state['total_dockets']}")
-    log.info(f"API calls made: {rate.count}")
-    log.info("=" * 60)
-
-    progress(
-        f"Docket backfill: {status.upper()} — "
-        f"{state['total_dockets']} dockets, {rate.count} API calls"
-    )
+    log.info(f"\nDocket backfill: {status}")
+    log.info(f"  Fetched: {fetched:,}")
+    log.info(f"  Errors/404s: {errors}")
+    log.info(f"  API calls: {rate.count}")
+    log.info(f"  Duration: {elapsed/3600:.1f} hours")
 
 
 if __name__ == "__main__":

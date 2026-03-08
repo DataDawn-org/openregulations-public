@@ -1,0 +1,74 @@
+issue_code,issue_description,primary_agencies,secondary_agencies,regs_gov_agency_prefixes,federal_register_agency_slugs,related_committee_ids,notes
+ACC,Accounting,"SEC, PCAOB, Treasury","GAO,OMB","SEC,TREAS","securities-and-exchange-commission,treasury-department","SSBK,HSBA",Financial reporting standards; auditing rules; PCAOB oversight
+ADV,Advertising,"FTC, FCC","FDA","FTC,FCC","federal-trade-commission,federal-communications-commission","SSCM,HSIF",Advertising standards; truth-in-advertising; FCC broadcast rules
+AER,Aerospace,"NASA, DoD, FAA","Commerce","DOD,FAA,NASA","national-aeronautics-and-space-administration,defense-department,federal-aviation-administration","SSAS,HSAS,HSSY",Defense procurement; space policy; aviation manufacturing
+AGR,Agriculture,"USDA, EPA","FDA,USTR","USDA,EPA","agriculture-department,environmental-protection-agency","SSAF,HSAG",Farm policy; crop insurance; SNAP; agricultural trade; pesticides
+ALC,Alcohol and Drug Abuse,"HHS, SAMHSA, DEA","FDA","HHS,DEA","health-and-human-services-department,drug-enforcement-administration","SSHR,HSIF",Substance abuse policy; opioid regulation; drug scheduling
+ANI,Animals,"USDA-APHIS, FWS, NOAA","EPA","USDA,FWS","agriculture-department,fish-and-wildlife-service","SSAF,SSEV,HSAG,HSII",Animal welfare; endangered species; APHIS inspections; marine mammals
+APP,Apparel/Clothing/Textiles,"Commerce, USTR, CBP","FTC,Labor","DOC,CBP","commerce-department","SSCM,HSIF",Trade policy; tariffs; textile labeling; import regulation
+ART,Arts/Entertainment,"NEA, NEH, FCC, Copyright Office","LOC","FCC","federal-communications-commission,national-endowment-for-the-arts","SSCM,HSJU",Copyright; broadcasting; arts funding; content regulation
+AUT,Automotive Industry,"NHTSA, EPA, DOT","DOE,FTC","NHTSA,EPA,DOT","national-highway-traffic-safety-administration,environmental-protection-agency,transportation-department","SSCM,SSEG,HSIF,HSPW",Vehicle safety; emissions standards; fuel economy (CAFE); EV policy
+AVI,Aviation/Aircraft/Airlines,"FAA, DOT, TSA","DHS,NTSB","FAA,DOT,TSA","federal-aviation-administration,transportation-department","SSCM,HSPW",Air traffic; airline regulation; airport policy; aviation safety
+BAN,Banking,"Fed, OCC, FDIC, CFPB","SEC,Treasury","FRB,OCC,FDIC,CFPB","federal-reserve-system,comptroller-of-the-currency,federal-deposit-insurance-corporation,consumer-financial-protection-bureau","SSBK,HSBA",Bank regulation; capital requirements; consumer lending; fintech
+BNK,Bankruptcy,"DOJ, Courts","Treasury","DOJ","justice-department","SSJU,HSJU",Bankruptcy reform; creditor rights; Chapter 11/13 rules
+BEV,Beverage Industry,"TTB, FDA, FTC","USDA,EPA","TTB,FDA","alcohol-and-tobacco-tax-and-trade-bureau,food-and-drug-administration","SSCM,SSFI,HSIF,HSWM",Alcohol taxation; labeling; food safety for beverages
+BUD,Budget/Appropriations,"OMB, Treasury, CBO","All agencies","OMB","office-of-management-and-budget","SSAP,SSBU,HSAP,HSBU",Federal budget; spending levels; sequestration; debt ceiling
+CHM,Chemicals/Chemical Industry,"EPA, OSHA","DOT,DHS","EPA,OSHA","environmental-protection-agency,occupational-safety-and-health-administration","SSEV,HSIF",TSCA; chemical safety; hazardous materials; PFAS regulation
+CIV,Civil Rights/Civil Liberties,"DOJ-CRD, EEOC, ED-OCR","DHS","DOJ,EEOC","justice-department,equal-employment-opportunity-commission","SSJU,HSJU",Voting rights; anti-discrimination; EEOC enforcement; privacy
+CAW,Clean Air and Water,"EPA","Army Corps,Interior","EPA","environmental-protection-agency","SSEV,HSIF,HSPW",Clean Air Act; Clean Water Act; WOTUS; air quality standards; NPDES permits
+COM,Communications/Broadcasting,"FCC","NTIA,FTC","FCC","federal-communications-commission","SSCM,HSIF",Telecom regulation; spectrum allocation; net neutrality; broadband
+CPI,Computer Industry,"Commerce, FTC, NIST","DOD,NSA","DOC,FTC,NIST","commerce-department,federal-trade-commission","SSCM,HSIF,HSSY",Data privacy; cybersecurity standards; export controls; AI policy
+CON,Constitution,"DOJ, Courts","Congress","DOJ","justice-department","SSJU,HSJU",Constitutional amendments; civil liberties; separation of powers
+CSP,Consumer Issues/Safety/Protection,"CPSC, FTC, FDA","NHTSA","CPSC,FTC,FDA","consumer-product-safety-commission,federal-trade-commission,food-and-drug-administration","SSCM,HSIF",Product safety; consumer fraud; recalls; data privacy
+DEF,Defense,"DoD, VA","DHS,DOE,State","DOD","defense-department","SSAS,HSAS",Military spending; weapons systems; base closures; personnel
+DIS,Disaster Planning/Emergencies,"FEMA, DHS","SBA,HUD","FEMA,DHS","federal-emergency-management-agency,homeland-security-department","SSGA,HSHM,HSPW",Disaster relief; emergency preparedness; flood insurance; FEMA reform
+DOC,District of Columbia,"DC Government","Congress","N/A","N/A","SSGA,HSGO",DC home rule; DC budget; statehood
+ECN,Economics/Economic Development,"Commerce-EDA, SBA, Treasury","Fed,HUD","DOC,SBA","commerce-department,small-business-administration","SSSB,HSSM,SSBK",Economic development; small business programs; trade zones
+EDU,Education,"ED, NSF","Labor,HHS","ED","education-department","SSHR,HSED",Student loans; K-12 policy; higher education; Title IX; IDEA
+ENG,Energy/Nuclear,"DOE, NRC, FERC","EPA,Interior","DOE,NRC,FERC","energy-department,nuclear-regulatory-commission,federal-energy-regulatory-commission","SSEG,HSIF",Energy production; nuclear regulation; grid policy; renewables; fossil fuels
+ENV,Environmental/Superfund,"EPA","Interior,Army Corps,NOAA","EPA","environmental-protection-agency","SSEV,HSIF,HSII",Superfund; RCRA; NEPA; brownfields; environmental justice
+FAM,Family Issues/Abortion/Adoption,"HHS, ACF","ED,DOJ","HHS","health-and-human-services-department","SSFI,SSJU,HSJU,HSWM",Family policy; adoption; child welfare; reproductive rights
+FIR,Firearms/Guns/Ammunition,"ATF, DOJ","DHS","ATF,DOJ","alcohol-tobacco-firearms-and-explosives-bureau,justice-department","SSJU,HSJU",Gun control/rights; ATF regulation; background checks; ammunition
+FOO,Food Industry,"FDA, USDA-FSIS","FTC,EPA","FDA,USDA","food-and-drug-administration,agriculture-department","SSAF,SSHR,HSAG,HSIF",Food safety; labeling; GRAS; meat inspection; dietary guidelines
+FOR,Foreign Relations,"State, USTR, USAID","Treasury,Commerce,DOD","DOS","state-department","SSFR,HSFA",Diplomacy; foreign aid; sanctions; trade agreements; treaties
+FUE,Fuel/Gas/Oil,"DOE, DOI-BOEM, EPA, FERC","DOT","DOE,EPA,BOEM,FERC","energy-department,environmental-protection-agency","SSEG,HSII,HSIF",Oil/gas leasing; refining; pipeline regulation; fuel standards; LNG exports
+GAM,Gaming/Gambling/Casino,"DOI-BIA, FTC","DOJ,Treasury","DOI","interior-department","SLIN,HSJU,HSII",Tribal gaming; online gambling; sports betting; wire act
+GOV,Government Issues,"OPM, GSA, OMB","GAO","OPM,GSA","office-of-personnel-management,general-services-administration","SSGA,HSGO",Federal workforce; procurement; government reform; FOIA
+HCR,Health Issues,"HHS, CMS, FDA, CDC, NIH","VA,DOD,EPA","HHS,CMS,FDA,CDC","health-and-human-services-department,centers-for-medicare-medicaid-services,food-and-drug-administration","SSHR,SSFI,HSIF,HSWM",Healthcare policy; ACA; drug approval; public health; pandemic prep
+HOM,Homeland Security,"DHS, CBP, ICE, TSA, CISA","DOJ,DOD","DHS,CBP","homeland-security-department,customs-and-border-protection","SSGA,HSHM",Border security; cybersecurity; immigration enforcement; terrorism
+HOU,Housing,"HUD, FHFA","Treasury,Fed","HUD,FHFA","housing-and-urban-development-department,federal-housing-finance-agency","SSBK,HSBA",Housing policy; Fannie/Freddie; fair housing; homelessness; LIHTC
+IMM,Immigration,"DHS-USCIS, ICE, DOJ-EOIR, State","Labor","DHS,USCIS","homeland-security-department","SSJU,HSJU,HSHM",Visa policy; asylum; deportation; employment-based immigration; DACA
+IND,Indian/Native American Affairs,"DOI-BIA, IHS","HHS,Justice","BIA,IHS","interior-department,indian-health-service","SLIN,HSII",Tribal sovereignty; Indian health; gaming; land trust; treaty rights
+INS,Insurance,"Treasury-FIO, State regulators, CMS","HHS","TREAS,CMS","treasury-department,centers-for-medicare-medicaid-services","SSBK,SSFI,HSBA,HSWM",Insurance regulation; health insurance; flood insurance; crop insurance
+LBR,Labor Issues/Antitrust/Workplace,"DOL, NLRB, OSHA, EEOC","FTC,DOJ","DOL,NLRB,OSHA","labor-department,national-labor-relations-board,occupational-safety-and-health-administration","SSHR,HSED",Wages; workplace safety; union rights; antitrust; gig economy
+LAW,Law Enforcement/Crime/Criminal Justice,"DOJ, FBI, DEA, BOP","DHS","DOJ,FBI","justice-department,federal-bureau-of-investigation","SSJU,HSJU",Criminal justice reform; sentencing; policing; drug enforcement
+MAN,Manufacturing,"Commerce, DOD, EPA, OSHA","DOE,USTR","DOC,DOD","commerce-department,defense-department","SSCM,HSIF",Industrial policy; defense manufacturing; environmental compliance; trade
+MAR,Marine/Maritime/Boating/Fisheries,"NOAA, USCG, MARAD","DOI-FWS,EPA","NOAA,USCG","national-oceanic-and-atmospheric-administration,coast-guard","SSCM,HSPW,HSII",Fisheries management; shipping; maritime safety; offshore energy
+MIA,Media/Information/Publishing,"FCC, FTC, Copyright Office","DOJ","FCC,FTC","federal-communications-commission,federal-trade-commission","SSCM,HSJU,HSIF",Media ownership; copyright; FOIA; press freedom; platform regulation
+MED,Medical/Disease Research/Clinical Labs,"NIH, FDA, CDC, CMS","HHS,VA","NIH,FDA,CDC","national-institutes-of-health,food-and-drug-administration,centers-for-disease-control-and-prevention","SSHR,HSIF",Medical research funding; drug/device approval; clinical trials; lab regulation
+MMM,Medicare/Medicaid,"CMS, HHS","Treasury","CMS","centers-for-medicare-medicaid-services","SSFI,HSWM,HSIF",Medicare/Medicaid policy; reimbursement rates; Part D; managed care
+MON,Minting/Money/Gold Standard,"Treasury, Fed","SEC","TREAS,FRB","treasury-department,federal-reserve-system","SSBK,HSBA",Currency policy; gold reserves; cryptocurrency regulation
+NAT,Natural Resources,"DOI, BLM, FWS, NPS, USFS","EPA,Army Corps","DOI,BLM,FWS","interior-department,bureau-of-land-management,fish-and-wildlife-service","SSEG,HSII",Public lands; mining; water rights; national parks; forests; wildlife
+PHA,Pharmacy,"FDA, DEA, CMS","HHS,FTC","FDA,DEA,CMS","food-and-drug-administration,drug-enforcement-administration","SSHR,SSFI,HSIF,HSWM",Drug pricing; PBMs; pharmacy regulation; controlled substances
+POS,Postal,"USPS, PRC","Congress","USPS","postal-service","SSGA,HSGO",Postal reform; USPS finances; mail regulation
+RRR,Railroads,"FRA, STB, DOT","DHS,EPA","FRA,STB","federal-railroad-administration,surface-transportation-board","SSCM,HSPW",Rail safety; freight regulation; Amtrak; grade crossings
+RES,Real Estate/Land Use/Conservation,"DOI, EPA, HUD, Army Corps","USDA","DOI,EPA,HUD","interior-department,environmental-protection-agency,housing-and-urban-development-department","SSEV,SSBK,HSII,HSBA",Land use; conservation easements; wetlands; zoning; fair housing
+REL,Religion,"N/A (1st Amendment)","DOJ,ED,IRS","N/A","N/A","SSJU,HSJU",Religious freedom; church-state separation; faith-based initiatives
+RET,Retirement,"DOL-EBSA, Treasury, PBGC, SSA","SEC","DOL,TREAS","labor-department,treasury-department","SSFI,SSHR,HSWM,HSED",Pensions; 401(k) regulation; Social Security; ERISA; multiemployer plans
+ROD,Roads/Highway,"FHWA, DOT","EPA,Army Corps","FHWA,DOT","federal-highway-administration,transportation-department","SSEV,HSPW",Highway funding; infrastructure; tolling; truck regulation
+SCI,Science/Technology,"NSF, OSTP, NIST, DOE","NASA,NIH","NSF,NIST","national-science-foundation,national-institute-of-standards-and-technology","SSCM,HSSY",R&D policy; science funding; tech standards; AI; quantum
+SMB,Small Business,"SBA","Treasury,Commerce","SBA","small-business-administration","SSSB,HSSM",SBA programs; small business lending; contracting preferences
+SPO,Sports/Athletics,"N/A (limited federal)","FTC,DOJ,ED","N/A","N/A","SSCM,HSIF",Antitrust (sports leagues); Title IX athletics; doping; sports betting
+TAX,Taxation/Internal Revenue Code,"Treasury-IRS","DOJ-Tax,Congress","IRS,TREAS","internal-revenue-service,treasury-department","SSFI,HSWM",Tax code; IRS enforcement; tax reform; international tax; TCJA
+TEC,Telecommunications,"FCC, NTIA","FTC,DOJ","FCC","federal-communications-commission","SSCM,HSIF",Broadband; 5G; spectrum; net neutrality; universal service
+TOB,Tobacco,"FDA-CTP, TTB, FTC","HHS","FDA,TTB","food-and-drug-administration","SSHR,HSIF",Tobacco regulation; e-cigarettes/vaping; warning labels; youth access
+TOR,Torts,"DOJ, Courts","Congress","N/A","N/A","SSJU,HSJU",Tort reform; liability; class actions; asbestos litigation
+TRA,Trade/GATT/Tariffs,"USTR, Commerce-ITA, ITC, CBP","Treasury,State,USDA","USTR,ITC,DOC","office-of-the-united-states-trade-representative,international-trade-commission,commerce-department","SSFI,SSFR,HSWM,HSFA",Trade agreements; tariffs; antidumping; export controls; WTO
+TRN,Transportation,"DOT, FMCSA, PHMSA","DHS,EPA","DOT,FMCSA","transportation-department,federal-motor-carrier-safety-administration","SSCM,HSPW",Trucking; pipelines; hazmat transport; autonomous vehicles
+URB,Urban Development/Municipalities,"HUD, EDA, EPA","DOT","HUD,EPA","housing-and-urban-development-department","SSBK,HSBA",Urban renewal; community development; brownfields; smart growth
+UNM,Unemployment,"DOL-ETA","Treasury,SBA","DOL","labor-department","SSFI,SSHR,HSWM,HSED",Unemployment insurance; workforce development; job training
+UTI,Utilities,"FERC, EPA, DOE","NRC,State PUCs","FERC,EPA,DOE","federal-energy-regulatory-commission,environmental-protection-agency,energy-department","SSEG,HSIF",Electric/gas/water utilities; rate regulation; grid reliability; renewables mandate
+VET,Veterans,"VA","DOD,DOL","VA","veterans-affairs-department","SSVA,HSVR",VA healthcare; veterans benefits; GI Bill; disability claims
+WAS,Waste (Hazardous/Solid/Interstate/Nuclear),"EPA, NRC, DOE","DOT","EPA,NRC","environmental-protection-agency,nuclear-regulatory-commission","SSEV,HSIF",RCRA; nuclear waste; Superfund; hazardous waste disposal
+WEL,Welfare,"HHS-ACF, USDA-FNS","DOL,ED","HHS,USDA","health-and-human-services-department,agriculture-department","SSFI,SSHR,HSWM",TANF; SNAP; WIC; child care; welfare reform
+WOM,Women,"EEOC, HHS, ED-OCR","DOJ,DOL","EEOC,HHS","equal-employment-opportunity-commission,health-and-human-services-department","SSHR,HSED,SSJU",Gender equity; Title IX; pay equity; reproductive health; VAWA

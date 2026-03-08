@@ -275,7 +275,7 @@ def parse_transactions(text):
         if m:
             state_district = m.group(1).strip()
 
-    date_re = r"(\d{2}/\d{2}/\d{4})"
+    date_re = r"(\d{1,2}/\d{1,2}/\d{4})"
     # Transaction type patterns — check longer patterns first
     tx_types = ["S (partial)", "E (partial)", "P (partial)", "P", "S", "E"]
 
