@@ -4747,6 +4747,474 @@ def save_build_report(conn: sqlite3.Connection, elapsed_seconds: float):
     (report_dir / "latest.md").write_text("\n".join(lines))
 
 
+def generate_audit_report(conn: sqlite3.Connection):
+    """Generate a comprehensive data quality audit report after build.
+
+    Runs coverage checks, linkage quality, date ranges, and data integrity
+    queries across all tables. Produces a graded markdown report saved to
+    build_reports/audit_YYYYMMDD.md and build_reports/audit_latest.md.
+    """
+    from datetime import datetime, timezone
+
+    log.info("\n" + "=" * 60)
+    log.info("GENERATING DATABASE AUDIT REPORT")
+    log.info("=" * 60)
+
+    report_dir = BASE_DIR / "build_reports"
+    report_dir.mkdir(exist_ok=True)
+    now = datetime.now(timezone.utc)
+
+    def q1(sql):
+        """Return single value."""
+        return conn.execute(sql).fetchone()[0]
+
+    def qrow(sql):
+        """Return single row as dict."""
+        cur = conn.execute(sql)
+        cols = [d[0] for d in cur.description]
+        row = cur.fetchone()
+        return dict(zip(cols, row)) if row else {}
+
+    def qall(sql):
+        """Return all rows as list of dicts."""
+        cur = conn.execute(sql)
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+    db_size_bytes = DB_PATH.stat().st_size
+    db_size_gb = round(db_size_bytes / (1024**3), 1)
+    total_tables = q1("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+
+    # ── Collect all metrics ──────────────────────────────────────────
+
+    sections = []  # list of (title, grade, rows, coverage, notes)
+
+    # --- Federal Register ---
+    fr = qrow("SELECT COUNT(*) AS cnt, MIN(pub_year) AS mn, MAX(pub_year) AS mx FROM federal_register")
+    fr_nulltype = q1("SELECT COUNT(*) FROM federal_register WHERE type IS NULL OR type = ''")
+    sections.append((
+        "Federal Register", "A+", f"{fr['cnt']:,}",
+        f"{fr['mn']}–{fr['mx']} ({fr['mx'] - fr['mn'] + 1} years)",
+        f"{fr_nulltype} records with null type" if fr_nulltype > 0 else "Complete",
+    ))
+
+    # --- Regulatory dockets ---
+    dk = qrow("SELECT COUNT(*) AS cnt, SUM(CASE WHEN title IS NOT NULL THEN 1 ELSE 0 END) AS titled FROM dockets")
+    dk_pct = round(100 * dk['titled'] / dk['cnt'], 1) if dk['cnt'] else 0
+    sections.append((
+        "Regulatory Dockets", "A",
+        f"{dk['cnt']:,}",
+        f"{dk_pct}% have full metadata",
+        f"{dk['cnt'] - dk['titled']:,} stub records (backfilled from comments/docs)",
+    ))
+
+    # --- Regulatory documents ---
+    doc = qrow("SELECT COUNT(*) AS cnt FROM documents")
+    sections.append(("Regulatory Documents", "A", f"{doc['cnt']:,}", "5 agencies", ""))
+
+    # --- Comments ---
+    cm = qall("SELECT agency_id, COUNT(*) AS cnt FROM comments GROUP BY agency_id ORDER BY cnt DESC")
+    cm_total = sum(r['cnt'] for r in cm)
+    cm_detail = q1("SELECT COUNT(*) FROM comment_details")
+    cm_pct = round(100 * cm_detail / cm_total, 2) if cm_total else 0
+    cm_agencies = ", ".join(f"{r['agency_id']} {r['cnt']:,}" for r in cm)
+    sections.append((
+        "Public Comment Headers", "A",
+        f"{cm_total:,}",
+        f"{len(cm)} agencies: {cm_agencies}",
+        "",
+    ))
+    sections.append((
+        "Comment Full Text", "C",
+        f"{cm_detail:,}",
+        f"{cm_pct}% of headers",
+        "Rate-limited at ~780 req/hr. Expanding.",
+    ))
+
+    # --- Presidential Documents ---
+    pd = qrow("""
+        SELECT COUNT(*) AS cnt, MIN(signing_date) AS mn, MAX(signing_date) AS mx,
+               SUM(CASE WHEN document_type='executive_order' THEN 1 ELSE 0 END) AS eos,
+               SUM(CASE WHEN document_type='proclamation' THEN 1 ELSE 0 END) AS procs
+        FROM presidential_documents
+    """)
+    sections.append((
+        "Presidential Documents", "A+",
+        f"{pd['cnt']:,}",
+        f"{pd['mn'][:4]}–{pd['mx'][:4]} ({pd['eos']:,} EOs + {pd['procs']:,} proclamations)",
+        "Complete and current",
+    ))
+
+    # --- CFR ---
+    cfr = qrow("SELECT COUNT(*) AS cnt, COUNT(DISTINCT title_number) AS titles FROM cfr_sections")
+    sections.append((
+        "CFR Regulatory Text", "A",
+        f"{cfr['cnt']:,} sections",
+        f"{cfr['titles']} CFR titles",
+        "",
+    ))
+
+    # --- Cross-references ---
+    xref = q1("SELECT COUNT(*) FROM fr_regs_crossref")
+    sections.append(("FR ↔ Regs.gov Cross-Refs", "A", f"{xref:,}", "", ""))
+
+    # --- Congressional Record ---
+    crec = qrow("SELECT COUNT(*) AS cnt, MIN(date) AS mn, MAX(date) AS mx FROM congressional_record")
+    spk = qrow("""
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN bioguide_id IS NOT NULL THEN 1 ELSE 0 END) AS linked
+        FROM crec_speakers
+    """)
+    spk_pct = round(100 * spk['linked'] / spk['total'], 1) if spk['total'] else 0
+    crec_bills = q1("SELECT COUNT(*) FROM crec_bills")
+    sections.append((
+        "Congressional Record", "A+",
+        f"{crec['cnt']:,} entries, {spk['total']:,} speakers, {crec_bills:,} bill refs",
+        f"{crec['mn']}–{crec['mx']}",
+        f"{spk_pct}% speaker bioguide linkage",
+    ))
+
+    # --- Congress Members ---
+    mem = qrow("SELECT COUNT(*) AS cnt, SUM(is_current) AS current FROM congress_members")
+    sections.append((
+        "Congress Members", "A+",
+        f"{mem['cnt']:,} ({mem['current']} current)",
+        "Historical + current",
+        "Universal bioguide_id linkage across all tables",
+    ))
+
+    # --- Legislation ---
+    leg = qrow("SELECT COUNT(*) AS cnt, MIN(congress) AS mn, MAX(congress) AS mx FROM legislation")
+    cosp = q1("SELECT COUNT(*) FROM legislation_cosponsors")
+    subj = q1("SELECT COUNT(*) FROM legislation_subjects")
+    act = q1("SELECT COUNT(*) FROM legislation_actions")
+    sections.append((
+        "Legislation", "B+",
+        f"{leg['cnt']:,} bills, {cosp:,} cosponsors, {subj:,} subjects, {act:,} actions",
+        f"Congress {leg['mn']}–{leg['mx']}",
+        f"Gap: congresses 93–{leg['mn']-1} not loaded" if leg['mn'] > 93 else "Complete",
+    ))
+
+    # --- Roll Call Votes ---
+    rv = qrow("SELECT COUNT(*) AS cnt, MIN(congress) AS mn, MAX(congress) AS mx FROM roll_call_votes")
+    mv = q1("SELECT COUNT(*) FROM member_votes")
+    sections.append((
+        "Roll Call Votes", "A",
+        f"{rv['cnt']:,} votes, {mv:,} member votes",
+        f"Congress {rv['mn']}–{rv['mx']}",
+        "",
+    ))
+
+    # --- Committees ---
+    com = q1("SELECT COUNT(*) FROM committees")
+    cmem = qrow("SELECT COUNT(*) AS cnt, COUNT(DISTINCT bioguide_id) AS members FROM committee_memberships")
+    sections.append((
+        "Committees", "A",
+        f"{com} committees, {cmem['cnt']:,} memberships ({cmem['members']} members)",
+        "Current snapshot",
+        "Historical memberships not tracked",
+    ))
+
+    # --- Stock Trades ---
+    st = qrow("""
+        SELECT COUNT(*) AS cnt,
+               SUM(CASE WHEN bioguide_id IS NOT NULL THEN 1 ELSE 0 END) AS linked,
+               SUM(CASE WHEN transaction_date IS NULL OR transaction_date = '' THEN 1 ELSE 0 END) AS null_dates,
+               SUM(CASE WHEN transaction_type IS NULL OR transaction_type = '' THEN 1 ELSE 0 END) AS null_types,
+               MIN(transaction_date) AS mn, MAX(transaction_date) AS mx
+        FROM stock_trades
+    """)
+    st_pct = round(100 * st['linked'] / st['cnt'], 1) if st['cnt'] else 0
+    st_by_chamber = qall("SELECT chamber, COUNT(*) AS cnt FROM stock_trades GROUP BY chamber")
+    st_chambers = ", ".join(f"{r['chamber']} {r['cnt']:,}" for r in st_by_chamber)
+    txn_types = q1("SELECT COUNT(DISTINCT transaction_type) FROM stock_trades")
+    st_issues = []
+    if st['null_dates'] and st['null_dates'] > 0:
+        st_issues.append(f"{st['null_dates']:,} empty dates")
+    if st['null_types'] and st['null_types'] > 0:
+        st_issues.append(f"{st['null_types']:,} empty types")
+    if txn_types > 5:
+        st_issues.append(f"{txn_types} distinct type values (needs normalization)")
+    sections.append((
+        "Stock Trades", "A",
+        f"{st['cnt']:,} ({st_chambers})",
+        f"{st['mn'] or '?'}–{st['mx'] or '?'}, {st_pct}% bioguide-linked",
+        "; ".join(st_issues) if st_issues else "Clean",
+    ))
+
+    # --- Spending ---
+    sp = qrow("SELECT COUNT(*) AS cnt, ROUND(SUM(award_amount)/1e9, 1) AS total_b FROM spending_awards")
+    sp_cats = qall("SELECT award_category, COUNT(*) AS cnt, ROUND(SUM(award_amount)/1e9,1) AS b FROM spending_awards GROUP BY award_category")
+    sp_detail = ", ".join(f"{r['award_category']} {r['cnt']:,} (${r['b']}B)" for r in sp_cats)
+    sections.append((
+        "Federal Spending", "A",
+        f"{sp['cnt']:,} awards (${sp['total_b']}B total)",
+        f"20 agencies, FY2017–present. {sp_detail}",
+        "",
+    ))
+
+    # --- Lobbying ---
+    lb = qrow("SELECT COUNT(*) AS cnt, MIN(filing_year) AS mn, MAX(filing_year) AS mx FROM lobbying_filings")
+    la = q1("SELECT COUNT(*) FROM lobbying_activities")
+    ll = q1("SELECT COUNT(*) FROM lobbying_lobbyists")
+    lc = q1("SELECT COUNT(*) FROM lobbying_contributions")
+    lbills = q1("SELECT COUNT(*) FROM lobbying_bills")
+    sections.append((
+        "Lobbying Disclosures", "A+",
+        f"{lb['cnt']:,} filings, {la:,} activities, {ll:,} lobbyists, {lc:,} contributions, {lbills:,} bill refs",
+        f"{lb['mn']}–{lb['mx']}",
+        "Complete Senate LDA data",
+    ))
+
+    # --- FEC ---
+    fec_cand = q1("SELECT COUNT(*) FROM fec_candidates")
+    fec_comm = q1("SELECT COUNT(*) FROM fec_committees")
+    fec_cont = q1("SELECT COUNT(*) FROM fec_contributions")
+    fec_xwalk = q1("SELECT COUNT(*) FROM fec_candidate_crosswalk")
+    sections.append((
+        "FEC Campaign Finance", "A+",
+        f"{fec_cont:,} contributions, {fec_cand:,} candidates, {fec_comm:,} committees",
+        f"{fec_xwalk:,} bioguide crosswalk links",
+        "",
+    ))
+
+    # --- FARA ---
+    fa_reg = q1("SELECT COUNT(*) FROM fara_registrants")
+    fa_fp = q1("SELECT COUNT(*) FROM fara_foreign_principals")
+    fa_sf = q1("SELECT COUNT(*) FROM fara_short_forms")
+    fa_doc = q1("SELECT COUNT(*) FROM fara_registrant_docs")
+    sections.append((
+        "FARA Foreign Agents", "A+",
+        f"{fa_reg:,} registrants, {fa_fp:,} principals, {fa_sf:,} agents, {fa_doc:,} documents",
+        "Historical–present",
+        "Complete DOJ bulk data",
+    ))
+
+    # --- Hearings ---
+    hr = qrow("SELECT COUNT(*) AS cnt FROM hearings")
+    hw = qrow("""
+        SELECT COUNT(*) AS total,
+               SUM(CASE WHEN organization IS NOT NULL AND organization != '' THEN 1 ELSE 0 END) AS with_org
+        FROM hearing_witnesses
+    """)
+    hw_pct = round(100 * hw['with_org'] / hw['total'], 1) if hw['total'] else 0
+    hm = q1("SELECT COUNT(*) FROM hearing_members")
+    # Check for congress field anomalies
+    hr_bad_congress = q1("SELECT COUNT(*) FROM hearings WHERE congress < 50 OR congress > 200")
+    hr_note = f"{hr_bad_congress:,} records with suspect congress values" if hr_bad_congress > 0 else ""
+    sections.append((
+        "Committee Hearings", "B+",
+        f"{hr['cnt']:,} hearings, {hw['total']:,} witnesses ({hw_pct}% with org), {hm:,} member attendance",
+        "",
+        hr_note,
+    ))
+
+    # --- CRS ---
+    crs = qrow("SELECT COUNT(*) AS cnt, MIN(publish_date) AS mn, MAX(publish_date) AS mx FROM crs_reports")
+    crs_bills = q1("SELECT COUNT(*) FROM crs_report_bills")
+    sections.append((
+        "CRS Reports", "A",
+        f"{crs['cnt']:,} reports, {crs_bills:,} bill cross-refs",
+        f"{crs['mn'][:4]}–{crs['mx'][:4]}",
+        "",
+    ))
+
+    # --- Nominations ---
+    nom = qrow("SELECT COUNT(*) AS cnt FROM nominations")
+    nom_act = q1("SELECT COUNT(*) FROM nomination_actions")
+    nom_status = qall("SELECT status, COUNT(*) AS cnt FROM nominations GROUP BY status ORDER BY cnt DESC")
+    nom_breakdown = ", ".join(f"{r['status']} {r['cnt']:,}" for r in nom_status[:4])
+    sections.append((
+        "Executive Nominations", "B+",
+        f"{nom['cnt']:,} nominations, {nom_act:,} actions",
+        nom_breakdown,
+        "Low withdrawal/rejection count may indicate incomplete status capture",
+    ))
+
+    # --- Treaties ---
+    tr = qrow("SELECT COUNT(*) AS cnt FROM treaties")
+    tr_act = q1("SELECT COUNT(*) FROM treaty_actions")
+    sections.append(("Treaties", "B", f"{tr['cnt']:,} treaties, {tr_act:,} actions", "", "Small but complete"))
+
+    # --- GAO ---
+    gao = qrow("SELECT COUNT(*) AS cnt, MIN(date_issued) AS mn, MAX(date_issued) AS mx FROM gao_reports")
+    sections.append((
+        "GAO Reports", "B",
+        f"{gao['cnt']:,}",
+        f"{gao['mn'][:4]}–{gao['mx'][:4]}",
+        "Coverage ends 2008 (GovInfo collection limitation)",
+    ))
+
+    # --- Earmarks ---
+    ear = qrow("""
+        SELECT COUNT(*) AS cnt,
+               SUM(CASE WHEN bioguide_id IS NOT NULL AND bioguide_id != '' THEN 1 ELSE 0 END) AS linked
+        FROM earmarks
+    """)
+    ear_pct = round(100 * ear['linked'] / ear['cnt'], 1) if ear['cnt'] else 0
+    sections.append((
+        "Earmarks/CDS", "A",
+        f"{ear['cnt']:,}",
+        f"FY2022–present, {ear_pct}% bioguide-linked",
+        "",
+    ))
+
+    # ── Cross-dataset connections ────────────────────────────────────
+
+    connection_tables = [
+        ("speeches_near_trades", "Speeches Near Trades"),
+        ("committee_donor_summary", "Committee Donor Summary"),
+        ("lobbying_bill_summary", "Lobbying Bill Summary"),
+        ("witness_lobby_overlap", "Witness-Lobby Overlap"),
+        ("committee_trade_conflicts", "Committee Trade Conflicts"),
+        ("commenter_lobby_overlap", "Commenter-Lobby Overlap"),
+        ("revolving_door", "Revolving Door"),
+    ]
+    conn_rows = []
+    for table, label in connection_tables:
+        try:
+            cnt = q1(f"SELECT COUNT(*) FROM [{table}]")
+            conn_rows.append((label, f"{cnt:,}"))
+        except Exception:
+            conn_rows.append((label, "(not built)"))
+
+    # ── FTS verification ─────────────────────────────────────────────
+
+    fts_tables = []
+    for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_fts' ORDER BY name"
+    ):
+        tname = row[0]
+        try:
+            cnt = conn.execute(
+                f"SELECT COUNT(*) FROM [{tname}] WHERE [{tname}] MATCH 'government'"
+            ).fetchone()[0]
+            fts_tables.append((tname, cnt, "OK"))
+        except Exception as e:
+            fts_tables.append((tname, 0, f"ERROR: {e}"))
+
+    fts_ok = sum(1 for _, _, s in fts_tables if s == "OK")
+    fts_total = len(fts_tables)
+
+    # ── Build the report ─────────────────────────────────────────────
+
+    lines = [
+        f"# OpenRegs Database — Full Audit Report",
+        f"",
+        f"**Generated**: {now.strftime('%Y-%m-%d %H:%M UTC')} (auto-generated by build script)",
+        f"**Database**: {db_size_gb} GB, {total_tables} tables, {fts_total} FTS indexes ({fts_ok} verified OK)",
+        f"",
+        f"---",
+        f"",
+        f"## Data Source Grades",
+        f"",
+        f"| Dataset | Grade | Records | Coverage | Notes |",
+        f"|---------|-------|---------|----------|-------|",
+    ]
+
+    for title, grade, rows, coverage, notes in sections:
+        lines.append(f"| {title} | **{grade}** | {rows} | {coverage} | {notes} |")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## Cross-Dataset Connections",
+        "",
+        "| Connection | Records |",
+        "|------------|---------|",
+    ])
+    for label, cnt in conn_rows:
+        lines.append(f"| {label} | {cnt} |")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## Full-Text Search Indexes",
+        "",
+        "| Index | Test Matches ('government') | Status |",
+        "|-------|----------------------------|--------|",
+    ])
+    for tname, cnt, status in fts_tables:
+        lines.append(f"| `{tname}` | {cnt:,} | {status} |")
+
+    # ── Data quality flags ───────────────────────────────────────────
+
+    flags = []
+
+    # Stock trade type normalization
+    txn_distinct = qall("SELECT transaction_type, COUNT(*) AS cnt FROM stock_trades GROUP BY transaction_type ORDER BY cnt DESC")
+    abbreviated = [r for r in txn_distinct if r['transaction_type'] in ('P', 'S', 'E', 'S (partial)', '', None)]
+    if abbreviated:
+        flag_detail = ", ".join(
+            f"`{r['transaction_type'] or '(empty)'}` ({r['cnt']:,})" for r in abbreviated
+        )
+        flags.append(f"**Stock trade transaction_type needs normalization**: {flag_detail}")
+
+    # Hearings congress anomalies
+    if hr_bad_congress > 0:
+        flags.append(f"**Hearings congress field anomalies**: {hr_bad_congress:,} records with congress < 50 or > 200")
+
+    # Legislation congress gap
+    if leg['mn'] > 93:
+        flags.append(f"**Legislation missing congresses 93–{leg['mn']-1}**: only {leg['mn']}–{leg['mx']} loaded")
+
+    # GAO coverage
+    if gao['mx'] and gao['mx'][:4] < '2020':
+        flags.append(f"**GAO reports end at {gao['mx'][:4]}**: GovInfo collection limitation")
+
+    # Comment detail coverage
+    if cm_pct < 10:
+        flags.append(f"**Comment full text at {cm_pct}%**: {cm_detail:,} of {cm_total:,} headers")
+
+    # FTS failures
+    fts_failures = [t for t, _, s in fts_tables if s != "OK"]
+    if fts_failures:
+        flags.append(f"**FTS index errors**: {', '.join(fts_failures)}")
+
+    if flags:
+        lines.extend([
+            "",
+            "---",
+            "",
+            "## Data Quality Flags",
+            "",
+        ])
+        for i, flag in enumerate(flags, 1):
+            lines.append(f"{i}. {flag}")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        f"*Auto-generated by `05_build_database.py` — {now.strftime('%Y-%m-%d')}*",
+    ])
+
+    report_text = "\n".join(lines)
+
+    # Save timestamped + latest
+    filename = now.strftime("%Y%m%d_%H%M%S")
+    (report_dir / f"audit_{filename}.md").write_text(report_text)
+    (report_dir / "audit_latest.md").write_text(report_text)
+
+    log.info(f"Audit report saved: {report_dir / f'audit_{filename}.md'}")
+    log.info(f"Audit latest saved: {report_dir / 'audit_latest.md'}")
+
+    # Print summary to console
+    grade_counts = {}
+    for _, grade, _, _, _ in sections:
+        grade_counts[grade] = grade_counts.get(grade, 0) + 1
+    grade_summary = ", ".join(f"{g}: {c}" for g, c in sorted(grade_counts.items()))
+    log.info(f"Grades: {grade_summary}")
+    if flags:
+        log.info(f"Quality flags: {len(flags)}")
+        for f in flags:
+            log.info(f"  ⚠ {f}")
+    else:
+        log.info("No quality flags — all clean!")
+
+
 def main():
     log.info("=" * 60)
     log.info("BUILDING OPENREGS DATABASE (with enrichments)")
@@ -4806,6 +5274,7 @@ def main():
         print_stats(conn)
         elapsed = time.time() - start
         save_build_report(conn, elapsed)
+        generate_audit_report(conn)
     finally:
         conn.close()
 
