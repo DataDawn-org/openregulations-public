@@ -14,11 +14,11 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Dataset | Records | Source |
 |---------|---------|--------|
 | Federal Register documents | 993,703 | Federal Register API |
-| Regulatory dockets | 86,706 | Regulations.gov API + derived from documents/comments |
-| Regulatory documents | 727,510 | Regulations.gov API |
-| Public comment headers | 3,713,961 | Regulations.gov API |
-| Comment full details | 41,807 | Regulations.gov API (in progress) |
-| Presidential documents | 5,904 | Federal Register API |
+| Regulatory dockets | 164,759 | Regulations.gov API + derived from documents/comments |
+| Regulatory documents | 1,213,019 | Regulations.gov API |
+| Public comment headers | 3,907,894 | Regulations.gov API |
+| Comment full details | 86,507 | Regulations.gov API (2.2% of headers, in progress) |
+| Presidential documents | 5,905 | Federal Register API |
 | Congressional legislation | 167,507 | GovInfo BILLSTATUS + Congress.gov API |
 | Legislation actions | 1,100,541 | GovInfo BILLSTATUS |
 | Legislation subjects | 1,513,256 | GovInfo BILLSTATUS |
@@ -32,10 +32,10 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,763 | congress-legislators GitHub |
-| Stock trading disclosures | 64,220 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only (non-trade filings excluded) |
-| Lobbying filings | 1,507,321 | Senate LDA API |
-| Lobbying lobbyists | 3,464,421 | Senate LDA API |
-| Lobbying activities | 2,754,579 | Senate LDA API |
+| Stock trading disclosures | 64,220 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Lobbying filings | 1,908,114 | Senate LDA API |
+| Lobbying lobbyists | 4,376,087 | Senate LDA API |
+| Lobbying activities | 3,528,264 | Senate LDA API |
 | Lobbying contributions | 3,492,672 | Senate LDA API |
 | FARA registrants | 7,035 | FARA.gov |
 | FARA foreign principals | 17,627 | FARA.gov |
@@ -48,20 +48,20 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | FR agencies | 444 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
 | APHIS inspections | 110,400 | APHIS Salesforce API |
-| Committee hearings | 46,295 | GovInfo CHRG collection |
-| Hearing witnesses | 108,962 | GovInfo CHRG collection |
-| Hearing member attendance | 319,446 | GovInfo CHRG collection |
-| CRS reports | 13,617 | Congress.gov API |
-| CRS report–bill cross-references | 52,845 | Congress.gov API |
-| Executive nominations | 44,711 | Congress.gov API |
-| Nomination actions | 196,505 | Congress.gov API |
-| Treaties | 785 | Congress.gov API |
-| Treaty actions | 2,184 | Congress.gov API |
-| GAO reports | 16,582 | GovInfo GAOREPORTS collection |
+| Committee hearings | 46,177 | GovInfo CHRG collection |
+| Hearing witnesses | 109,242 | GovInfo CHRG collection |
+| Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
+| CRS reports | 13,629 | Congress.gov API |
+| CRS report–bill cross-references | 135,890 | Congress.gov API |
+| Executive nominations | 40,067 | Congress.gov API |
+| Nomination actions | 189,972 | Congress.gov API |
+| Treaties | 777 | Congress.gov API |
+| Treaty actions | 4,286 | Congress.gov API |
+| GAO reports | 16,569 | GovInfo GAOREPORTS collection (1989–2008) |
 | Earmarks | 70,826 | House/Senate Appropriations |
-| Lobbying bills (parsed) | 1,258,003 | Derived from lobbying specific_issues text |
+| Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
-| FR ↔ Regs.gov cross-references | 70,030 | Derived |
+| FR ↔ Regs.gov cross-references | 185,900 | Derived |
 
 **Comment coverage by agency:**
 
@@ -69,8 +69,8 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 |--------|----------------|--------|
 | FWS | 1,601,634 | Complete |
 | EPA | 1,166,180 | Complete (with daily backfill for truncated months) |
-| APHIS | 490,988 | Complete |
-| FDA | 432,676 | Through 2022 only; 2023-2026 missing |
+| FDA | 610,727 | Expanded (previously through 2022 only) |
+| APHIS | 506,870 | Complete |
 | USDA | 22,483 | Complete |
 
 ---
@@ -1159,7 +1159,7 @@ These items should be addressed in the next `05_build_database.py` rebuild:
 
 1. **Comment details download in progress** — Full comment text requires a separate API call per comment. Script `07_full_comment_details.py` is actively downloading at ~780 req/hr. 42K of 151K priority comments (organizations) downloaded so far. At current rates, the full 3.7M comments would take months — the prioritized approach (organizations first) is the practical strategy.
 
-2. **FDA comments incomplete** — Only downloaded through 2022. Years 2023–2026 are missing, estimated **~400,000–800,000 comments** based on prior-year volumes (FDA averaged ~80K–150K/year in 2018–2022).
+2. **FDA comments expanded but may still have gaps** — Now 610,727 headers (up from 432,676). Previously documented as "through 2022 only" but additional years have been collected. Coverage completeness for 2023–2026 not yet fully verified.
 
 3. **House PTR PDF parsing** — ~30% of House PTR filings (2,408 of 8,073) are scanned/image PDFs that cannot be text-parsed. These are predominantly older filings (pre-2017). Newer filings are 95%+ text-extractable. Filing indexes are still available for all filings.
 
