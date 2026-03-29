@@ -7,7 +7,7 @@
 #
 set -euo pipefail
 
-BASE="${1:-http://localhost:8001}"
+BASE="${1:-http://localhost:8002}"
 API="$BASE/openregs.json"
 
 echo "[$(date '+%H:%M:%S')] Warming up OpenRegs database..."

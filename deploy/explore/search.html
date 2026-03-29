@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMzIgMzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGRlZnM+CiAgICA8cmFkaWFsR3JhZGllbnQgaWQ9ImMiIGN4PSI0MiUiIGN5PSIzOCUiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjZmVmM2M3Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iNDAlIiBzdG9wLWNvbG9yPSIjZjU5ZTBiIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iI2EwNzgxOCIvPgogICAgPC9yYWRpYWxHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iYiIgY3g9IjQwJSIgY3k9IjM1JSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZWYzYzciLz4KICAgICAgPHN0b3Agb2Zmc2V0PSI1MCUiIHN0b3AtY29sb3I9IiNmZGU2OGEiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjYjg5MTBlIi8+CiAgICA8L3JhZGlhbEdyYWRpZW50PgogICAgPHJhZGlhbEdyYWRpZW50IGlkPSJtIiBjeD0iNDAlIiBjeT0iMzUlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iI2RhYTUyMCIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiM3YTVjMTAiLz4KICAgIDwvcmFkaWFsR3JhZGllbnQ+CiAgPC9kZWZzPgoKICA8IS0tIEJhY2tncm91bmQgLS0+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiBmaWxsPSIjMGEwZTFhIiByeD0iMCIvPgoKICA8IS0tIDUgbGluZXMgZnJvbSBjZW50ZXIgLS0+CiAgPGxpbmUgeDE9IjE2IiB5MT0iMjIiIHgyPSIzIiB5Mj0iMTkiIHN0cm9rZT0iIzlhN2EyOCIgc3Ryb2tlLXdpZHRoPSIwLjgiIG9wYWNpdHk9IjAuNSIvPgogIDxsaW5lIHgxPSIxNiIgeTE9IjIyIiB4Mj0iNyIgeTI9IjgiIHN0cm9rZT0iIzlhN2EyOCIgc3Ryb2tlLXdpZHRoPSIwLjgiIG9wYWNpdHk9IjAuNSIvPgogIDxsaW5lIHgxPSIxNiIgeTE9IjIyIiB4Mj0iMTYiIHkyPSIzIiBzdHJva2U9IiM5YTdhMjgiIHN0cm9rZS13aWR0aD0iMC44IiBvcGFjaXR5PSIwLjUiLz4KICA8bGluZSB4MT0iMTYiIHkxPSIyMiIgeDI9IjI1IiB5Mj0iOCIgc3Ryb2tlPSIjOWE3YTI4IiBzdHJva2Utd2lkdGg9IjAuOCIgb3BhY2l0eT0iMC41Ii8+CiAgPGxpbmUgeDE9IjE2IiB5MT0iMjIiIHgyPSIyOSIgeTI9IjE5IiBzdHJva2U9IiM5YTdhMjgiIHN0cm9rZS13aWR0aD0iMC44IiBvcGFjaXR5PSIwLjUiLz4KCiAgPCEtLSA1IG9yYnMgLS0+CiAgPGNpcmNsZSBjeD0iMyIgY3k9IjE5IiByPSIyLjIiIGZpbGw9InVybCgjYikiLz4KICA8Y2lyY2xlIGN4PSI3IiBjeT0iOCIgcj0iMS44IiBmaWxsPSJ1cmwoI20pIi8+CiAgPGNpcmNsZSBjeD0iMTYiIGN5PSIzIiByPSIyLjUiIGZpbGw9InVybCgjYikiLz4KICA8Y2lyY2xlIGN4PSIyNSIgY3k9IjgiIHI9IjEuOCIgZmlsbD0idXJsKCNtKSIvPgogIDxjaXJjbGUgY3g9IjI5IiBjeT0iMTkiIHI9IjIuMiIgZmlsbD0idXJsKCNiKSIvPgoKICA8IS0tIENlbnRlciByaW5nIC0tPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMjIiIHI9IjQuNSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjOGE2ZDFiIiBzdHJva2Utd2lkdGg9IjEuMiIgb3BhY2l0eT0iMC42Ii8+CiAgPCEtLSBDZW50ZXIgb3JiIC0tPgogIDxjaXJjbGUgY3g9IjE2IiBjeT0iMjIiIHI9IjMuMiIgZmlsbD0idXJsKCNjKSIvPgogIDwhLS0gSGlnaGxpZ2h0IC0tPgogIDxjaXJjbGUgY3g9IjE1LjUiIGN5PSIyMS41IiByPSIxLjIiIGZpbGw9IiNmZWYzYzciIG9wYWNpdHk9IjAuNCIvPgo8L3N2Zz4K">
+    <title>Search Everything &mdash; DataDawn</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --night: #0a0e1a;
+            --deep: #111827;
+            --twilight: #1a2342;
+            --horizon: #2a3a6b;
+            --dawn-amber: #f59e0b;
+            --dawn-gold: #fbbf24;
+            --dawn-light: #fde68a;
+            --dawn-white: #fef3c7;
+            --dawn-rose: #fb923c;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --surface: rgba(255,255,255,0.03);
+            --surface-hover: rgba(255,255,255,0.06);
+            --border: rgba(255,255,255,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--night);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        nav {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 1.5rem 3rem; border-bottom: 1px solid var(--border);
+        }
+        .nav-brand {
+            font-family: 'DM Serif Display', serif; font-size: 1.4rem;
+            color: var(--dawn-gold); text-decoration: none; letter-spacing: 0.02em;
+        }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 400;
+            color: var(--text-muted); text-decoration: none; text-transform: uppercase;
+            letter-spacing: 0.1em; transition: color 0.3s;
+        }
+        .nav-links a:hover, .nav-links a.active { color: var(--dawn-gold); }
+
+        .search-header {
+            padding: 4rem 3rem 2rem; max-width: 900px; margin: 0 auto; text-align: center;
+        }
+        .search-header h1 {
+            font-family: 'DM Serif Display', serif;
+            font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 400;
+            background: linear-gradient(135deg, var(--dawn-light), var(--dawn-amber));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text; margin-bottom: 0.75rem;
+        }
+        .search-header p {
+            font-size: 1rem; color: var(--text-secondary); font-weight: 300;
+            line-height: 1.6; max-width: 650px; margin: 0 auto;
+        }
+        .db-badges {
+            display: flex; gap: 0.75rem; justify-content: center; margin-top: 1rem;
+        }
+        .db-badge {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem;
+            padding: 0.3rem 0.8rem; border-radius: 20px;
+            border: 1px solid var(--border); color: var(--text-muted);
+        }
+        .db-badge.regs { border-color: rgba(239,68,68,0.3); color: #f87171; }
+        .db-badge.npo { border-color: rgba(34,197,94,0.3); color: #4ade80; }
+
+        .search-container { max-width: 750px; margin: 2rem auto 0; padding: 0 2rem; }
+        .search-box {
+            display: flex; align-items: center; background: var(--deep);
+            border: 1px solid var(--border); border-radius: 12px; padding: 0.25rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .search-box:focus-within {
+            border-color: rgba(245, 158, 11, 0.4);
+            box-shadow: 0 0 30px rgba(245, 158, 11, 0.08);
+        }
+        .search-icon { padding: 0 1rem; color: var(--text-muted); flex-shrink: 0; }
+        .search-box input {
+            flex: 1; background: none; border: none; outline: none;
+            color: var(--text-primary); font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem; font-weight: 300; padding: 1rem 0.5rem;
+        }
+        .search-box input::placeholder { color: var(--text-muted); }
+        .search-btn {
+            background: linear-gradient(135deg, var(--dawn-amber), var(--dawn-rose));
+            border: none; color: var(--night); font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem; font-weight: 500; padding: 0.9rem 1.8rem;
+            border-radius: 9px; cursor: pointer; letter-spacing: 0.05em;
+            text-transform: uppercase; transition: opacity 0.2s, transform 0.2s; flex-shrink: 0;
+        }
+        .search-btn:hover { opacity: 0.9; transform: scale(1.02); }
+
+        .examples {
+            margin-top: 1.25rem; display: flex; flex-wrap: wrap; gap: 0.5rem;
+            justify-content: center; padding: 0 2rem;
+        }
+        .example-chip {
+            padding: 0.3rem 0.8rem; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 20px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer;
+            transition: all 0.3s; font-family: 'IBM Plex Mono', monospace;
+        }
+        .example-chip:hover { border-color: var(--dawn-amber); color: var(--dawn-gold); }
+
+        .results-area { max-width: 1100px; margin: 2rem auto; padding: 0 2rem 3rem; }
+        .results-status {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+            color: var(--text-muted); margin-bottom: 1rem; min-height: 1.2em;
+        }
+        .results-status .count { color: var(--dawn-gold); }
+
+        .section {
+            margin-bottom: 1.5rem; padding: 1.5rem;
+            background: var(--deep); border: 1px solid var(--border); border-radius: 12px;
+        }
+        .section-header {
+            display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;
+        }
+        .section-icon {
+            width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+            justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+        }
+        .section-title-wrap { flex: 1; }
+        .section-title {
+            font-family: 'DM Serif Display', serif; font-size: 1.1rem; color: var(--text-primary);
+        }
+        .section-subtitle { font-size: 0.8rem; color: var(--text-muted); }
+        .section-source {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem;
+            padding: 0.15rem 0.5rem; border-radius: 10px; letter-spacing: 0.05em;
+            text-transform: uppercase; flex-shrink: 0;
+        }
+        .source-990 { background: rgba(34,197,94,0.12); color: #4ade80; }
+        .source-regs { background: rgba(239,68,68,0.12); color: #f87171; }
+        .section-link {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            color: var(--dawn-gold); text-decoration: none; white-space: nowrap;
+        }
+        .section-link:hover { text-decoration: underline; }
+
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        .data-table th {
+            text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-muted);
+            font-weight: 400; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .data-table td {
+            padding: 0.5rem 0.75rem; border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .data-table tr:hover { background: var(--surface-hover); }
+        .data-table a { color: var(--dawn-gold); text-decoration: none; }
+        .data-table a:hover { text-decoration: underline; }
+
+        .money { font-family: 'IBM Plex Mono', monospace; color: var(--dawn-gold); white-space: nowrap; }
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+        .party-r { color: #ef4444; }
+        .party-d { color: #3b82f6; }
+        .muted { color: var(--text-muted); }
+
+        .empty-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
+        .empty-icon { font-size: 3rem; margin-bottom: 1rem; opacity: 0.3; }
+        .hint { font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-muted); }
+
+        .loading { text-align: center; padding: 3rem; }
+        .loading-text {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem;
+            color: var(--text-muted); margin-bottom: 1rem;
+        }
+        .loading-dots { display: inline-flex; gap: 0.3rem; }
+        .loading-dots span {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--dawn-amber);
+            animation: blink 1.4s infinite both;
+        }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+        .error-note {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem;
+            color: #f87171; padding: 0.5rem 0.75rem; background: rgba(239,68,68,0.08);
+            border-radius: 6px; margin-bottom: 1rem; border-left: 3px solid rgba(239,68,68,0.3);
+        }
+
+        footer {
+            padding: 3rem; text-align: center; border-top: 1px solid var(--border);
+        }
+        .footer-text {
+            font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-muted);
+        }
+        .footer-text a { color: var(--dawn-gold); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            nav { padding: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+            .nav-links { gap: 1rem; flex-wrap: wrap; }
+            .search-header { padding: 2rem 1rem 1rem; }
+            .search-container, .examples { padding: 0 1rem; }
+            .results-area { padding: 0 1rem 2rem; }
+            .section { padding: 1rem; }
+            .data-table { font-size: 0.75rem; }
+            .data-table th, .data-table td { padding: 0.4rem 0.5rem; }
+            .db-badges { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="https://datadawn.org" class="nav-brand">DataDawn</a>
+        <div class="nav-links">
+            <a href="https://datadawn.org/explore.html">Explore</a>
+            <a href="/explore/search.html" class="active">Search All</a>
+            <a href="https://data.datadawn.org">990 Database</a>
+            <a href="/explore/entity.html">OpenRegs</a>
+        </div>
+    </nav>
+
+    <div class="search-header">
+        <h1>Search everything</h1>
+        <p>One search across two databases. Nonprofits, foundations, grants, Congress members, legislation, lobbying, regulations, federal spending, and more.</p>
+        <div class="db-badges">
+            <span class="db-badge npo">990 Nonprofit Database</span>
+            <span class="db-badge regs">OpenRegs Government Database</span>
+        </div>
+    </div>
+
+    <div class="search-container">
+        <div class="search-box">
+            <div class="search-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+            <input type="text" id="searchInput" placeholder="Search any name, organization, or topic..." autocomplete="off">
+            <button class="search-btn" id="searchBtn">Search</button>
+        </div>
+    </div>
+    <div class="examples">
+        <span class="example-chip" onclick="exSearch('Gates Foundation')">Gates Foundation</span>
+        <span class="example-chip" onclick="exSearch('Nancy Pelosi')">Nancy Pelosi</span>
+        <span class="example-chip" onclick="exSearch('Google')">Google</span>
+        <span class="example-chip" onclick="exSearch('climate change')">climate change</span>
+        <span class="example-chip" onclick="exSearch('American Red Cross')">American Red Cross</span>
+    </div>
+
+    <div class="results-area">
+        <div class="results-status" id="resultsStatus"></div>
+        <div id="results">
+            <div class="empty-state">
+                <div class="empty-icon">&#9670;</div>
+                <p>Two databases, one search</p>
+                <div class="hint">Search for a person, organization, company, or topic to find records across nonprofits, government, and Congress</div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-text">
+            <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+        </div>
+    </footer>
+
+    <script src="shared.js"></script>
+    <script>
+        // --- API endpoints ---
+        const API_990 = 'https://data.datadawn.org/990data_public';
+        const API_REGS = 'https://regs.datadawn.org/openregs';
+        // shared.js expects a global API for its query() function — we override with our own
+        const API = API_REGS;
+
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultsDiv = document.getElementById('results');
+        const statusDiv = document.getElementById('resultsStatus');
+
+        // --- Query helpers ---
+
+        async function queryRegs(sql, retries = 1) {
+            const url = `${API_REGS}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            try {
+                const resp = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                return data.rows || [];
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (retries > 0 && (e.name === 'AbortError' || (e.message && e.message.includes('SQL query took too long')))) {
+                    return queryRegs(sql, retries - 1);
+                }
+                throw e;
+            }
+        }
+
+        async function query990(sql, retries = 1) {
+            const url = `${API_990}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            try {
+                const resp = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                return data.rows || [];
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (retries > 0 && (e.name === 'AbortError' || (e.message && e.message.includes('SQL query took too long')))) {
+                    return query990(sql, retries - 1);
+                }
+                throw e;
+            }
+        }
+
+        // Wraps a query promise to return {data, error} — never rejects
+        async function safe(promise, label) {
+            try {
+                const data = await promise;
+                return { data, error: null };
+            } catch (e) {
+                console.warn(`[${label}] query failed:`, e.message);
+                return { data: [], error: e.message };
+            }
+        }
+
+        // --- FTS sanitization ---
+        function ftsClean(q) {
+            return q.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
+        }
+        function sqlSafe(q) {
+            return q.replace(/'/g, "''");
+        }
+
+        // --- URL state ---
+        function readURL() {
+            const p = new URLSearchParams(location.search);
+            if (p.get('q')) { searchInput.value = p.get('q'); doSearch(); }
+        }
+        function writeURL(q) {
+            const p = new URLSearchParams();
+            if (q) p.set('q', q);
+            history.replaceState(null, '', p.toString() ? '?' + p.toString() : location.pathname);
+        }
+
+        // --- Event bindings ---
+        searchBtn.addEventListener('click', doSearch);
+        searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+        // --- Main search ---
+        async function doSearch() {
+            const q = searchInput.value.trim();
+            if (!q) return;
+            writeURL(q);
+            const qFTS = ftsClean(q);
+            const qSQL = sqlSafe(q);
+            const startTime = performance.now();
+
+            resultsDiv.innerHTML = '<div class="loading"><div class="loading-text">Searching across 990 + OpenRegs databases...</div><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            statusDiv.textContent = '';
+
+            // Fire all 10 queries in parallel
+            const [
+                nonprofitsR, peopleR, grantsR,
+                membersR, legislationR, lobbyingR, frR, tradesR, spendingR, hearingsR
+            ] = await Promise.all([
+                // --- 990 Database ---
+                safe(query990(`
+                    SELECT b.ein, b.name, b.city, b.state, b.subsection,
+                        b.asset_amt, b.income_amt, b.ntee_cd
+                    FROM bmf b
+                    WHERE b.rowid IN (
+                        SELECT rowid FROM fts_bmf WHERE fts_bmf MATCH '"${qFTS}"'
+                    )
+                    ORDER BY b.income_amt DESC
+                    LIMIT 8
+                `), 'nonprofits'),
+
+                safe(query990(`
+                    SELECT o.person_name, o.title, o.compensation, o.ein,
+                        r.org_name, r.tax_year
+                    FROM returns r
+                    JOIN officers o ON o.object_id = r.object_id
+                    WHERE r.rowid IN (
+                        SELECT rowid FROM fts_returns WHERE fts_returns MATCH '"${qFTS}"'
+                    )
+                    AND o.person_name IS NOT NULL AND o.person_name != ''
+                    ORDER BY o.compensation DESC
+                    LIMIT 8
+                `), 'people990'),
+
+                safe(query990(`
+                    SELECT g.id, g.recipient_name, g.amount, g.purpose, g.tax_year,
+                        r.org_name AS funder_name, g.ein AS funder_ein
+                    FROM grants g
+                    JOIN returns r ON r.object_id = g.object_id
+                    WHERE g.rowid IN (
+                        SELECT rowid FROM fts_grants WHERE fts_grants MATCH '"${qFTS}"'
+                    )
+                    AND g.grant_type = 'paid'
+                    ORDER BY g.amount DESC
+                    LIMIT 8
+                `), 'grants'),
+
+                // --- OpenRegs Database ---
+                safe(queryRegs(`
+                    SELECT bioguide_id, full_name, party, state, chamber, is_current
+                    FROM congress_members
+                    WHERE full_name LIKE '%${qSQL}%'
+                    ORDER BY is_current DESC, full_name
+                    LIMIT 8
+                `), 'members'),
+
+                safe(queryRegs(`
+                    SELECT l.bill_id, l.title, l.congress, l.bill_type, l.bill_number,
+                        l.policy_area, l.cosponsor_count,
+                        cm.full_name AS sponsor_name
+                    FROM legislation l
+                    LEFT JOIN congress_members cm ON cm.bioguide_id = l.sponsor_bioguide_id
+                    WHERE l.rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"${qFTS}"')
+                    ORDER BY l.congress DESC, l.bill_number
+                    LIMIT 8
+                `), 'legislation'),
+
+                safe(queryRegs(`
+                    SELECT client_name, registrant_name,
+                        SUM(income_amount) AS total_income,
+                        COUNT(*) AS filing_count,
+                        MIN(filing_year) AS year_from,
+                        MAX(filing_year) AS year_to
+                    FROM lobbying_activities
+                    WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                    GROUP BY client_name, registrant_name
+                    ORDER BY total_income DESC
+                    LIMIT 8
+                `), 'lobbying'),
+
+                safe(queryRegs(`
+                    SELECT document_number, title, type, publication_date, agency_names
+                    FROM federal_register
+                    WHERE rowid IN (SELECT rowid FROM federal_register_fts WHERE federal_register_fts MATCH '"${qFTS}"')
+                    ORDER BY publication_date DESC
+                    LIMIT 8
+                `), 'fr'),
+
+                safe(queryRegs(`
+                    SELECT st.member_name, st.ticker, st.transaction_date,
+                        st.transaction_type, st.amount_range, st.asset_description,
+                        st.bioguide_id, st.chamber
+                    FROM stock_trades st
+                    WHERE st.asset_description LIKE '%${qSQL}%'
+                        OR st.ticker LIKE '%${qSQL}%'
+                        OR st.member_name LIKE '%${qSQL}%'
+                    ORDER BY st.transaction_date DESC
+                    LIMIT 8
+                `), 'trades'),
+
+                safe(queryRegs(`
+                    SELECT recipient_name, agency, award_category,
+                        SUM(award_amount) AS total_amount,
+                        COUNT(*) AS award_count,
+                        MIN(fiscal_year) AS fy_from,
+                        MAX(fiscal_year) AS fy_to
+                    FROM spending_awards
+                    WHERE rowid IN (SELECT rowid FROM spending_awards_fts WHERE spending_awards_fts MATCH '"${qFTS}"')
+                    GROUP BY recipient_name, agency
+                    ORDER BY total_amount DESC
+                    LIMIT 8
+                `), 'spending'),
+
+                safe(queryRegs(`
+                    SELECT h.package_id, h.title, h.chamber, h.date_issued, h.congress
+                    FROM hearings h
+                    WHERE h.rowid IN (SELECT rowid FROM hearings_fts WHERE hearings_fts MATCH '"${qFTS}"')
+                    ORDER BY h.date_issued DESC
+                    LIMIT 8
+                `), 'hearings')
+            ]);
+
+            const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+
+            // Collect errors for display
+            const errors = [];
+            const allResults = [
+                { label: 'nonprofits', ...nonprofitsR },
+                { label: 'people990', ...peopleR },
+                { label: 'grants', ...grantsR },
+                { label: 'members', ...membersR },
+                { label: 'legislation', ...legislationR },
+                { label: 'lobbying', ...lobbyingR },
+                { label: 'fr', ...frR },
+                { label: 'trades', ...tradesR },
+                { label: 'spending', ...spendingR },
+                { label: 'hearings', ...hearingsR }
+            ];
+            for (const r of allResults) {
+                if (r.error) errors.push(r.label);
+            }
+
+            const totalHits = allResults.reduce((s, r) => s + r.data.length, 0);
+
+            // Status line
+            const categories = allResults.filter(r => r.data.length > 0).map(r => {
+                const names = {
+                    nonprofits: 'nonprofits', people990: 'people', grants: 'grants',
+                    members: 'congress', legislation: 'legislation', lobbying: 'lobbying',
+                    fr: 'federal register', trades: 'stock trades', spending: 'spending',
+                    hearings: 'hearings'
+                };
+                return names[r.label];
+            });
+            statusDiv.innerHTML = totalHits > 0
+                ? `Found <span class="count">${totalHits}</span> results in <span class="count">${elapsed}s</span> across ${categories.join(', ')}`
+                : `No results found (${elapsed}s)`;
+
+            if (totalHits === 0 && errors.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">&empty;</div>
+                        <p>No records found for "${esc(q)}"</p>
+                        <div class="hint">Try a different name, organization, or keyword</div>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+
+            // Show errors banner if any queries failed
+            if (errors.length > 0) {
+                const db990Down = errors.some(e => ['nonprofits','people990','grants'].includes(e));
+                const regsDown = errors.some(e => !['nonprofits','people990','grants'].includes(e));
+                let errMsg = '';
+                if (db990Down && regsDown) errMsg = 'Both databases had errors. Some results may be missing.';
+                else if (db990Down) errMsg = '990 database unavailable. Showing OpenRegs results only.';
+                else errMsg = 'OpenRegs database had partial errors. Some results may be missing.';
+                html += `<div class="error-note">${errMsg}</div>`;
+            }
+
+            // === NONPROFITS (990) ===
+            const nonprofits = nonprofitsR.data;
+            if (nonprofits.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:#4ade80;">&#9878;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Nonprofits</div>
+                            <div class="section-subtitle">${nonprofits.length} organizations found</div>
+                        </div>
+                        <span class="section-source source-990">990</span>
+                        <a class="section-link" href="https://data.datadawn.org/explore/bmf.html?q=${encodeURIComponent(q)}" target="_blank">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Name</th><th>EIN</th><th>Location</th><th>Assets</th><th>Income</th></tr></thead>
+                        <tbody>${nonprofits.map(r => `<tr>
+                            <td><a href="https://data.datadawn.org/org/${esc(r.ein)}" target="_blank">${esc(truncate(r.name, 60))}</a></td>
+                            <td class="mono muted">${esc(r.ein)}</td>
+                            <td class="muted">${esc([r.city, r.state].filter(Boolean).join(', '))}</td>
+                            <td class="money">${formatMoney(r.asset_amt)}</td>
+                            <td class="money">${formatMoney(r.income_amt)}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === PEOPLE / 990 OFFICERS ===
+            const people = peopleR.data;
+            if (people.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(168,85,247,0.15);color:#c084fc;">&#9786;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Officers &amp; Key Employees</div>
+                            <div class="section-subtitle">${people.length} highest-paid people at matching organizations</div>
+                        </div>
+                        <span class="section-source source-990">990</span>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Name</th><th>Title</th><th>Compensation</th><th>Organization</th><th>Year</th></tr></thead>
+                        <tbody>${people.map(r => `<tr>
+                            <td>${esc(r.person_name)}</td>
+                            <td class="muted">${esc(truncate(r.title, 40))}</td>
+                            <td class="money">${formatMoney(r.compensation)}</td>
+                            <td><a href="https://data.datadawn.org/org/${esc(r.ein)}" target="_blank">${esc(truncate(r.org_name, 50))}</a></td>
+                            <td class="muted">${r.tax_year || ''}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === CONGRESS MEMBERS ===
+            const members = membersR.data;
+            if (members.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(59,130,246,0.15);color:#60a5fa;">&#9733;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Congress Members</div>
+                            <div class="section-subtitle">${members.length} members found</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/member.html?q=${encodeURIComponent(q)}">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Name</th><th>Party</th><th>State</th><th>Chamber</th><th>Status</th></tr></thead>
+                        <tbody>${members.map(r => {
+                            const pClass = r.party === 'Republican' ? 'party-r' : r.party === 'Democrat' ? 'party-d' : '';
+                            return `<tr>
+                                <td><a class="${pClass}" href="/explore/member.html?member=${encodeURIComponent(r.bioguide_id)}">${esc(r.full_name)}</a></td>
+                                <td class="${pClass}">${esc(r.party || '')}</td>
+                                <td class="muted">${esc(r.state || '')}</td>
+                                <td class="muted">${esc(r.chamber || '')}</td>
+                                <td>${r.is_current ? '<span style="color:#4ade80;">Current</span>' : '<span class="muted">Former</span>'}</td>
+                            </tr>`;
+                        }).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === LEGISLATION ===
+            const legislation = legislationR.data;
+            if (legislation.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(251,146,60,0.15);color:#fb923c;">&#9782;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Legislation</div>
+                            <div class="section-subtitle">${legislation.length} bills found</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/legislation.html?q=${encodeURIComponent(q)}">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Bill</th><th>Title</th><th>Congress</th><th>Sponsor</th><th>Cosponsors</th></tr></thead>
+                        <tbody>${legislation.map(r => `<tr>
+                            <td style="white-space:nowrap;"><a href="/explore/legislation.html?detail=${encodeURIComponent(r.bill_id)}">${esc(r.bill_id)}</a></td>
+                            <td>${esc(truncate(r.title, 80))}</td>
+                            <td class="mono muted">${r.congress || ''}</td>
+                            <td class="muted">${esc(r.sponsor_name || '')}</td>
+                            <td class="muted">${r.cosponsor_count != null ? r.cosponsor_count : ''}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === LOBBYING ===
+            const lobbying = lobbyingR.data;
+            if (lobbying.length > 0) {
+                const lobbyTotal = lobbying.reduce((s, r) => s + (r.total_income || 0), 0);
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(245,158,11,0.15);color:var(--dawn-amber);">&#9883;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Lobbying Disclosures</div>
+                            <div class="section-subtitle">${lobbying.length} client-firm pairs &middot; ${formatMoney(lobbyTotal)} reported</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/lobbying.html?q=${encodeURIComponent(q)}">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Client</th><th>Registrant</th><th>Reported Income</th><th>Filings</th><th>Years</th></tr></thead>
+                        <tbody>${lobbying.map(r => `<tr>
+                            <td><a href="/explore/lobbying.html?q=${encodeURIComponent(r.client_name)}&client=${encodeURIComponent(r.client_name)}">${esc(truncate(r.client_name, 50))}</a></td>
+                            <td class="muted">${esc(truncate(r.registrant_name, 40))}</td>
+                            <td class="money">${formatMoney(r.total_income)}</td>
+                            <td>${formatNumber(r.filing_count)}</td>
+                            <td class="muted">${r.year_from}\u2013${r.year_to}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === GRANTS (990) ===
+            const grants = grantsR.data;
+            if (grants.length > 0) {
+                const grantTotal = grants.reduce((s, r) => s + (r.amount || 0), 0);
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8;">&#10084;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Foundation Grants</div>
+                            <div class="section-subtitle">${grants.length} grants &middot; ${formatMoney(grantTotal)} total</div>
+                        </div>
+                        <span class="section-source source-990">990</span>
+                        <a class="section-link" href="https://data.datadawn.org/explore/grants.html?q=${encodeURIComponent(q)}" target="_blank">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Funder</th><th>Recipient</th><th>Amount</th><th>Purpose</th><th>Year</th></tr></thead>
+                        <tbody>${grants.map(r => `<tr>
+                            <td><a href="https://data.datadawn.org/org/${esc(r.funder_ein)}" target="_blank">${esc(truncate(r.funder_name, 40))}</a></td>
+                            <td>${esc(truncate(r.recipient_name, 40))}</td>
+                            <td class="money">${formatMoney(r.amount)}</td>
+                            <td class="muted">${esc(truncate(r.purpose, 50))}</td>
+                            <td class="muted">${r.tax_year || ''}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === FEDERAL REGISTER ===
+            const fr = frR.data;
+            if (fr.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(239,68,68,0.15);color:#f87171;">&#9783;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Federal Register</div>
+                            <div class="section-subtitle">${fr.length} documents found</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/regulation.html?q=${encodeURIComponent(q)}">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Title</th><th>Type</th><th>Date</th><th>Agency</th></tr></thead>
+                        <tbody>${fr.map(r => `<tr>
+                            <td><a href="/explore/regulation.html?q=${encodeURIComponent(r.document_number)}">${esc(truncate(r.title, 80))}</a></td>
+                            <td class="muted" style="white-space:nowrap;">${esc(r.type || '')}</td>
+                            <td class="muted" style="white-space:nowrap;">${esc(r.publication_date || '')}</td>
+                            <td class="muted">${esc(truncate(r.agency_names, 40))}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === STOCK TRADES ===
+            const trades = tradesR.data;
+            if (trades.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(34,197,94,0.15);color:#4ade80;">&#8645;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Congressional Stock Trades</div>
+                            <div class="section-subtitle">${trades.length} trades found</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/member.html?q=${encodeURIComponent(q)}&filter=all">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Date</th><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Asset</th></tr></thead>
+                        <tbody>${trades.map(r => `<tr>
+                            <td class="muted" style="white-space:nowrap;">${esc(r.transaction_date || '')}</td>
+                            <td>${r.bioguide_id
+                                ? '<a href="/explore/member.html?member=' + encodeURIComponent(r.bioguide_id) + '">' + esc(r.member_name) + '</a>'
+                                : esc(r.member_name)
+                            }</td>
+                            <td class="mono" style="color:var(--dawn-gold);">${esc(r.ticker || '')}</td>
+                            <td class="muted">${esc(r.transaction_type || '')}</td>
+                            <td class="muted" style="white-space:nowrap;">${esc(r.amount_range || '')}</td>
+                            <td class="muted">${esc(truncate(r.asset_description, 50))}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === SPENDING ===
+            const spending = spendingR.data;
+            if (spending.length > 0) {
+                const spendTotal = spending.reduce((s, r) => s + (r.total_amount || 0), 0);
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(59,130,246,0.15);color:#60a5fa;">$</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Federal Spending</div>
+                            <div class="section-subtitle">${spending.length} recipients &middot; ${formatMoney(spendTotal)} total</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Recipient</th><th>Agency</th><th>Type</th><th>Awards</th><th>Total</th><th>Years</th></tr></thead>
+                        <tbody>${spending.map(r => `<tr>
+                            <td>${esc(truncate(r.recipient_name, 50))}</td>
+                            <td class="muted">${esc(truncate(r.agency, 30))}</td>
+                            <td class="muted">${esc(r.award_category || '')}</td>
+                            <td>${formatNumber(r.award_count)}</td>
+                            <td class="money">${formatMoney(r.total_amount)}</td>
+                            <td class="muted">FY${r.fy_from}\u2013${r.fy_to}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            // === HEARINGS ===
+            const hearings = hearingsR.data;
+            if (hearings.length > 0) {
+                html += `<div class="section">
+                    <div class="section-header">
+                        <div class="section-icon" style="background:rgba(251,191,36,0.15);color:var(--dawn-gold);">&#9881;</div>
+                        <div class="section-title-wrap">
+                            <div class="section-title">Committee Hearings</div>
+                            <div class="section-subtitle">${hearings.length} hearings found</div>
+                        </div>
+                        <span class="section-source source-regs">OpenRegs</span>
+                        <a class="section-link" href="/explore/hearings.html?q=${encodeURIComponent(q)}">See all &rarr;</a>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Title</th><th>Chamber</th><th>Congress</th><th>Date</th></tr></thead>
+                        <tbody>${hearings.map(r => `<tr>
+                            <td><a href="/explore/hearings.html?q=${encodeURIComponent(r.title ? r.title.substring(0, 40) : '')}">${esc(truncate(r.title, 80))}</a></td>
+                            <td class="muted">${esc(r.chamber || '')}</td>
+                            <td class="mono muted">${r.congress || ''}</td>
+                            <td class="muted" style="white-space:nowrap;">${esc(r.date_issued || '')}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`;
+            }
+
+            resultsDiv.innerHTML = html || `
+                <div class="empty-state">
+                    <div class="empty-icon">&empty;</div>
+                    <p>No records found for "${esc(q)}"</p>
+                    <div class="hint">Try a different name, organization, or keyword</div>
+                </div>`;
+        }
+
+        // Init
+        readURL();
+    </script>
+</body>
+</html>

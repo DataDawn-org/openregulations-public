@@ -14,12 +14,12 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Dataset | Records | Source |
 |---------|---------|--------|
 | Federal Register documents | 993,703 | Federal Register API |
-| Regulatory dockets | 164,759 | Regulations.gov API + derived from documents/comments |
-| Regulatory documents | 1,213,019 | Regulations.gov API |
-| Public comment headers | 3,907,894 | Regulations.gov API |
-| Comment full details | 86,507 | Regulations.gov API (2.2% of headers, in progress) |
-| Presidential documents | 5,905 | Federal Register API |
-| Congressional legislation | 167,507 | GovInfo BILLSTATUS + Congress.gov API |
+| Regulatory dockets | 254,397 | Regulations.gov API + derived from documents/comments |
+| Regulatory documents | 1,703,711 | Regulations.gov API |
+| Public comment headers | 9,669,365 | Regulations.gov API |
+| Comment full details | 423,837 | Regulations.gov API (4.4% of headers, in progress) |
+| Presidential documents | 5,918 | Federal Register API |
+| Congressional legislation | 364,559 | GovInfo BILLSTATUS + Congress.gov API |
 | Legislation actions | 1,100,541 | GovInfo BILLSTATUS |
 | Legislation subjects | 1,513,256 | GovInfo BILLSTATUS |
 | Legislation cosponsors | 2,070,889 | GovInfo BILLSTATUS |
@@ -32,7 +32,7 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,763 | congress-legislators GitHub |
-| Stock trading disclosures | 64,220 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Stock trading disclosures | 61,148 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
 | Lobbying filings | 1,908,114 | Senate LDA API |
 | Lobbying lobbyists | 4,376,087 | Senate LDA API |
 | Lobbying activities | 3,528,264 | Senate LDA API |
@@ -44,6 +44,9 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | FEC candidates | 64,679 | FEC bulk data |
 | FEC committees | 154,967 | FEC bulk data |
 | FEC contributions | 4,395,926 | FEC bulk data |
+| FEC operating expenditures | 15,358,447 | FEC bulk data |
+| FEC independent expenditures | 666,910 | FEC bulk data |
+| FEC PAC summary | 98,614 | FEC bulk data |
 | Federal spending awards | 863,632 | USAspending.gov API |
 | FR agencies | 444 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
@@ -57,35 +60,34 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Nomination actions | 189,972 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
-| GAO reports | 16,569 | GovInfo GAOREPORTS collection (1989–2008) |
+| GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
+| OIRA regulatory reviews | 48,434 | Reginfo.gov |
+| OIRA review meetings | 8,663 | Reginfo.gov |
+| OIRA meeting attendees | 90,711 | Reginfo.gov |
+| IG reports | 34,880 | oversight.gov |
+| IG recommendations | 11,999 | oversight.gov |
 | Earmarks | 70,826 | House/Senate Appropriations |
 | Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
 | FR ↔ Regs.gov cross-references | 185,900 | Derived |
 
-**Comment coverage by agency:**
+**Total**: ~120 million rows across 188 tables.
 
-| Agency | Comment Headers | Status |
-|--------|----------------|--------|
-| FWS | 1,601,634 | Complete |
-| EPA | 1,166,180 | Complete (with daily backfill for truncated months) |
-| FDA | 610,727 | Expanded (previously through 2022 only) |
-| APHIS | 506,870 | Complete |
-| USDA | 22,483 | Complete |
+**Comment coverage by agency**: 9.7M comment headers across EPA, FDA, USDA, FWS, APHIS, and expansion agencies.
 
 ---
 
 ## Interactive Explore Pages
 
-The live instance includes 21 interactive explore pages at `regs.datadawn.org/explore/`:
+The live instance includes 24 interactive explore pages at `regs.datadawn.org/explore/`, powered by a shared utility library (`shared.js`) for consistent styling and data formatting:
 
 | Page | URL | Description |
 |------|-----|-------------|
 | Explore Home | `/explore/index.html` | Overview dashboard with search and data stats |
 | Members | `/explore/member.html` | 12,700+ Congress members: stock trades, floor speeches, legislation, votes, donors, committees |
 | Regulations | `/explore/regulation.html` | Federal rulemaking: dockets, documents, comments, CFR text, cross-references |
-| Legislation | `/explore/legislation.html` | 167K+ bills: sponsors, cosponsors, actions, subjects, related floor speeches |
-| Lobbying | `/explore/lobbying.html` | 1.5M+ lobbying filings: clients, registrants, issue areas, government entities |
+| Legislation | `/explore/legislation.html` | 364K+ bills: sponsors, cosponsors, actions, subjects, related floor speeches |
+| Lobbying | `/explore/lobbying.html` | 1.9M+ lobbying filings: clients, registrants, issue areas, government entities |
 | Contributions | `/explore/contributions.html` | Campaign finance: employer donations, candidate fundraising, party flows |
 | FARA | `/explore/fara.html` | Foreign agent registrations: principals, countries, registrant documents |
 | Hearings | `/explore/hearings.html` | Committee hearings: witnesses, member attendance, hearing search |
@@ -102,8 +104,12 @@ The live instance includes 21 interactive explore pages at `regs.datadawn.org/ex
 | Committee Trade Conflicts | `/explore/trade-conflicts.html` | Trading in sectors committees regulate |
 | Most Lobbied Bills | `/explore/lobbied-bills.html` | Bills with most lobbying activity |
 | The Revolving Door | `/explore/revolving-door.html` | Former members who became lobbyists |
+| CBO Cost Estimates | `/explore/cbo.html` | CBO cost estimates linked to legislation |
+| FARA Hearings Overlap | `/explore/fara-hearings.html` | Foreign agents who testified at congressional hearings |
+| Meta Search | `/explore/search.html` | Cross-dataset search across all tables and explore pages |
+| Treaties | `/explore/treaties.html` | Treaty metadata, countries, Senate actions |
 
-All pages use the same DataDawn dark theme with self-contained HTML (inline CSS + JS). Data is queried live from the Datasette API.
+All pages use the same DataDawn dark theme and share a common `shared.js` utility library (15 functions for formatting, search, pagination, and chart rendering). Data is queried live from the Datasette API.
 
 ---
 
@@ -184,7 +190,19 @@ All pages use the same DataDawn dark theme with self-contained HTML (inline CSS 
 - URL: https://api.govinfo.gov/published?collection=GAOREPORTS
 - Free, public, requires a free GovInfo API key.
 - GAO report metadata, abstracts, legal references (USC, public laws, statutes at large), subject classifications.
-- Coverage: 1994–2008.
+- Coverage: 1989–2008 (GovInfo); 2009–present (gao.gov direct).
+
+**OIRA Regulatory Reviews (Reginfo.gov)**
+- URL: https://www.reginfo.gov/
+- Free, public, no API key needed.
+- Executive Order 12866 regulatory review data: reviews, meetings, attendees.
+- Coverage: 1981–present.
+
+**Inspector General Reports (oversight.gov)**
+- URL: https://www.oversight.gov/
+- Free, public, no API key needed.
+- IG report metadata, recommendations, questioned costs.
+- Coverage: varies by agency (generally 2010–present).
 
 **SEC EDGAR (Ticker-SIC Mapping)**
 - URL: https://www.sec.gov/files/company_tickers.json
@@ -349,23 +367,22 @@ regulations_gov/comments/headers/
 - No records dropped.
 
 ### Dockets
-- Downloaded for 5 agencies: EPA, FDA, USDA, FWS, APHIS.
-- 14,654 dockets from API, plus 72,052 stub dockets derived from documents/comments (86,706 total).
-- The Regulations.gov docket endpoint caps at 5,000 results (20 pages × 250/page). EPA and FDA both exceeded this cap. Stub records (id + agency_id) are backfilled during the database build step to ensure referential integrity.
+- Downloaded for multiple agencies via Regulations.gov API + expansion.
+- 254,397 dockets total (API downloads + stub dockets derived from documents/comments).
+- The Regulations.gov docket endpoint caps at 5,000 results (20 pages × 250/page). Stub records (id + agency_id) are backfilled during the database build step to ensure referential integrity.
 
 ### Documents
 - Downloaded by agency and year.
-- 727,510 documents across 5 agencies.
+- 1,703,711 documents across all covered agencies.
 
 ### Comment Headers
-- Downloaded for EPA (fully backfilled), FDA (through 2022), and USDA.
-- FWS complete (1.5M headers); APHIS complete.
-- 3,159,697 headers in current build.
-- Rate limited at 1,000 requests/hour.
+- Downloaded for EPA, FDA, USDA, FWS, APHIS, and expansion agencies.
+- 9,669,365 headers in current build (up from ~3.9M before expansion).
+- Rate limited at 1,000 requests/hour per API key.
 - EPA months exceeding 5,000 results were backfilled using daily date windows, recovering ~308,000 comments across 78 truncated months.
 
 ### Enrichments Applied During Database Build
-- **Submitter name parsing**: Names parsed from comment titles using regex patterns (e.g., "Comment from X", "Comment submitted by X"). Successfully parsed 1,935,452 of 3,126,188 comments.
+- **Submitter name parsing**: Names parsed from comment titles using regex patterns (e.g., "Comment from X", "Comment submitted by X"). Successfully parsed submitter names for the majority of comments.
 - **Submitter type classification**: Each comment classified as `individual`, `organization`, `anonymous`, or `unknown` based on name heuristics.
 - **Docket ID extraction**: Docket ID derived from comment IDs by stripping the last numeric segment.
 - **Cross-reference table** (5-phase):
@@ -546,7 +563,7 @@ Bill references extracted from CREC floor proceedings.
 | `congress` | Congress number |
 | `bill_type` | Type (hr, s, hjres, etc.) |
 | `bill_number` | Bill number |
-| `bill_id` | Formatted as `{congress}-{type}-{number}` — matches legislation table (108th-119th Congress) |
+| `bill_id` | Formatted as `{congress}-{type}-{number}` — matches legislation table (93rd-119th Congress) |
 
 ### congress_members
 
@@ -609,7 +626,7 @@ Current committee assignments with leadership roles.
 
 ### legislation
 
-Congressional bills and resolutions (93rd–119th Congress, 167K+ bills).
+Congressional bills and resolutions (93rd–119th Congress, 364K+ bills).
 
 | Column | Description |
 |---|---|
@@ -679,7 +696,7 @@ Individual member positions on each roll call vote (8.3M+ records).
 
 ### comment_details
 
-Full comment details from Regulations.gov (in progress — 42K of 3.7M downloaded).
+Full comment details from Regulations.gov (in progress — 423K of 9.7M downloaded).
 
 | Column | Description |
 |---|---|
@@ -695,7 +712,7 @@ Full comment details from Regulations.gov (in progress — 42K of 3.7M downloade
 
 ### lobbying_filings
 
-Lobbying disclosure filings from the Senate LDA (1.5M+ filings, 1999–present).
+Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present).
 
 | Column | Description |
 |---|---|
@@ -828,7 +845,7 @@ FEC political committees (155K+ records).
 
 ### fec_contributions
 
-Individual contributions to federal candidates (4.4M+ records).
+Individual contributions to federal candidates (4.4M+ records, aggregated from 103.9M raw records).
 
 | Column | Description |
 |---|---|
@@ -841,9 +858,52 @@ Individual contributions to federal candidates (4.4M+ records).
 | `state` | Contributor's state |
 | `cycle` | Election cycle |
 
+### fec_operating_expenditures
+
+FEC operating expenditures by political committees (15.4M+ records).
+
+| Column | Description |
+|---|---|
+| `cmte_id` | Spending committee ID |
+| `recipient_nm` | Payee/recipient name |
+| `purpose` | Purpose of expenditure |
+| `transaction_dt` | Transaction date |
+| `transaction_amt` | Dollar amount |
+| `city` / `state` / `zip` | Payee location |
+| `cycle` | Election cycle |
+
+### fec_independent_expenditures
+
+FEC independent expenditures for/against candidates (667K+ records).
+
+| Column | Description |
+|---|---|
+| `cmte_id` | Spending committee ID |
+| `cand_id` | Target candidate ID |
+| `sup_opp` | Support (S) or Oppose (O) |
+| `purpose` | Purpose of expenditure |
+| `transaction_dt` | Transaction date |
+| `transaction_amt` | Dollar amount |
+| `cycle` | Election cycle |
+
+### fec_pac_summary
+
+FEC PAC financial summary data (99K+ records).
+
+| Column | Description |
+|---|---|
+| `cmte_id` | Committee ID |
+| `cmte_nm` | Committee name |
+| `cmte_tp` | Committee type |
+| `total_receipts` | Total receipts |
+| `total_disbursements` | Total disbursements |
+| `contributions_to_candidates` | Contributions to federal candidates |
+| `independent_expenditures` | Independent expenditures |
+| `cycle` | Election cycle |
+
 ### hearings
 
-Committee hearings from GovInfo CHRG collection (46,295 hearings, 1993–present).
+Committee hearings from GovInfo CHRG collection (46,177 hearings, 1993–present).
 
 | Column | Description |
 |---|---|
@@ -882,7 +942,7 @@ Congress members who participated in committee hearings.
 
 ### crs_reports
 
-Congressional Research Service reports (13,617 reports).
+Congressional Research Service reports (13,629 reports).
 
 | Column | Description |
 |---|---|
@@ -908,7 +968,7 @@ Cross-references between CRS reports and legislation.
 
 ### nominations
 
-Executive nominations submitted to the Senate (44,711 nominations, Congresses 100–119).
+Executive nominations submitted to the Senate (40,067 nominations, Congresses 100–119).
 
 | Column | Description |
 |---|---|
@@ -963,7 +1023,7 @@ Action history for treaties.
 
 ### gao_reports
 
-Government Accountability Office reports (16,582 reports, 1994–2008).
+Government Accountability Office reports (73,725 reports, 1989–present). Includes GovInfo GAOREPORTS collection (1989–2008) plus direct gao.gov scrape (2009–present).
 
 | Column | Description |
 |---|---|
@@ -977,6 +1037,70 @@ Government Accountability Office reports (16,582 reports, 1994–2008).
 | `public_law_references` | Public law citations |
 | `statute_references` | Statutes at Large citations |
 | `url` | Link to report on GovInfo |
+
+### oira_reviews
+
+OIRA (Office of Information and Regulatory Affairs) regulatory reviews (48,434 reviews).
+
+| Column | Description |
+|---|---|
+| `rin` (PK) | Regulation Identifier Number |
+| `title` | Rule title |
+| `agency` | Issuing agency |
+| `stage` | Review stage (Proposed Rule, Final Rule, etc.) |
+| `received_date` | Date received by OIRA |
+| `concluded_date` | Date review concluded |
+| `conclusion` | Review conclusion (Consistent with Change, Withdrawn, etc.) |
+| `legal_authority` | Legal authority citations |
+
+### oira_meetings
+
+OIRA review meetings with external parties (8,663 meetings).
+
+| Column | Description |
+|---|---|
+| `meeting_id` (PK) | Meeting identifier |
+| `rin` | Regulation Identifier Number (links to oira_reviews) |
+| `date` | Meeting date |
+| `subject` | Meeting subject |
+| `attendee_count` | Number of attendees |
+
+### oira_attendees
+
+Individual attendees at OIRA review meetings (90,711 records).
+
+| Column | Description |
+|---|---|
+| `meeting_id` | Links to oira_meetings |
+| `name` | Attendee name |
+| `organization` | Attendee organization |
+| `title` | Attendee title |
+
+### ig_reports
+
+Inspector General reports from oversight.gov (34,880 reports).
+
+| Column | Description |
+|---|---|
+| `report_id` (PK) | Report identifier |
+| `title` | Report title |
+| `agency` | Issuing IG office |
+| `published_date` | Publication date |
+| `type` | Report type (Audit, Inspection, Investigation, etc.) |
+| `url` | Link to report |
+| `questioned_costs` | Dollar amount of questioned costs |
+| `unsupported_costs` | Dollar amount of unsupported costs |
+
+### ig_recommendations
+
+Recommendations from IG reports (11,999 recommendations).
+
+| Column | Description |
+|---|---|
+| `report_id` | Links to ig_reports |
+| `recommendation_number` | Recommendation number within report |
+| `recommendation_text` | Recommendation text |
+| `status` | Open, Closed, etc. |
 
 ### cbo_cost_estimates
 
@@ -1058,6 +1182,8 @@ Full-text search indexes (SQLite FTS5):
 - `crs_reports_fts` — title, authors, topics, summary
 - `nominations_fts` — description, organization, citation, status
 - `gao_reports_fts` — title, abstract, subjects, report_number
+- `ig_reports_fts` — title, agency, type
+- `oira_reviews_fts` — title, agency, legal_authority
 
 ---
 
@@ -1089,18 +1215,21 @@ Full-text search indexes (SQLite FTS5):
 | `scripts/17_crs_reports.py` | Download CRS reports and related legislation from Congress.gov API |
 | `scripts/18_nominations_treaties.py` | Download executive nominations and treaties from Congress.gov API |
 | `scripts/19_gao_reports.py` | Download GAO reports from GovInfo GAOREPORTS collection |
+| `scripts/19b_gao_direct.py` | Download GAO reports directly from gao.gov (2009–present) |
 | `scripts/20_sec_ticker_sic.py` | Download SIC codes for stock tickers from SEC EDGAR for committee trade conflict analysis |
+| `scripts/21_ig_reports.py` | Download IG reports and recommendations from oversight.gov |
 | `scripts/16_backfill_dockets.py` | Backfill truncated docket lists for EPA/FDA from Regulations.gov |
 | `scripts/build_lis_crosswalk.py` | Build LIS-to-bioguide crosswalk for vote linkage |
 | `scripts/refresh_member_stats.py` | Refresh pre-computed member stats (trades, speeches, votes, bills) |
 | `scripts/repair_crec_metadata.py` | Repair CREC metadata (one-time fix for namespace bug) |
 | `deploy/deploy.sh` | Deploy database + APHIS DB + templates + explore pages to Datasette instance |
+| `deploy/post_deploy_qc.sh` | Post-deployment quality checks (row counts, FTS, canned queries, explore pages) |
 
 ---
 
 ## Datasette Configuration
 
-The live instance at regs.datadawn.org includes 80+ pre-built SQL queries across all tables, accessible from the database page. Key categories:
+The live instance at regs.datadawn.org includes 80+ pre-built SQL queries across all tables, accessible from the database page. Post-deploy quality checks are run via `deploy/post_deploy_qc.sh`. Key query categories:
 
 - **Regulatory data**: Most commented dockets, rulemaking pipeline, FR documents by agency, recently published rules
 - **Public comments**: Search comments, comment volume by year, top organizational commenters, monthly activity
@@ -1130,7 +1259,7 @@ These are defined in `deploy/metadata.json`. The metadata also configures facets
 - **Federal Register**: Updated daily by GPO. Can re-run monthly to stay current.
 - **Regulations.gov**: API data updates continuously. Comment downloads are incremental (state files track completed year/month combinations).
 - **Recommended cycle**: Monthly for Federal Register, quarterly for Regulations.gov.
-- **Rebuild command**: `python3 scripts/05_build_database.py` rebuilds the entire database from raw JSON files in ~1 minute.
+- **Rebuild command**: `python3 scripts/05_build_database.py` rebuilds the entire database from raw JSON files (~37 minutes for ~120M rows).
 - **Deploy command**: `bash deploy/deploy.sh` uploads the database and metadata to regs.datadawn.org.
 
 ---
@@ -1143,37 +1272,29 @@ These items should be addressed in the next `05_build_database.py` rebuild:
 
 2. **Fix `committee_donor_summary` subcommittee duplication** — Members who sit on both a parent committee and its subcommittees appear multiple times in the summary table, inflating donation counts. The build should deduplicate by (bioguide_id, fec_committee_id) pair.
 
-3. **Port `_tmp_lobby_clients` optimization into `05_build_database.py`** — The pre-computed temp table with indexed `norm_name` column (currently only in `resume_build.py`) reduced `witness_lobby_overlap` and `commenter_lobby_overlap` build time from 60+ minutes to <1 second. Merge this pattern into the main build script.
-
-4. **Add GAO Oversight connection** — 4,990 GAO reports cite Public Laws in the `public_laws` field. Parse the comma-separated field, cross-reference with `legislation` table, and create a `gao_legislation_overlap` materialized table + explore page.
-
-5. **Add FARA Hearings connection** — 56 FARA registrants matched to hearing witnesses by organization name. Create a `fara_hearing_overlap` materialized table + explore page.
-
-6. **Remove "Independent" party filter from revolving-door page** — Zero matches (one Whig member displays as Independent). Either remove the filter button or fix the underlying party mapping.
-
-7. **Consider adding permanent `name_normalized` columns** to `hearing_witnesses` and lobbying tables for faster cross-reference joins in future rebuilds.
+3. **Remove "Independent" party filter from revolving-door page** — Zero matches (one Whig member displays as Independent). Either remove the filter button or fix the underlying party mapping.
 
 ---
 
 ## Known Limitations
 
-1. **Comment details download in progress** — Full comment text requires a separate API call per comment. Script `07_full_comment_details.py` is actively downloading at ~780 req/hr. 42K of 151K priority comments (organizations) downloaded so far. At current rates, the full 3.7M comments would take months — the prioritized approach (organizations first) is the practical strategy.
+1. **Comment details download in progress** — Full comment text requires a separate API call per comment. Script `07_full_comment_details.py` is actively downloading at ~780 req/hr. 423K details downloaded so far. At current rates, the full 9.7M comments would take months — the prioritized approach (organizations first) is the practical strategy.
 
-2. **FDA comments expanded but may still have gaps** — Now 610,727 headers (up from 432,676). Previously documented as "through 2022 only" but additional years have been collected. Coverage completeness for 2023–2026 not yet fully verified.
+2. **Comment expansion coverage** — Comment headers expanded from ~3.9M to 9.7M across additional agencies. Coverage completeness varies by agency and time period.
 
 3. **House PTR PDF parsing** — ~30% of House PTR filings (2,408 of 8,073) are scanned/image PDFs that cannot be text-parsed. These are predominantly older filings (pre-2017). Newer filings are 95%+ text-extractable. Filing indexes are still available for all filings.
 
 4. **EPA truncation partially recovered** — 78 months exceeded the 5,000-result API pagination cap. All 78 were backfilled via daily date windows, recovering ~308,000 comments. **One day (2020-12-30) still exceeds the daily cap** with 5,144 comments but only 5,000 retrieved — an estimated **~144 comments are missing** for that single day. No other days are known to be truncated.
 
-5. **Submitter name parsing is heuristic** — Regex-based extraction from comment titles. 1,935,452 of 3,126,188 comments (~62%) have a parsed submitter name. The rest are classified as `anonymous` or `unknown`. Organization detection uses keyword matching and may misclassify some orgs as individuals or vice versa.
+5. **Submitter name parsing is heuristic** — Regex-based extraction from comment titles. Approximately 60% of comments have a parsed submitter name. The rest are classified as `anonymous` or `unknown`. Organization detection uses keyword matching and may misclassify some orgs as individuals or vice versa.
 
 6. **Docket ID derivation** — Extracted by stripping the last numeric segment from comment IDs (e.g., `EPA-HQ-OA-2002-0001-0039` → `EPA-HQ-OA-2002-0001`). Works for standard ID formats but may produce incorrect docket IDs for non-standard formats.
 
 7. **No document full text** — Federal Register abstracts and excerpts are included, but full document text is not stored. Full text is available via `html_url` links.
 
-8. **5 agencies only** — Dockets, documents, and comments cover EPA, FDA, USDA, FWS, and APHIS. The Federal Register table covers all 444 agencies.
+8. **Agency coverage varies** — Core agencies (EPA, FDA, USDA, FWS, APHIS) have the deepest coverage. Expansion agencies have comment headers and documents but may lack full docket metadata. The Federal Register table covers all 444 agencies.
 
-9. **Cross-reference coverage** — 70,030 of 727,510 Regulations.gov documents (9.6%) are linked to Federal Register records. Most supporting materials and older documents lack a `fr_doc_num` field. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata, but the majority of documents simply don't have FR document numbers.
+9. **Cross-reference coverage** — 185,900 of 1,703,711 Regulations.gov documents (10.9%) are linked to Federal Register records. Most supporting materials and older documents lack a `fr_doc_num` field. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata, but the majority of documents simply don't have FR document numbers.
 
 ---
 

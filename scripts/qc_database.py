@@ -37,18 +37,19 @@ EXPECTED_NEW = {
     "earmarks", "nominations", "nomination_actions",
     "treaties", "treaty_actions", "hearings", "hearing_witnesses",
     "hearing_members", "crs_reports", "crs_report_bills",
-    "gao_reports",
+    "gao_reports", "docket_importance",
 }
 
 # Minimum expected row counts for key tables
 MIN_ROWS = {
     "federal_register": 990_000,
-    "comments": 3_700_000,
-    "documents": 700_000,
+    "comments": 7_000_000,     # Was 3.7M, expanded to ~8M+ with full agency expansion
+    "documents": 1_200_000,    # Was 700K, expanded with new agencies
+    "dockets": 160_000,        # Expanded from ~14K to 76K+ with new agencies
     "legislation": 160_000,
     "congress_members": 12_000,
     "congressional_record": 870_000,
-    "stock_trades": 60_000,  # Was 95K before PTR-only filter removed non-trade filings
+    "stock_trades": 60_000,
     "spending_awards": 860_000,
     "lobbying_filings": 1_900_000,
     "fec_contributions": 4_300_000,
@@ -58,6 +59,7 @@ MIN_ROWS = {
     "hearings": 45_000,
     "crs_reports": 13_000,
     "gao_reports": 16_000,
+    "docket_importance": 100_000,  # New materialized table
 }
 
 # Spot-check queries that should return results

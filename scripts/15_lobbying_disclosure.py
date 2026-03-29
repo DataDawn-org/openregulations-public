@@ -3,14 +3,14 @@
 Phase 15: Lobbying Disclosure Data Pull
 
 Downloads ALL lobbying disclosure data from the Senate LDA REST API
-(lda.senate.gov/api/v1/) and stores in a separate SQLite database.
+(lda.gov/api/v1/) and stores in a separate SQLite database.
 
 Data includes:
 - LD-1 registrations and LD-2 activity reports (filings endpoint)
 - LD-203 political contributions (contributions endpoint)
 - Reference constants (filing types, issue codes, government entities)
 
-The API is shutting down June 30, 2026 — this pulls the full archive.
+The old lda.senate.gov API migrated to lda.gov on June 30, 2026.
 
 Expected volume: ~2-3 million filings (1999-present), 8,000-12,000 API pages.
 At 2 requests/second: ~1.5-2 hours for the full pull.
@@ -39,7 +39,7 @@ with open(CONFIG_FILE) as f:
     CONFIG = json.load(f)
 
 API_KEY = CONFIG["lda_api_key"]
-BASE_URL = "https://lda.senate.gov/api/v1"
+BASE_URL = "https://lda.gov/api/v1"
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_DIR / "lobbying.db"
@@ -756,28 +756,39 @@ def parse_contribution(filing, conn):
         ))
         return
 
+    # Lobbyist info lives at the filing level, not per-item
+    filing_lobbyist = filing.get("lobbyist", {}) or {}
+    if isinstance(filing_lobbyist, dict):
+        first = safe_str(filing_lobbyist.get("first_name")) or ""
+        last = safe_str(filing_lobbyist.get("last_name")) or ""
+        filing_lobbyist_name = f"{first} {last}".strip() if (first or last) else safe_str(filing_lobbyist.get("name"))
+    else:
+        filing_lobbyist_name = safe_str(filing_lobbyist)
+
     for item in contributions:
         if not isinstance(item, dict):
             continue
 
-        # Lobbyist info — may be nested
+        # Per-item lobbyist (rare) falls back to filing-level lobbyist
         lobbyist = item.get("lobbyist", {})
-        if isinstance(lobbyist, dict):
+        if isinstance(lobbyist, dict) and lobbyist:
             first = safe_str(lobbyist.get("first_name")) or ""
             last = safe_str(lobbyist.get("last_name")) or ""
             lobbyist_name = f"{first} {last}".strip() if (first or last) else safe_str(lobbyist.get("name"))
         else:
-            lobbyist_name = safe_str(lobbyist)
+            item_name = safe_str(lobbyist) if lobbyist else None
+            lobbyist_name = item_name or filing_lobbyist_name
 
         contributor_name = safe_str(item.get("contributor_name"))
         payee_name = safe_str(item.get("payee_name"))
-        recipient_name = safe_str(item.get("recipient_name")) or safe_str(item.get("destination_name"))
+        recipient_name = safe_str(item.get("honoree_name")) or safe_str(item.get("recipient_name")) or safe_str(item.get("destination_name"))
 
         contrib_type = item.get("contribution_type")
         if isinstance(contrib_type, dict):
             contribution_type = safe_str(contrib_type.get("name")) or safe_str(contrib_type.get("code"))
         else:
-            contribution_type = safe_str(contrib_type)
+            # Use display name if available, fall back to raw code
+            contribution_type = safe_str(item.get("contribution_type_display")) or safe_str(contrib_type)
 
         amount = safe_int(item.get("amount"))
         contribution_date = safe_str(item.get("date")) or safe_str(item.get("contribution_date"))

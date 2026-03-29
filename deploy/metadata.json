@@ -65,7 +65,7 @@
                 },
                 "comments": {
                     "label_column": "title",
-                    "description_html": "Public comments submitted to federal agencies via Regulations.gov. Over 2.4M comments with submitter names and types.",
+                    "description_html": "Public comments submitted to federal agencies via Regulations.gov. Over 3.9M comments with submitter names and types.",
                     "facets": ["agency_id", "submitter_type", "posted_year"],
                     "sort_desc": "posted_date"
                 },
@@ -135,7 +135,7 @@
                     "sort": "full_name"
                 },
                 "stock_trades": {
-                    "description_html": "Congressional stock trading disclosures from 100% government sources. Senate: efdsearch.senate.gov (15,000+ transactions, 2012-present). House: disclosures-clerk.house.gov PTR PDFs parsed for transaction-level data (tickers, amounts, buy/sell). Both chambers linked to congress_members via bioguide_id.",
+                    "description_html": "Congressional stock trading disclosures from 100% government sources. Senate: efdsearch.senate.gov (15,000+ transactions, 2012-present). House: disclosures-clerk.house.gov PTR PDFs parsed for transaction-level data (tickers, amounts, buy/sell). 64,000+ total transactions. Both chambers linked to congress_members via bioguide_id.",
                     "facets": ["chamber", "transaction_type", "ticker"],
                     "sort_desc": "transaction_date"
                 },
@@ -238,7 +238,7 @@
                     "sort_desc": "date_stamped"
                 },
                 "lobbying_filings": {
-                    "description_html": "Senate Lobbying Disclosure Act filings (1999\u20132026). LD-1 registrations and LD-2 quarterly activity reports. 1.5M+ filings.",
+                    "description_html": "Senate Lobbying Disclosure Act filings (1999\u20132026). LD-1 registrations and LD-2 quarterly activity reports. 1.9M+ filings.",
                     "facets": ["filing_year"],
                     "sort_desc": "filing_year"
                 },
@@ -248,7 +248,7 @@
                     "sort_desc": "filing_year"
                 },
                 "lobbying_lobbyists": {
-                    "description_html": "Individual lobbyists listed on LDA filings. 3.5M+ records with covered positions (former government roles).",
+                    "description_html": "Individual lobbyists listed on LDA filings. 4.4M+ records with covered positions (former government roles).",
                     "sort": "lobbyist_name"
                 },
                 "lobbying_issue_codes": {
@@ -339,7 +339,7 @@
                 "most_commented_dockets": {
                     "title": "Most Commented Dockets",
                     "description": "Dockets with the most public comments, showing comment volume and submitter breakdown.",
-                    "sql": "SELECT c.docket_id, c.agency_id, d.title AS docket_title, COUNT(*) AS comment_count, SUM(CASE WHEN c.submitter_type = 'organization' THEN 1 ELSE 0 END) AS org_comments, SUM(CASE WHEN c.submitter_type = 'individual' THEN 1 ELSE 0 END) AS individual_comments, SUM(CASE WHEN c.submitter_type = 'anonymous' THEN 1 ELSE 0 END) AS anonymous_comments, MIN(c.posted_date) AS first_comment, MAX(c.posted_date) AS last_comment FROM comments c LEFT JOIN dockets d ON d.id = c.docket_id WHERE c.docket_id IS NOT NULL GROUP BY c.docket_id ORDER BY comment_count DESC LIMIT 100"
+                    "sql": "SELECT docket_id, docket_title, agency_id, comment_count, org_comments, individual_comments, anonymous_comments, first_comment, last_comment FROM top_dockets ORDER BY comment_count DESC LIMIT 100"
                 },
                 "search_comments": {
                     "title": "Search Comments (Full Text)",
@@ -373,12 +373,12 @@
                 "agency_comment_trends": {
                     "title": "Comment Volume by Year & Agency",
                     "description": "Annual comment volume for each agency, with breakdown by submitter type.",
-                    "sql": "SELECT agency_id, posted_year, COUNT(*) AS total, SUM(CASE WHEN submitter_type = 'organization' THEN 1 ELSE 0 END) AS organizations, SUM(CASE WHEN submitter_type = 'individual' THEN 1 ELSE 0 END) AS individuals, SUM(CASE WHEN submitter_type = 'anonymous' THEN 1 ELSE 0 END) AS anonymous, COUNT(DISTINCT docket_id) AS active_dockets FROM comments WHERE posted_year IS NOT NULL GROUP BY agency_id, posted_year ORDER BY agency_id, posted_year"
+                    "sql": "SELECT agency_id, posted_year, comment_count, docket_count, org_comments, individual_comments, anonymous_comments FROM comments_by_year ORDER BY agency_id, posted_year"
                 },
                 "top_organizational_commenters": {
                     "title": "Most Active Organizational Commenters",
                     "description": "Organizations that submit the most public comments across all agencies.",
-                    "sql": "SELECT submitter_name, COUNT(*) AS comment_count, COUNT(DISTINCT agency_id) AS agencies, COUNT(DISTINCT docket_id) AS dockets, GROUP_CONCAT(DISTINCT agency_id) AS agency_list, MIN(posted_date) AS first_comment, MAX(posted_date) AS last_comment FROM comments WHERE submitter_type = 'organization' AND submitter_name IS NOT NULL GROUP BY submitter_name ORDER BY comment_count DESC LIMIT 100"
+                    "sql": "SELECT submitter_name, comment_count, agencies_commented, dockets_commented, agency_list, first_comment, last_comment FROM top_submitters ORDER BY comment_count DESC LIMIT 100"
                 },
                 "rulemaking_pipeline": {
                     "title": "Rulemaking Pipeline (Proposed \u2192 Final)",
@@ -422,7 +422,7 @@
                 "comment_activity_monthly": {
                     "title": "Monthly Comment Activity",
                     "description": "Comment volume by month across all agencies, useful for spotting surges in public engagement.",
-                    "sql": "SELECT posted_year || '-' || printf('%02d', posted_month) AS month, agency_id, COUNT(*) AS comments, COUNT(DISTINCT docket_id) AS dockets FROM comments WHERE posted_year IS NOT NULL AND posted_month IS NOT NULL GROUP BY month, agency_id ORDER BY month DESC, comments DESC LIMIT 500"
+                    "sql": "SELECT year_month, agency_id, comment_count, active_dockets FROM comments_monthly ORDER BY year_month DESC LIMIT 500"
                 },
                 "cross_reference": {
                     "title": "Federal Register \u2194 Regulations.gov Lookup",
@@ -476,7 +476,7 @@
                 "spending_by_agency": {
                     "title": "Federal Spending by Agency",
                     "description": "Total grants and contracts by agency and fiscal year from USAspending.gov.",
-                    "sql": "SELECT COALESCE(sub_agency, agency) AS agency_name, award_category, fiscal_year, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, CAST(AVG(award_amount) AS INTEGER) AS avg_amount FROM spending_awards GROUP BY agency_name, award_category, fiscal_year ORDER BY fiscal_year DESC, total_amount DESC"
+                    "sql": "SELECT agency, sub_agency, award_category, award_count, total_amount, avg_amount FROM spending_by_agency ORDER BY total_amount DESC"
                 },
                 "top_grant_recipients": {
                     "title": "Top Grant Recipients",
@@ -586,20 +586,19 @@
                 },
                 "most_active_speakers": {
                     "title": "Most Active Speakers in Congress",
-                    "description": "Members of Congress with the most floor speeches, filtered by Congress number (e.g., 118 for 2023-2024).",
-                    "sql": "SELECT cs.speaker_name, COUNT(*) AS speeches, MIN(cr.date) AS first_speech, MAX(cr.date) AS last_speech, GROUP_CONCAT(DISTINCT cr.chamber) AS chambers FROM crec_speakers cs JOIN congressional_record cr ON cs.granule_id = cr.granule_id WHERE cr.congress = :congress GROUP BY cs.speaker_name ORDER BY speeches DESC LIMIT 100",
-                    "params": {"congress": "118"}
+                    "description": "Members of Congress with the most floor speeches across all Congresses on record.",
+                    "sql": "SELECT speaker_name, bioguide_id, official_name, party, state, total_speeches, active_days, first_appearance, last_appearance, chambers FROM speaker_activity ORDER BY total_speeches DESC LIMIT 100"
                 },
                 "bills_discussed_on_floor": {
                     "title": "Bills Discussed on the Floor",
                     "description": "Bills referenced in Congressional Record floor proceedings, showing how many times each was discussed. Can filter by bill type (hr, s, hjres, etc.).",
-                    "sql": "SELECT cb.bill_id, cb.bill_type, cb.bill_number, cb.congress, COALESCE(l.title, '(not in legislation table)') AS bill_title, COUNT(*) AS mentions, MIN(cr.date) AS first_mentioned, MAX(cr.date) AS last_mentioned FROM crec_bills cb JOIN congressional_record cr ON cb.granule_id = cr.granule_id LEFT JOIN legislation l ON cb.bill_id = l.bill_id WHERE cb.congress = :congress AND (:bill_type = '' OR cb.bill_type = :bill_type) GROUP BY cb.bill_id ORDER BY mentions DESC LIMIT 100",
+                    "sql": "SELECT bill_id, bill_type, bill_number, congress, COALESCE(bill_title, '(not in legislation table)') AS bill_title, floor_mentions AS mentions, first_discussed, last_discussed FROM bills_floor_time WHERE congress = :congress AND (:bill_type = '' OR bill_type = :bill_type) ORDER BY floor_mentions DESC LIMIT 100",
                     "params": {"congress": "118", "bill_type": ""}
                 },
                 "floor_debate_for_bill": {
                     "title": "Floor Debate for a Specific Bill",
                     "description": "All Congressional Record entries referencing a specific bill. Enter bill_id format: congress-type-number (e.g., '118-hr-3684').",
-                    "sql": "SELECT cr.date, cr.title, cr.chamber, cs_agg.speakers, cr.page_start, substr(cr.full_text, 1, 400) AS excerpt FROM crec_bills cb JOIN congressional_record cr ON cb.granule_id = cr.granule_id LEFT JOIN (SELECT granule_id, GROUP_CONCAT(speaker_name, '; ') AS speakers FROM crec_speakers GROUP BY granule_id) cs_agg ON cr.granule_id = cs_agg.granule_id WHERE cb.bill_id = :bill_id ORDER BY cr.date",
+                    "sql": "SELECT cr.date, cr.title, cr.chamber, (SELECT GROUP_CONCAT(speaker_name, '; ') FROM crec_speakers WHERE granule_id = cr.granule_id) AS speakers, cr.page_start, substr(cr.full_text, 1, 400) AS excerpt FROM crec_bills cb JOIN congressional_record cr ON cb.granule_id = cr.granule_id WHERE cb.bill_id = :bill_id ORDER BY cr.date",
                     "params": {"bill_id": "118-hr-3684"}
                 },
                 "search_members": {
@@ -628,7 +627,7 @@
                 "most_traded_stocks": {
                     "title": "Most Traded Stocks by Congress",
                     "description": "Stocks most frequently bought or sold by members of Congress (both chambers).",
-                    "sql": "SELECT ticker, MAX(asset_description) AS description, COUNT(*) AS trades, COUNT(DISTINCT member_name) AS traders, SUM(CASE WHEN transaction_type IN ('P', 'Purchase') THEN 1 ELSE 0 END) AS buys, SUM(CASE WHEN transaction_type LIKE '%S%' OR transaction_type LIKE '%Sale%' THEN 1 ELSE 0 END) AS sells, GROUP_CONCAT(DISTINCT member_name) AS members FROM stock_trades WHERE ticker IS NOT NULL AND ticker != '' GROUP BY ticker ORDER BY trades DESC LIMIT 100"
+                    "sql": "SELECT ticker, asset_description, trade_count, trader_count, purchases, sales, traders, first_trade, last_trade FROM stock_trades_by_ticker ORDER BY trade_count DESC LIMIT 100"
                 },
                 "trades_by_ticker": {
                     "title": "Who Traded a Specific Stock?",
@@ -744,11 +743,6 @@
                     "sql": "SELECT submitter_type, COUNT(*) AS comment_count, MIN(posted_date) AS first_comment, MAX(posted_date) AS last_comment FROM comments WHERE docket_id = :docket_id GROUP BY submitter_type ORDER BY comment_count DESC",
                     "params": ["docket_id"]
                 },
-                "explore_open_comments": {
-                    "title": "Explore: Open Comment Periods",
-                    "description": "Documents currently open for public comment, ordered by closing date.",
-                    "sql": "SELECT id, agency_id, title, document_type, comment_end_date, docket_id, CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0 ORDER BY comment_end_date ASC LIMIT 50"
-                },
                 "explore_lobbying_client": {
                     "title": "Explore: Lobbying Client Search",
                     "description": "Search lobbying clients by name with total spending and firm counts.",
@@ -770,7 +764,7 @@
                 "explore_lobbying_issues": {
                     "title": "Explore: Lobbying Issue Areas",
                     "description": "All lobbying issue areas with filing counts and client counts.",
-                    "sql": "SELECT la.issue_code, ic.description, COUNT(*) AS filing_count, COUNT(DISTINCT la.client_name) AS client_count, SUM(la.income_amount) AS total_income FROM lobbying_activities la LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code GROUP BY la.issue_code ORDER BY filing_count DESC"
+                    "sql": "SELECT issue_code, description, filing_count, client_count, total_income FROM lobbying_issue_summary ORDER BY filing_count DESC"
                 },
                 "explore_revolving_door": {
                     "title": "Explore: Revolving Door",
@@ -1090,6 +1084,25 @@
                     "description": "Search political contributions reported by registered lobbyists. Enter a lobbyist name, recipient name, or leave blank for top contributions.",
                     "sql": "SELECT lc.lobbyist_name, lc.contributor_name, lc.recipient_name, lc.payee_name, lc.contribution_type, CAST(lc.amount AS INTEGER) AS amount, lc.contribution_date, lc.filing_year FROM lobbying_contributions lc WHERE (:search = '' OR lc.lobbyist_name LIKE '%' || :search || '%' OR lc.recipient_name LIKE '%' || :search || '%' OR lc.contributor_name LIKE '%' || :search || '%') ORDER BY lc.amount DESC, lc.contribution_date DESC LIMIT 200",
                     "params": ["search"]
+                }
+            }
+        },
+        "open_comments": {
+            "title": "Open for Comment — Daily Updated",
+            "description_html": "<p>Documents currently open for public comment on Regulations.gov. Updated daily at 6:30 AM UTC. This is a small, frequently-refreshed database separate from the main OpenRegs archive.</p>",
+            "tables": {
+                "documents": {
+                    "label_column": "title",
+                    "description_html": "Federal regulatory documents currently open for public comment.",
+                    "facets": ["agency_id", "document_type"],
+                    "sort_desc": "comment_end_date"
+                }
+            },
+            "queries": {
+                "explore_open_comments": {
+                    "title": "Explore: Open Comment Periods",
+                    "description": "Documents currently open for public comment, ordered by closing date.",
+                    "sql": "SELECT id, agency_id, title, document_type, comment_end_date, docket_id, CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0 ORDER BY comment_end_date ASC LIMIT 50"
                 }
             }
         }
