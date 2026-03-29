@@ -8,8 +8,9 @@ every legislator who has both, and saves the mapping as lis_crosswalk.json.
 """
 
 import json
-import urllib.request
 import os
+import urllib.request
+from pathlib import Path
 
 URLS = [
     "https://raw.githubusercontent.com/unitedstates/congress-legislators/gh-pages/legislators-current.json",
@@ -17,12 +18,13 @@ URLS = [
 ]
 
 # Also check local copies if available
+PROJECT_DIR = Path(__file__).resolve().parent.parent
 LOCAL_FILES = [
-    str(Path(__file__).resolve().parent.parent / "congress_members" / "legislators-current.json"),
-    str(Path(__file__).resolve().parent.parent / "congress_members" / "legislators-historical.json"),
+    str(PROJECT_DIR / "congress_members" / "legislators-current.json"),
+    str(PROJECT_DIR / "congress_members" / "legislators-historical.json"),
 ]
 
-OUTPUT_PATH = str(Path(__file__).resolve().parent.parent / "congress_members" / "lis_crosswalk.json")
+OUTPUT_PATH = str(PROJECT_DIR / "congress_members" / "lis_crosswalk.json")
 
 
 def load_legislators():
