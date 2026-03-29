@@ -4,7 +4,7 @@
 #
 # This mirrors the DataDawn (990project) deployment pattern:
 #   - Caddy reverse proxy on port 443
-#   - Datasette serving SQLite on localhost
+#   - Datasette serving SQLite on localhost:8002
 #   - systemd service for process management
 #
 # Usage:
@@ -27,7 +27,7 @@ REMOTE_DB="$REMOTE_DIR/openregs.db"
 REMOTE_APHIS_DB="$REMOTE_DIR/aphis.db"
 REMOTE_LOBBYING_DB="$REMOTE_DIR/lobbying.db"
 REMOTE_FARA_DB="$REMOTE_DIR/fara.db"
-DATASETTE_PORT="${OPENREGS_PORT:-8001}"
+DATASETTE_PORT="${OPENREGS_PORT:-8002}"
 DOMAIN="${OPENREGS_DOMAIN:-regs.datadawn.org}"
 
 DRY_RUN=0
@@ -83,16 +83,15 @@ After=network.target
 Type=simple
 User=${REMOTE_HOST%%@*}
 WorkingDirectory=$REMOTE_DIR
-ExecStart=$(ssh "$REMOTE_HOST" 'which datasette') serve $REMOTE_DB $REMOTE_APHIS_DB $REMOTE_LOBBYING_DB $REMOTE_FARA_DB \\
+ExecStart=$(ssh "$REMOTE_HOST" 'which datasette') serve $REMOTE_DB $REMOTE_APHIS_DB $REMOTE_LOBBYING_DB $REMOTE_FARA_DB $REMOTE_DIR/open_comments.db \\
     --host 127.0.0.1 \\
     --port $DATASETTE_PORT \\
     --metadata $REMOTE_DIR/metadata.json \\
     --template-dir $REMOTE_DIR/templates \\
     --static explore:$REMOTE_DIR/explore \\
-    --setting sql_time_limit_ms 10000 \\
+    --setting sql_time_limit_ms 30000 \\
     --setting max_returned_rows 1000 \\
-    --setting default_allow_sql 1 \\
-    --cors
+    --setting default_allow_sql 1
 Restart=always
 RestartSec=5
 
@@ -114,6 +113,27 @@ SERVICE_EOF
         log "Then run: systemctl reload caddy"
         log ""
         log "Also add a DNS A record for $DOMAIN → $(ssh "$REMOTE_HOST" 'curl -s ifconfig.me')"
+    fi
+fi
+
+# ── Backup existing databases on VPS ─────────────────────────────────────
+log "=== Backing up existing databases on VPS ==="
+BACKUP_DIR="$REMOTE_DIR/backups"
+
+if [[ $DRY_RUN -eq 1 ]]; then
+    log "[DRY-RUN] Would backup existing DB to $BACKUP_DIR/"
+else
+    ssh "$REMOTE_HOST" "mkdir -p $BACKUP_DIR"
+    TIMESTAMP=$(date '+%Y%m%d_%H%M')
+    # Backup main DB (only keep last 2 backups to save disk space)
+    if ssh "$REMOTE_HOST" "test -f $REMOTE_DB"; then
+        log "Backing up existing openregs.db → backups/openregs_${TIMESTAMP}.db"
+        ssh "$REMOTE_HOST" "cp $REMOTE_DB $BACKUP_DIR/openregs_${TIMESTAMP}.db"
+        # Clean old backups (keep last 2)
+        ssh "$REMOTE_HOST" "ls -t $BACKUP_DIR/openregs_*.db 2>/dev/null | tail -n +3 | xargs -r rm"
+        log "Backup complete (keeping last 2 versions)"
+    else
+        log "No existing DB to backup"
     fi
 fi
 

@@ -15,7 +15,7 @@ Add to scripts/config.json: "congress_gov_api_key": "YOUR_KEY"
 Usage:
     python3 09_congress_gov.py                     # current + previous congress
     python3 09_congress_gov.py --congress 118 119   # specific congresses
-    python3 09_congress_gov.py --full               # all congresses (108-119)
+    python3 09_congress_gov.py --full               # all congresses (93-119)
 
 Note: If upgrading from the previous version that filtered by policy area,
 run with --reset to re-download bills that were previously skipped.
@@ -53,6 +53,10 @@ BILL_TYPES = ["hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", "sres"]
 
 # Current congress number (119th: 2025-2027)
 CURRENT_CONGRESS = 119
+
+# GovInfo BILLSTATUS XML only available from congress 108+
+# Older congresses use Congress.gov API v3 JSON (rate-limited)
+MIN_BILLSTATUS_CONGRESS = 108
 
 # === Logging ===
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -313,6 +317,173 @@ def download_single_billstatus(bulk_session, congress, bill_type, number):
         return None
 
 
+def download_bill_via_api(api_session, congress, bill_type, number):
+    """Download bill detail from Congress.gov API v3 (for congresses without BILLSTATUS XML).
+
+    Returns a dict in the same format as parse_billstatus_xml for compatibility.
+    Requires multiple API calls per bill: base + actions + cosponsors + subjects + summaries.
+    """
+    base_url = f"{API_BASE}/bill/{congress}/{bill_type}/{number}"
+
+    # Base bill info
+    data = api_get(api_session, base_url)
+    if not data or "bill" not in data:
+        return None
+    bill = data["bill"]
+
+    result = {
+        "number": str(bill.get("number", "")),
+        "type": bill.get("type", "").lower(),
+        "congress": str(bill.get("congress", congress)),
+        "title": bill.get("title", ""),
+        "originChamber": bill.get("originChamber", ""),
+        "introducedDate": bill.get("introducedDate", ""),
+        "updateDate": bill.get("updateDate", ""),
+        "constitutionalAuthorityStatement": bill.get("constitutionalAuthorityStatementText", ""),
+    }
+
+    # Policy area
+    pa = bill.get("policyArea", {})
+    result["policyArea"] = pa.get("name") if pa else None
+
+    # Sponsors (inline in base response)
+    sponsors = []
+    for sp in bill.get("sponsors", []):
+        sponsors.append({
+            "bioguideId": sp.get("bioguideId", ""),
+            "fullName": sp.get("fullName", sp.get("firstName", "") + " " + sp.get("lastName", "")),
+            "firstName": sp.get("firstName", ""),
+            "lastName": sp.get("lastName", ""),
+            "party": sp.get("party", ""),
+            "state": sp.get("state", ""),
+            "district": str(sp.get("district", "")),
+        })
+    result["sponsors"] = sponsors
+
+    # Latest action (inline)
+    la = bill.get("latestAction", {})
+    if la:
+        result["latestAction"] = {
+            "actionDate": la.get("actionDate", ""),
+            "text": la.get("text", ""),
+        }
+
+    # Cosponsors (separate endpoint)
+    cosponsors = []
+    cos_url = bill.get("cosponsors", {}).get("url")
+    if cos_url:
+        offset = 0
+        while True:
+            cos_data = api_get(api_session, cos_url, {"limit": PAGE_SIZE, "offset": offset})
+            if not cos_data:
+                break
+            for co in cos_data.get("cosponsors", []):
+                cosponsors.append({
+                    "bioguideId": co.get("bioguideId", ""),
+                    "fullName": co.get("fullName", ""),
+                    "firstName": co.get("firstName", ""),
+                    "lastName": co.get("lastName", ""),
+                    "party": co.get("party", ""),
+                    "state": co.get("state", ""),
+                    "district": str(co.get("district", "")),
+                    "sponsorshipDate": co.get("sponsorshipDate", ""),
+                    "isOriginalCosponsor": str(co.get("isOriginalCosponsor", "")),
+                })
+            if "next" not in cos_data.get("pagination", {}):
+                break
+            offset += PAGE_SIZE
+    result["cosponsors"] = cosponsors
+
+    # Actions (separate endpoint)
+    actions = []
+    act_url = bill.get("actions", {}).get("url")
+    if act_url:
+        offset = 0
+        while True:
+            act_data = api_get(api_session, act_url, {"limit": PAGE_SIZE, "offset": offset})
+            if not act_data:
+                break
+            for act in act_data.get("actions", []):
+                action = {
+                    "actionDate": act.get("actionDate", ""),
+                    "text": act.get("text", ""),
+                    "type": act.get("type", ""),
+                }
+                comm = act.get("committee", {})
+                if comm and comm.get("name"):
+                    action["committee"] = comm["name"]
+                src = act.get("sourceSystem", {})
+                if src and src.get("name"):
+                    action["source"] = src["name"]
+                actions.append(action)
+            if "next" not in act_data.get("pagination", {}):
+                break
+            offset += PAGE_SIZE
+    result["actions"] = actions
+
+    # Subjects (separate endpoint)
+    subjects = []
+    subj_url = bill.get("subjects", {}).get("url")
+    if subj_url:
+        subj_data = api_get(api_session, subj_url)
+        if subj_data:
+            for s in subj_data.get("subjects", {}).get("legislativeSubjects", []):
+                name = s.get("name")
+                if name:
+                    subjects.append(name)
+    result["subjects"] = subjects
+
+    # Summaries (separate endpoint)
+    summaries = []
+    summ_url = bill.get("summaries", {}).get("url")
+    if summ_url:
+        summ_data = api_get(api_session, summ_url)
+        if summ_data:
+            for s in summ_data.get("summaries", []):
+                summaries.append({
+                    "versionCode": s.get("versionCode", ""),
+                    "actionDate": s.get("actionDate", ""),
+                    "actionDesc": s.get("actionDesc", ""),
+                    "text": s.get("text", ""),
+                    "updateDate": s.get("updateDate", ""),
+                })
+    result["summaries"] = summaries
+
+    # Committees (inline in base)
+    committees = []
+    for comm in bill.get("committees", {}).get("url", []) if isinstance(bill.get("committees"), dict) else []:
+        pass  # committees need separate fetch
+    # Fetch committees
+    comm_url = bill.get("committees", {}).get("url") if isinstance(bill.get("committees"), dict) else None
+    if comm_url:
+        comm_data = api_get(api_session, comm_url)
+        if comm_data:
+            for c in comm_data.get("committees", []):
+                committees.append({
+                    "name": c.get("name", ""),
+                    "chamber": c.get("chamber", ""),
+                    "type": c.get("type", ""),
+                })
+    result["committees"] = committees
+
+    # Related bills
+    related = []
+    rel_url = bill.get("relatedBills", {}).get("url") if isinstance(bill.get("relatedBills"), dict) else None
+    if rel_url:
+        rel_data = api_get(api_session, rel_url)
+        if rel_data:
+            for r in rel_data.get("relatedBills", []):
+                related.append({
+                    "number": str(r.get("number", "")),
+                    "type": r.get("type", "").lower(),
+                    "congress": str(r.get("congress", "")),
+                    "title": r.get("title", ""),
+                })
+    result["relatedBills"] = related
+
+    return result
+
+
 # === Phase 3: Orchestrate download ===
 
 def download_congress(api_session, bulk_session, congress, state):
@@ -330,6 +501,7 @@ def download_congress(api_session, bulk_session, congress, state):
 
     total_relevant = 0
     total_checked = 0
+    _congress_start = time.time()
 
     for bill_type in BILL_TYPES:
         log.info(f"Processing {bill_type.upper()} bills for Congress {congress}...")
@@ -350,7 +522,7 @@ def download_congress(api_session, bulk_session, congress, state):
         if not bills:
             continue
 
-        # Phase 2: Download BILLSTATUS XML from GovInfo (parallel, no rate limits)
+        # Phase 2: Download bill details
         # Filter to bills not yet completed
         completed = set(state["completed_bills"][congress_key])
         pending = []
@@ -364,28 +536,25 @@ def download_congress(api_session, bulk_session, congress, state):
             log.info(f"  All {len(bills)} {bill_type.upper()} bills already processed")
             continue
 
-        log.info(f"  Downloading {len(pending)} BILLSTATUS XML files ({len(bills) - len(pending)} cached)...")
+        use_api = congress < MIN_BILLSTATUS_CONGRESS
+        method = "Congress.gov API" if use_api else "BILLSTATUS XML"
+        log.info(f"  Downloading {len(pending)} bills via {method} ({len(bills) - len(pending)} cached)...")
 
         type_relevant = 0
         batch_completed = []
 
-        with ThreadPoolExecutor(max_workers=BULK_WORKERS) as pool:
-            futures = {}
-            for bt, num, bid in pending:
-                f = pool.submit(download_single_billstatus, bulk_session, congress, bt, num)
-                futures[f] = (bt, num, bid)
-
-            for i, future in enumerate(as_completed(futures)):
-                bt, num, bid = futures[future]
+        if use_api:
+            # Sequential API downloads (rate-limited)
+            for i, (bt, num, bid) in enumerate(pending):
                 try:
-                    parsed = future.result()
+                    parsed = download_bill_via_api(api_session, congress, bt, num)
                 except Exception as e:
                     log.error(f"  Error processing {bid}: {e}")
                     batch_completed.append(bid)
+                    total_checked += 1
                     continue
 
                 if parsed:
-                    # Save bill data (all policy areas)
                     detail_file = congress_dir / f"{bt}_{num}.json"
                     with open(detail_file, "w") as f:
                         json.dump(parsed, f, indent=2)
@@ -395,11 +564,46 @@ def download_congress(api_session, bulk_session, congress, state):
                 batch_completed.append(bid)
                 total_checked += 1
 
-                if (i + 1) % 500 == 0:
+                if (i + 1) % 100 == 0:
                     state["completed_bills"][congress_key].extend(batch_completed)
                     batch_completed = []
                     save_state(state)
-                    log.info(f"  Progress: {i + 1}/{len(pending)} checked, {type_relevant} saved")
+                    rate = (i + 1) / max(1, (time.time() - _congress_start) / 3600)
+                    remaining = len(pending) - (i + 1)
+                    eta_hr = remaining / max(1, rate)
+                    log.info(f"  Progress: {i + 1}/{len(pending)}, {type_relevant} saved | ~{rate:.0f}/hr, ~{eta_hr:.1f}hr remaining")
+        else:
+            # Parallel GovInfo bulk XML downloads
+            with ThreadPoolExecutor(max_workers=BULK_WORKERS) as pool:
+                futures = {}
+                for bt, num, bid in pending:
+                    f = pool.submit(download_single_billstatus, bulk_session, congress, bt, num)
+                    futures[f] = (bt, num, bid)
+
+                for i, future in enumerate(as_completed(futures)):
+                    bt, num, bid = futures[future]
+                    try:
+                        parsed = future.result()
+                    except Exception as e:
+                        log.error(f"  Error processing {bid}: {e}")
+                        batch_completed.append(bid)
+                        continue
+
+                    if parsed:
+                        detail_file = congress_dir / f"{bt}_{num}.json"
+                        with open(detail_file, "w") as f:
+                            json.dump(parsed, f, indent=2)
+                        type_relevant += 1
+                        total_relevant += 1
+
+                    batch_completed.append(bid)
+                    total_checked += 1
+
+                    if (i + 1) % 500 == 0:
+                        state["completed_bills"][congress_key].extend(batch_completed)
+                        batch_completed = []
+                        save_state(state)
+                        log.info(f"  Progress: {i + 1}/{len(pending)} checked, {type_relevant} saved")
 
         # Save remaining batch
         state["completed_bills"][congress_key].extend(batch_completed)
@@ -420,7 +624,7 @@ def main():
     parser.add_argument("--congress", type=int, nargs="+",
                         help="Congress numbers to download (default: current + previous)")
     parser.add_argument("--full", action="store_true",
-                        help="Download all available congresses (108-current)")
+                        help="Download all available congresses (93-current)")
     parser.add_argument("--reset", action="store_true",
                         help="Reset download state and start fresh")
     args = parser.parse_args()
@@ -438,7 +642,7 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if args.full:
-        congresses = list(range(108, CURRENT_CONGRESS + 1))
+        congresses = list(range(93, CURRENT_CONGRESS + 1))
     elif args.congress:
         congresses = args.congress
     else:

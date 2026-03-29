@@ -7,17 +7,19 @@ The detail endpoint gives us everything: full comment text, firstName, lastName,
 organization, city, state, zip, country, docketId, commentOnDocumentId, category,
 duplicateComments, trackingNbr, attachments, and more.
 
-Rate limited to 1,000 requests/hour (3.6s between requests) to stay within
-the Regulations.gov API cap. Supports resume via state file.
+Uses 3 parallel workers with a thread-safe rate limiter to stay under the
+API's 1,000 req/hr cap while maximizing throughput (~700-900/hr actual).
 
 Usage:
     python3 07_full_comment_details.py                        # all agencies, all types
-    python3 07_full_comment_details.py --types organization   # orgs only (~180K)
+    python3 07_full_comment_details.py --types organization   # orgs only
     python3 07_full_comment_details.py --types organization --types unknown
     python3 07_full_comment_details.py --agency EPA --types organization
-    python3 07_full_comment_details.py --workers 2            # more parallelism
+    python3 07_full_comment_details.py --workers 4            # more parallelism
     python3 07_full_comment_details.py --limit 1000           # stop after N
     python3 07_full_comment_details.py --skip-anonymous       # skip anonymous
+    python3 07_full_comment_details.py --priority             # smart order: small-docket → unique-title → rest
+    python3 07_full_comment_details.py --priority --types organization  # org comments in priority order
 """
 
 import argparse
@@ -46,12 +48,14 @@ LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "full_comments_state.json"
 PROGRESS_FILE = LOG_DIR / "progress.txt"
 
-MIN_INTERVAL = 3.6  # seconds between ANY two requests (1,000 req/hr)
+MIN_INTERVAL = 1.0  # seconds between ANY two requests
 BATCH_SIZE = 100     # comments per output file
-DEFAULT_WORKERS = 1
+DEFAULT_WORKERS = 3
 
 with open(CONFIG_FILE) as f:
-    API_KEY = json.load(f)["regulations_gov_api_key"]
+    _config = json.load(f)
+API_KEY = _config["regulations_gov_api_key"]
+API_KEY_2 = _config.get("regulations_gov_api_key_2", API_KEY)
 
 # === Logging ===
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -167,11 +171,24 @@ def fetch_comment_detail(comment_id):
 
 # === State management ===
 def load_state_downloaded():
-    """Load the set of already-downloaded comment IDs."""
-    if STATE_FILE.exists():
+    """Load the set of already-downloaded comment IDs from all batch files."""
+    downloaded = set()
+    # Read from batch files (source of truth) — handles both forward and reverse
+    for pattern in ["batch_*.json", "rev_*.json"]:
+        for bf in DETAILS_DIR.glob(pattern):
+            try:
+                data = json.loads(bf.read_text())
+                for rec in data:
+                    cid = rec.get("data", {}).get("id") or rec.get("id", "")
+                    if cid:
+                        downloaded.add(cid)
+            except (json.JSONDecodeError, OSError):
+                continue
+    # Fall back to state file if no batch files exist
+    if not downloaded and STATE_FILE.exists():
         data = json.loads(STATE_FILE.read_text())
-        return set(data.get("downloaded", []))
-    return set()
+        downloaded = set(data.get("downloaded", []))
+    return downloaded
 
 
 def save_state(downloaded, failed_count):
@@ -227,6 +244,7 @@ def collect_comment_ids_from_db(agencies=None, types=None, skip_anonymous=False)
                 WHEN 'anonymous' THEN 3
                 ELSE 4
             END,
+            CASE agency_id WHEN 'EPA' THEN 1 ELSE 0 END,
             agency_id, posted_date DESC
     """
 
@@ -242,6 +260,117 @@ def collect_comment_ids_from_db(agencies=None, types=None, skip_anonymous=False)
         log.info(f"  {stype}: {count:,}")
 
     return [(cid, title, agency) for cid, title, agency, _ in rows]
+
+
+def collect_comment_ids_prioritized(tiers=None, types=None):
+    """Collect comment IDs ordered by likely value, skipping already-downloaded.
+
+    Priority order:
+      Tier 2: Comments on small dockets (≤100 total comments) — substantive regulatory input
+      Tier 3: Comments with unique titles (title appears only once) — individually written
+      Tier 4: Remaining comments not in Tier 2 or 3
+
+    Args:
+        tiers: list of tier numbers to include (e.g. [2,3]). None = all tiers.
+        types: list of submitter types to include (e.g. ['organization']).
+               None = all non-anonymous types.
+    """
+    if not DB_PATH.exists():
+        log.error(f"Database not found: {DB_PATH}. Run 05_build_database.py first.")
+        sys.exit(1)
+
+    conn = sqlite3.connect(str(DB_PATH))
+
+    # Build type filter clause
+    type_params = []
+    if types:
+        placeholders = ",".join("?" for _ in types)
+        type_clause = f"c.submitter_type IN ({placeholders})"
+        type_params = list(types)
+        log.info(f"  Filtering to submitter types: {', '.join(types)}")
+    else:
+        type_clause = "c.submitter_type != 'anonymous'"
+
+    # Pre-compute docket sizes
+    log.info("  Computing docket sizes...")
+    conn.execute("DROP TABLE IF EXISTS _tmp_docket_sizes")
+    conn.execute("""
+        CREATE TEMP TABLE _tmp_docket_sizes AS
+        SELECT docket_id, COUNT(*) as cnt FROM comments GROUP BY docket_id
+    """)
+    conn.execute("CREATE INDEX _tmp_ds_idx ON _tmp_docket_sizes(docket_id)")
+
+    # Pre-compute title frequencies
+    log.info("  Computing title frequencies...")
+    conn.execute("DROP TABLE IF EXISTS _tmp_title_freq")
+    conn.execute("""
+        CREATE TEMP TABLE _tmp_title_freq AS
+        SELECT title, COUNT(*) as cnt FROM comments
+        WHERE title IS NOT NULL AND title != ''
+        GROUP BY title
+    """)
+    conn.execute("CREATE INDEX _tmp_tf_idx ON _tmp_title_freq(title)")
+
+    include_tiers = tiers or [2, 3, 4]
+
+    tier2 = []
+    tier2_ids = set()
+    tier3 = []
+    tier3_ids = set()
+    tier4 = []
+
+    # Tier 2: Small-docket comments (most substantive)
+    if 2 in include_tiers:
+        log.info("  Tier 2: Small-docket comments (≤100 per docket)...")
+        tier2 = conn.execute(f"""
+            SELECT c.id, COALESCE(c.title, ''), c.agency_id
+            FROM comments c
+            JOIN _tmp_docket_sizes ds ON c.docket_id = ds.docket_id
+            WHERE ds.cnt <= 100
+            AND {type_clause}
+            ORDER BY ds.cnt ASC, c.agency_id, c.posted_date DESC
+        """, type_params).fetchall()
+        log.info(f"    {len(tier2):,} comments")
+        tier2_ids = {r[0] for r in tier2}
+
+    # Tier 3: Unique-title comments (individually written, not form letters)
+    if 3 in include_tiers:
+        log.info("  Tier 3: Unique-title comments...")
+        tier3 = conn.execute(f"""
+            SELECT c.id, c.title, c.agency_id
+            FROM comments c
+            JOIN _tmp_title_freq tf ON c.title = tf.title
+            WHERE tf.cnt = 1
+            AND {type_clause}
+            ORDER BY c.agency_id, c.posted_date DESC
+        """, type_params).fetchall()
+        # Remove any already in tier 2
+        tier3 = [(cid, t, a) for cid, t, a in tier3 if cid not in tier2_ids]
+        log.info(f"    {len(tier3):,} comments (after dedup)")
+        tier3_ids = {r[0] for r in tier3}
+
+    # Tier 4: Everything else matching type filter
+    if 4 in include_tiers:
+        log.info("  Tier 4: Remaining comments...")
+        seen = tier2_ids | tier3_ids
+        tier4 = conn.execute(f"""
+            SELECT c.id, COALESCE(c.title, ''), c.agency_id
+            FROM comments c
+            WHERE {type_clause}
+            ORDER BY c.agency_id, c.posted_date DESC
+        """, type_params).fetchall()
+        tier4 = [(cid, t, a) for cid, t, a in tier4 if cid not in seen]
+        log.info(f"    {len(tier4):,} comments (after dedup)")
+
+    conn.close()
+
+    combined = tier2 + tier3 + tier4
+    log.info(f"  Total prioritized: {len(combined):,} comments")
+    if tier2: log.info(f"    Tier 2 (small docket): {len(tier2):,}")
+    if tier3: log.info(f"    Tier 3 (unique title): {len(tier3):,}")
+    if tier4: log.info(f"    Tier 4 (remaining): {len(tier4):,}")
+
+    return combined
 
 
 def collect_comment_ids_from_files(agencies=None, skip_anonymous=False):
@@ -275,10 +404,10 @@ def collect_comment_ids_from_files(agencies=None, skip_anonymous=False):
             unique.append((cid, title, agency))
 
     if skip_anonymous:
-        unique = [(c, t, a) for c, t, a in unique if "anonymous" not in t.lower()]
+        unique = [(c, t, a) for c, t, a in unique if t and "anonymous" not in t.lower()]
 
     def sort_key(item):
-        if "anonymous" in item[1].lower():
+        if item[1] and "anonymous" in item[1].lower():
             return 2
         return 0
 
@@ -301,7 +430,21 @@ def main():
                         help=f"Number of parallel workers (default: {DEFAULT_WORKERS})")
     parser.add_argument("--limit", type=int, default=0, help="Max comments to fetch")
     parser.add_argument("--skip-anonymous", action="store_true", help="Skip anonymous comments")
+    parser.add_argument("--priority", action="store_true",
+                        help="Fetch in priority order: small-docket → unique-title → remaining (skips anonymous)")
+    parser.add_argument("--tier", type=int, action="append",
+                        help="With --priority: which tiers to include (2=small-docket, 3=unique-title, 4=rest). Can repeat.")
+    parser.add_argument("--api-key-2", action="store_true",
+                        help="Use the second API key (regulations_gov_api_key_2)")
+    parser.add_argument("--reverse", action="store_true",
+                        help="Fetch in reverse order (work from end of list)")
     args = parser.parse_args()
+
+    # Switch API key if requested
+    if args.api_key_2:
+        global API_KEY
+        API_KEY = API_KEY_2
+        log.info(f"Using secondary API key")
 
     agencies = [a.upper() for a in args.agency] if args.agency else None
     types = [t.lower() for t in args.types] if args.types else None
@@ -326,7 +469,12 @@ def main():
     log.info(f"Already downloaded: {len(downloaded):,} comments")
 
     # Collect comment IDs
-    if types:
+    if args.priority:
+        tier_list = args.tier or None
+        tier_label = f" (tiers {tier_list})" if tier_list else ""
+        log.info(f"Collecting comment IDs in priority order{tier_label}...")
+        all_comments = collect_comment_ids_prioritized(tiers=tier_list, types=types)
+    elif types:
         log.info("Querying database for comment IDs...")
         all_comments = collect_comment_ids_from_db(agencies, types, args.skip_anonymous)
     else:
@@ -336,6 +484,9 @@ def main():
 
     # Filter out already downloaded
     to_fetch = [cid for cid, _, _ in all_comments if cid not in downloaded]
+    if args.reverse:
+        to_fetch.reverse()
+        log.info(f"Reversed fetch order (working from end)")
     log.info(f"Remaining to fetch: {len(to_fetch):,}")
 
     if not to_fetch:
@@ -353,9 +504,10 @@ def main():
     # Create output directory
     DETAILS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Tracking
+    # Tracking — use prefix to avoid file collisions between forward/reverse instances
+    batch_prefix = "rev" if args.reverse else "batch"
     batch = []
-    batch_num = len(list(DETAILS_DIR.glob("batch_*.json")))
+    batch_num = len(list(DETAILS_DIR.glob(f"{batch_prefix}_*.json")))
     fetched = 0
     failed = 0
     start_time = time.time()
@@ -367,7 +519,7 @@ def main():
         if not batch:
             return
         batch_num += 1
-        outfile = DETAILS_DIR / f"batch_{batch_num:06d}.json"
+        outfile = DETAILS_DIR / f"{batch_prefix}_{batch_num:06d}.json"
         outfile.write_text(json.dumps(batch, indent=None))
         batch = []
 

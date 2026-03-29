@@ -30,14 +30,23 @@ LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "regs_dockets_docs_state.json"
 PROGRESS_FILE = LOG_DIR / "progress.txt"
 
-AGENCIES = ["USDA", "EPA", "FDA", "FWS", "APHIS"]
+DEFAULT_AGENCIES = ["USDA", "EPA", "FDA", "FWS", "APHIS"]
 PAGE_SIZE = 250
 MAX_PAGE = 20  # API hard limit: page[number] max is 20
 MIN_INTERVAL = 3.6  # seconds between requests (1000/hr)
 START_YEAR = 1994
 
+# CLI: --agencies DOE,SEC,FAA  and  --api-key-2
+_use_key2 = "--api-key-2" in sys.argv
+_agency_arg = None
+for i, a in enumerate(sys.argv):
+    if a == "--agencies" and i + 1 < len(sys.argv):
+        _agency_arg = sys.argv[i + 1]
+AGENCIES = _agency_arg.split(",") if _agency_arg else DEFAULT_AGENCIES
+
 with open(CONFIG_FILE) as f:
-    API_KEY = json.load(f)["regulations_gov_api_key"]
+    _cfg = json.load(f)
+    API_KEY = _cfg["regulations_gov_api_key_2"] if _use_key2 else _cfg["regulations_gov_api_key"]
 
 # === Logging ===
 log = logging.getLogger("regs_dockets_docs")

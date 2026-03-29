@@ -1,0 +1,177 @@
+# OpenRegulations Database — DataDawn
+
+> Free, open database of U.S. federal regulatory data: Federal Register documents, regulations.gov dockets/comments, congressional legislation, lobbying, stock trades, campaign finance, and more. Powered by Datasette at regs.datadawn.org.
+
+This database unifies 30+ federal data sources into a single queryable database with 29 GB of data across 50+ tables covering 126 federal agencies. All data is from official government sources and is public domain.
+
+The JSON API is at `https://regs.datadawn.org/openregs.json`. Append `?sql=QUERY&_shape=objects` to run arbitrary SQL.
+
+## How to Query
+
+```
+https://regs.datadawn.org/openregs.json?sql=SELECT+title,publication_date,type+FROM+federal_register+WHERE+title+LIKE+'%artificial+intelligence%'+ORDER+BY+publication_date+DESC+LIMIT+10&_shape=objects
+```
+
+Key parameters:
+- `sql=` — URL-encoded SQL query
+- `_shape=objects` — returns JSON array of objects
+- Maximum 1000 rows per query
+
+## Core Tables
+
+### federal_register (994K rows)
+Federal Register documents (1994–present). Rules, proposed rules, notices, presidential documents.
+Federal Register documents (1994–present). Rules, proposed rules, notices, presidential documents.
+
+Key columns: `document_number` (PK), `title`, `type` (Rule/Proposed Rule/Notice/Presidential Document), `abstract`, `publication_date`, `agency_names`, `html_url`, `pdf_url`
+
+### dockets (254K rows)
+Regulations.gov dockets.
+
+Key columns: `id` (PK, e.g. "EPA-HQ-OAR-2021-0208"), `agency_id`, `title`, `docket_type` (Rulemaking/Nonrulemaking)
+
+### documents (1.7M rows)
+Regulations.gov documents (rules, proposed rules, notices, supporting materials).
+
+Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `document_type`, `posted_date`, `comment_start_date`, `comment_end_date`, `fr_doc_num`
+
+### comments (9.7M rows)
+Public comments from regulations.gov.
+
+Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `submitter_name`, `submitter_type`, `posted_date`
+
+### legislation (284K rows)
+Congressional bills (Congresses 93–119).
+
+Key columns: `bill_id` (PK, e.g. "118-hr-3684"), `congress`, `bill_type`, `bill_number`, `title`, `policy_area`, `sponsor_bioguide_id`, `summary_text`
+
+### congress_members (12.8K rows)
+All historical and current members of Congress.
+
+Key columns: `bioguide_id` (PK), `full_name`, `party`, `state`, `chamber`, `is_current`
+
+`bioguide_id` is the universal key linking to: stock_trades, legislation (sponsor), crec_speakers, member_votes, committee_memberships, lobbying
+
+### stock_trades (61K rows)
+Congressional stock trading disclosures (PTR transactions).
+
+Key columns: `bioguide_id`, `member_name`, `chamber`, `transaction_date`, `ticker`, `asset_description`, `transaction_type` (Purchase/Sale/etc.), `amount_range`
+
+### congressional_record (879K rows)
+Floor proceedings from Congressional Record (1994–present).
+
+Key columns: `granule_id` (PK), `date`, `congress`, `chamber`, `title`, `full_text`
+
+### lobbying_filings (1.9M rows)
+Lobbying disclosure filings (1999–2026).
+
+Key columns: `filing_uuid` (PK), `registrant_name`, `client_name`, `amount_reported`, `filing_year`, `filing_period`
+
+### spending_awards (864K rows)
+Federal spending from USAspending.gov. 20 agencies, FY2017-2026.
+
+Key columns: `award_id`, `agency`, `award_category` (grants/contracts), `recipient_name`, `award_amount`, `description`, `fiscal_year`
+
+### cfr_sections (123K rows)
+Code of Federal Regulations sections (19 titles).
+
+Key columns: `section_id` (PK), `title_number`, `part_number`, `section_heading`, `agency`, `full_text`
+
+### presidential_documents (5.9K rows)
+Executive orders and proclamations.
+
+Key columns: `document_number` (PK), `title`, `document_type`, `executive_order_number`, `signing_date`
+
+### roll_call_votes (26K rows) / member_votes (8.3M rows)
+Congressional voting records.
+
+### fec_contributions (4.4M rows)
+FEC campaign contributions to candidates from committees.
+
+### hearings (46K rows)
+Committee hearing transcripts from GovInfo.
+
+### nominations (40K rows)
+Executive nominations (Congresses 100–119).
+
+### fara_registrants (7K rows) / fara_foreign_principals (18K rows)
+FARA foreign agent registrations.
+
+### crs_reports (13.6K rows)
+Congressional Research Service reports.
+
+### gao_reports (16.6K rows)
+GAO reports (1994–2008).
+
+## Full-Text Search
+
+17 FTS5 indexes available:
+
+- `federal_register_fts`: title, abstract
+- `documents_fts`, `comments_fts`, `dockets_fts`
+- `crec_fts`: Congressional Record full text
+- `cfr_fts`: CFR regulatory text
+- `lobbying_fts`: registrant/client names
+- `legislation_fts`: bill titles and summaries
+- `spending_awards_fts`: recipient names and descriptions
+- `hearings_fts`, `crs_reports_fts`, `nominations_fts`, `gao_reports_fts`, `earmarks_fts`
+- `fara_registrants_fts`, `fara_foreign_principals_fts`
+- `fec_employer_fts`
+
+## Common Queries
+
+Search Federal Register by keyword:
+```sql
+SELECT document_number, title, type, publication_date, agency_names
+FROM federal_register
+WHERE rowid IN (SELECT rowid FROM federal_register_fts WHERE federal_register_fts MATCH '"climate change"')
+ORDER BY publication_date DESC LIMIT 20
+```
+
+Look up a member of Congress:
+```sql
+SELECT bioguide_id, full_name, party, state, chamber, is_current
+FROM congress_members
+WHERE full_name LIKE '%Warren%' AND is_current = 1
+```
+
+Stock trades for a member:
+```sql
+SELECT transaction_date, ticker, asset_description, transaction_type, amount_range
+FROM stock_trades
+WHERE bioguide_id = 'W000817'
+ORDER BY transaction_date DESC LIMIT 20
+```
+
+Search lobbying by client:
+```sql
+SELECT la.registrant_name, la.client_name, la.issue_code, la.income_amount, la.filing_year
+FROM lobbying_activities la
+WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"Google"')
+ORDER BY la.income_amount DESC LIMIT 20
+```
+
+Bills on a topic:
+```sql
+SELECT bill_id, title, policy_area, congress
+FROM legislation
+WHERE rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"artificial intelligence"')
+ORDER BY congress DESC LIMIT 20
+```
+
+## Cross-Dataset Connection Pages
+
+9 explore pages at `https://regs.datadawn.org/explore/`:
+- `witness-lobby.html` — Orgs that testify at hearings AND lobby
+- `committee-trades.html` — Committee members' stock trades
+- `committee-donors.html` — Campaign donations to committee members
+- `speeches-trades.html` — Floor speeches near stock trades
+- `trade-conflicts.html` — Trades in committee-regulated sectors
+- `lobbied-bills.html` — Bills ranked by lobbying activity
+- `revolving-door.html` — Former members who became lobbyists
+- `fara-hearings.html` — Foreign agents at hearings
+- `commenter-lobby.html` — Orgs that comment on rules AND lobby
+
+## Member Detail Pages
+
+- Member profile: `https://regs.datadawn.org/explore/member.html?id={bioguide_id}`

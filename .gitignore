@@ -21,6 +21,7 @@ logs/
 
 # Secrets and private docs
 scripts/config.json
+deploy/vps_config.json
 CLAUDE.md
 .env
 .env.*

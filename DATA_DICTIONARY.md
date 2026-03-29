@@ -1,7 +1,7 @@
 # OpenRegs Data Dictionary
 
-> Comprehensive U.S. federal government data: regulations, legislation, congressional floor speeches, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending.
-> Updated: 2026-03-06
+> Comprehensive U.S. federal government data: regulations, legislation, congressional floor speeches, committee hearings, CRS reports, executive nominations, treaties, GAO reports, lobbying disclosures, campaign finance, stock trades, foreign agent registrations, and federal spending.
+> Updated: 2026-03-08
 
 ---
 
@@ -14,12 +14,18 @@
 | GovInfo (BILLSTATUS, CREC, eCFR) | `govinfo.gov/bulkdata` | None | None |
 | Congress.gov (votes, legislation) | `api.congress.gov/v3` | API key | 5,000 req/hour |
 | USAspending.gov | `api.usaspending.gov/api/v2` | None | None |
-| Senate LDA (lobbying) | `lda.senate.gov/api/v1` | API key | Throttled (~1 req/sec) |
+| LDA.gov (lobbying) | `lda.gov/api/v1` | API key | Throttled (~1 req/sec) |
 | Senate eFD (stock trades) | `efdsearch.senate.gov` | None | Throttled |
 | House FD (stock trades) | `disclosures-clerk.house.gov` | None | None (PDF downloads) |
 | FEC (campaign finance) | `fec.gov/data/browse-data` | None (bulk files) | N/A |
 | FARA (foreign agents) | `efile.fara.gov` | None | None |
 | APHIS (animal welfare) | `aphis.my.site.com` (Salesforce Aura) | None | Throttled |
+| GovInfo CHRG (hearings) | `api.govinfo.gov` (collection CHRG) | API key | None |
+| Congress.gov CRS Reports | `api.congress.gov/v3/crsreport` | API key | 5,000 req/hour |
+| Congress.gov Nominations | `api.congress.gov/v3/nomination` | API key | 5,000 req/hour |
+| Congress.gov Treaties | `api.congress.gov/v3/treaty` | API key | 5,000 req/hour |
+| GovInfo GAOREPORTS (GAO) | `api.govinfo.gov` (collection GAOREPORTS) | API key | None |
+| SEC EDGAR (ticker SIC) | `sec.gov/cgi-bin/browse-edgar` | None (User-Agent) | 10 req/sec |
 
 API keys are stored in `scripts/config.json` (never committed to git).
 
@@ -29,7 +35,7 @@ API keys are stored in `scripts/config.json` (never committed to git).
 
 | Database | Path | Size | Tables | Purpose |
 |----------|------|------|--------|---------|
-| openregs.db | `openregs.db` | 22 GB | 40+ | Primary database (deployed to Datasette) |
+| openregs.db | `openregs.db` | 22 GB | 60+ | Primary database (deployed to Datasette) |
 | lobbying.db | `lobbying.db` | 13 GB | 8 | Full lobbying data with raw JSON |
 | fec.db | `fec.db` | 47 GB | 7 | Full FEC data (104M individual contributions) |
 | fara.db | `fara.db` | 42 MB | 4 | Full FARA data |
@@ -80,7 +86,7 @@ Junction table: FR documents to agencies (many-to-many).
 | `document_number` | TEXT PK | FR document number |
 | `agency_id` | INTEGER PK | FR agency ID |
 
-#### `presidential_documents` -- 5,904 rows
+#### `presidential_documents` -- 5,905 rows
 
 Executive orders and proclamations extracted from FR data.
 
@@ -96,7 +102,7 @@ Executive orders and proclamations extracted from FR data.
 
 ### Regulations.gov
 
-#### `dockets` -- 86,706 rows
+#### `dockets` -- 164,759 rows
 
 Regulatory dockets from 5 agencies (EPA, FDA, USDA, FWS, APHIS). Includes 72K stub records backfilled from documents/comments for referential integrity.
 
@@ -107,7 +113,7 @@ Regulatory dockets from 5 agencies (EPA, FDA, USDA, FWS, APHIS). Includes 72K st
 | `title` | TEXT | Docket title (null for stubs) |
 | `docket_type` | TEXT | `Rulemaking` or `Nonrulemaking` |
 
-#### `docket_summary` -- 26,195 rows
+#### `docket_summary` -- 49,900 rows
 
 AI-generated docket summaries for dockets with titles.
 
@@ -116,7 +122,7 @@ AI-generated docket summaries for dockets with titles.
 | `docket_id` | TEXT | Docket ID |
 | `summary` | TEXT | Plain-language summary |
 
-#### `documents` -- 727,510 rows
+#### `documents` -- 1,213,019 rows
 
 Regulatory documents filed in dockets (rules, proposed rules, notices, supporting materials).
 
@@ -133,7 +139,7 @@ Regulatory documents filed in dockets (rules, proposed rules, notices, supportin
 | `comment_start_date` / `comment_end_date` | TEXT | Comment period window |
 | `open_for_comment` / `withdrawn` | INTEGER | Boolean flags |
 
-#### `comments` -- 3,713,961 rows
+#### `comments` -- 3,907,894 rows
 
 Public comment headers (metadata, not full text).
 
@@ -148,9 +154,9 @@ Public comment headers (metadata, not full text).
 | `posted_date` | TEXT | ISO date |
 | `posted_year` / `posted_month` | INTEGER | Extracted date parts |
 
-Coverage: FWS 1.6M, EPA 1.2M, APHIS 491K, FDA 433K, USDA 22K.
+Coverage: FWS 1.6M, EPA 1.2M, FDA 611K, APHIS 507K, USDA 22K.
 
-#### `comment_details` -- 41,807 rows
+#### `comment_details` -- 86,507 rows
 
 Full comment details (text, structured name, location). Downloaded one-by-one from the per-comment API endpoint. In progress.
 
@@ -165,7 +171,7 @@ Full comment details (text, structured name, location). Downloaded one-by-one fr
 | `attachment_count` | INTEGER | Number of attached files |
 | `attachment_urls` | TEXT | URLs to attachment files |
 
-#### `fr_regs_crossref` -- 70,030 rows
+#### `fr_regs_crossref` -- 185,900 rows
 
 Cross-reference linking FR documents to Regulations.gov documents. Built via 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive).
 
@@ -174,7 +180,7 @@ Cross-reference linking FR documents to Regulations.gov documents. Built via 5-p
 | `fr_document_number` | TEXT PK | FR document number |
 | `regs_document_id` | TEXT PK | Regulations.gov document ID |
 
-#### `agency_map` -- 5 rows
+#### `agency_map` -- 15 rows
 
 Maps Regulations.gov agency codes to FR agency IDs.
 
@@ -379,7 +385,7 @@ Crosswalk for Senate vote linkage (LIS IDs to bioguide IDs).
 
 ### Stock Trades
 
-#### `stock_trades` -- 95,621 rows
+#### `stock_trades` -- 64,220 rows
 
 Congressional financial disclosures. Senate from efdsearch.senate.gov (15K+), House from clerk PTR PDFs (80K+).
 
@@ -401,7 +407,7 @@ Congressional financial disclosures. Senate from efdsearch.senate.gov (15K+), Ho
 
 ### Lobbying Disclosures
 
-#### `lobbying_filings` -- 1,507,321 rows
+#### `lobbying_filings` -- 1,908,114 rows
 
 Senate LDA filings (LD-1 registrations, LD-2 activity reports), 1999--present.
 
@@ -416,7 +422,7 @@ Senate LDA filings (LD-1 registrations, LD-2 activity reports), 1999--present.
 | `amount_reported` | REAL | Dollar amount |
 | `is_no_activity` / `is_termination` | INTEGER | Boolean flags |
 
-#### `lobbying_lobbyists` -- 3,464,421 rows
+#### `lobbying_lobbyists` -- 4,376,087 rows
 
 Individual lobbyists listed on filings.
 
@@ -426,7 +432,7 @@ Individual lobbyists listed on filings.
 | `lobbyist_name` | TEXT | Lobbyist name |
 | `covered_position` | TEXT | Former government position (revolving door) |
 
-#### `lobbying_activities` -- 2,754,579 rows
+#### `lobbying_activities` -- 3,528,264 rows
 
 Activities by issue area, with specific issues lobbied and government entities contacted.
 
@@ -438,9 +444,9 @@ Activities by issue area, with specific issues lobbied and government entities c
 | `government_entities` | TEXT | Bodies contacted |
 | `income_amount` / `expense_amount` | INTEGER | Amounts reported |
 
-#### `lobbying_contributions` -- 0 rows (schema present)
+#### `lobbying_contributions` -- 3,492,672 rows
 
-LD-203 political contribution reports. Schema exists but not yet populated.
+LD-203 political contribution reports (lobbyist contributions to federal candidates/officeholders).
 
 #### `lobbying_issue_codes` -- 79 rows
 
@@ -492,6 +498,200 @@ Individual employees/associates of FARA registrants.
 | `registration_number` | TEXT | Links to `fara_registrants` |
 | `first_name` / `last_name` | TEXT | Individual name |
 | `short_form_date` / `short_form_termination_date` | TEXT | Active period |
+
+---
+
+### Committee Hearings
+
+#### `hearings` -- 46,177 rows
+
+Committee hearing metadata from GovInfo CHRG collection (1993--present).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `package_id` | TEXT PK | GovInfo package identifier (e.g., `CHRG-118shrg12345`) |
+| `title` | TEXT | Hearing title |
+| `chamber` | TEXT | `Senate`, `House`, or `Joint` |
+| `congress` | INTEGER | Congress number |
+| `session` | TEXT | Session number |
+| `date_issued` | TEXT | ISO date of hearing |
+| `committees` | TEXT | Committee name(s) |
+| `detail_url` | TEXT | GovInfo detail URL |
+| `html_url` | TEXT | Link to HTML transcript |
+| `pdf_url` | TEXT | Link to PDF transcript |
+
+#### `hearing_witnesses` -- ~100,000+ rows
+
+Witnesses who testified at committee hearings. Extracted from MODS XML metadata.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `package_id` | TEXT | Links to `hearings` |
+| `name` | TEXT | Witness name |
+| `title` | TEXT | Witness title/position |
+| `organization` | TEXT | Witness organization or affiliation |
+| `location` | TEXT | Location |
+
+#### `hearing_members` -- ~200,000+ rows
+
+Congress members who participated in committee hearings. Includes bioguide linkage.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `package_id` | TEXT PK | Links to `hearings` |
+| `name` | TEXT PK | Member name |
+| `role` | TEXT | Role (e.g., Chair) |
+| `bioguide_id` | TEXT | Links to `congress_members` |
+
+---
+
+### CRS Reports
+
+#### `crs_reports` -- 13,629 rows
+
+Congressional Research Service reports from Congress.gov API.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | CRS report ID (e.g., `R12345`, `RL33456`) |
+| `title` | TEXT | Report title |
+| `publish_date` | TEXT | ISO date of publication |
+| `update_date` | TEXT | Most recent update date |
+| `status` | TEXT | Report status |
+| `content_type` | TEXT | Content type |
+| `authors` | TEXT | Report authors |
+| `topics` | TEXT | Topic/subject classifications |
+| `summary` | TEXT | Report summary text |
+| `pdf_url` | TEXT | Link to PDF |
+| `html_url` | TEXT | Link to HTML |
+
+#### `crs_report_bills` -- ~20,000+ rows
+
+Cross-references between CRS reports and legislation.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `report_id` | TEXT | Links to `crs_reports` |
+| `bill_title` | TEXT | Bill title |
+| `congress` | INTEGER | Congress number |
+| `bill_type` | TEXT | hr, s, hjres, etc. |
+| `bill_number` | INTEGER | Bill number |
+| `bill_id` | TEXT | Formatted as `{congress}-{type}-{number}` (links to `legislation`) |
+
+---
+
+### Executive Nominations
+
+#### `nominations` -- 40,067 rows
+
+Executive nominations submitted to the Senate (Congresses 100--119).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Nomination identifier |
+| `congress` | INTEGER | Congress number |
+| `number` | INTEGER | Nomination number |
+| `part_number` | TEXT | Part number (for multi-part nominations) |
+| `citation` | TEXT | Nomination citation |
+| `description` | TEXT | Description (nominee name, position, agency) |
+| `organization` | TEXT | Agency or department |
+| `received_date` | TEXT | Date received by Senate |
+| `authority_date` | TEXT | Authority date |
+| `is_civilian` | INTEGER | Boolean: civilian nomination |
+| `is_military` | INTEGER | Boolean: military nomination |
+| `status` | TEXT | `Confirmed`, `Withdrawn`, `Returned`, `Rejected`, `Pending` |
+| `vote_yea` | INTEGER | Confirmation vote yea count |
+| `vote_nay` | INTEGER | Confirmation vote nay count |
+
+#### `nomination_actions` -- ~50,000+ rows
+
+Action history for executive nominations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `nomination_id` | TEXT | Links to `nominations` |
+| `action_date` | TEXT | ISO date of action |
+| `action_text` | TEXT | Description of action |
+| `action_type` | TEXT | Action type code |
+
+---
+
+### Treaties
+
+#### `treaties` -- 777 rows
+
+Treaties submitted to the Senate (Congresses 89--119).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Treaty identifier |
+| `congress` | INTEGER | Congress number |
+| `number` | INTEGER | Treaty document number |
+| `title` | TEXT | Treaty title |
+| `topic` | TEXT | Treaty topic |
+| `transmitted_date` | TEXT | Date transmitted to Senate |
+| `in_force_date` | TEXT | Date treaty entered into force |
+| `countries` | TEXT | Countries or parties involved |
+| `index_terms` | TEXT | Subject index terms |
+| `resolution_text` | TEXT | Senate resolution text |
+
+#### `treaty_actions` -- ~2,000+ rows
+
+Action history for treaties.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `treaty_id` | TEXT | Links to `treaties` |
+| `action_date` | TEXT | ISO date of action |
+| `action_text` | TEXT | Description of action |
+| `action_type` | TEXT | Action type code |
+
+---
+
+### GAO Reports
+
+#### `gao_reports` -- 16,569 rows
+
+Government Accountability Office reports and Comptroller General decisions from GovInfo (1994--2008).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `package_id` | TEXT PK | GovInfo package identifier |
+| `title` | TEXT | Report title |
+| `date_issued` | TEXT | ISO date |
+| `report_number` | TEXT | GAO report number |
+| `document_type` | TEXT | Report type |
+| `doc_class` | TEXT | Document classification |
+| `abstract` | TEXT | Report abstract/summary |
+| `subjects` | TEXT | Subject classifications |
+| `public_laws` | TEXT | Referenced public laws |
+| `usc_references` | TEXT | U.S. Code citations |
+| `statute_references` | TEXT | Statutes at Large citations |
+| `citation` | TEXT | Citation |
+| `pdf_url` | TEXT | Link to PDF |
+| `html_url` | TEXT | Link to HTML |
+| `detail_url` | TEXT | GovInfo detail URL |
+| `sudocs` | TEXT | SuDoc classification number |
+
+---
+
+### CBO Cost Estimates
+
+#### `cbo_cost_estimates` -- ~17,200 rows
+
+Congressional Budget Office cost estimates linked to legislation. Extracted from Congress.gov bill data.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `bill_id` | TEXT | Links to `legislation` |
+| `pub_date` | TEXT | Publication date |
+| `title` | TEXT | Cost estimate title |
+| `description` | TEXT | Cost estimate description |
+| `url` | TEXT | Link to CBO cost estimate |
 
 ---
 
@@ -579,6 +779,283 @@ Federal grants and contracts from USAspending.gov (20 agencies, FY2017--2026).
 
 ---
 
+### Lobbying Cross-References
+
+#### `lobbying_bills` -- ~500,000+ rows
+
+Cross-reference linking lobbying filings to specific legislation. Bill references are extracted from the `specific_issues` text in `lobbying_activities` using regex pattern matching.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `filing_uuid` | TEXT | Links to `lobbying_filings` |
+| `bill_congress` | INTEGER | Congress number (derived from filing year) |
+| `bill_type` | TEXT | hr, s, hjres, sjres, etc. |
+| `bill_number` | INTEGER | Bill number |
+| `bill_id` | TEXT | Formatted bill ID (links to `legislation`) |
+| `client_name` | TEXT | Lobbying client |
+| `issue_code` | TEXT | Issue area code |
+
+#### `lobbying_issue_agencies` -- 79 rows
+
+Reference table mapping lobbying issue codes to relevant federal agencies and congressional committees.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `issue_code` | TEXT PK | Issue area code (links to `lobbying_issue_codes`) |
+| `issue_description` | TEXT | Human-readable description |
+| `primary_agencies` | TEXT | Primary federal agencies involved |
+| `secondary_agencies` | TEXT | Secondary agencies |
+| `regs_gov_agency_prefixes` | TEXT | Regulations.gov docket ID prefixes |
+| `federal_register_agency_slugs` | TEXT | FR agency slugs |
+| `related_committee_ids` | TEXT | Congressional committee IDs |
+| `notes` | TEXT | Additional notes |
+
+---
+
+### Committee-Sector Reference
+
+#### `committee_sectors` -- ~30 rows
+
+Maps congressional committees to the industries they regulate. Used for identifying potential conflicts of interest in stock trades.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `committee_id` | TEXT PK | Links to `committees` |
+| `committee_name` | TEXT | Committee name |
+| `chamber` | TEXT | Senate, House, or Joint |
+| `regulated_sectors` | TEXT | Description of regulated sectors |
+| `example_tickers` | TEXT | Representative stock tickers |
+| `gics_sectors` | TEXT | GICS sector classifications |
+| `sic_ranges` | TEXT | SIC code ranges |
+| `notes` | TEXT | Additional notes |
+
+#### `committee_jurisdiction` -- ~100+ rows
+
+Tiered committee jurisdiction mapping with SIC codes. Each committee can have primary, secondary, and tertiary jurisdiction over different industry sectors.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER PK | Auto-increment |
+| `committee_id` | TEXT | Links to `committees` |
+| `committee_name` | TEXT | Committee name |
+| `chamber` | TEXT | Senate, House, or Joint |
+| `jurisdiction_desc` | TEXT | Description of jurisdiction |
+| `sic_codes` | TEXT | Comma-separated SIC codes or ranges |
+| `jurisdiction_tier` | TEXT | `primary`, `secondary`, or `tertiary` |
+| `notes` | TEXT | Additional notes |
+
+#### `committee_sic_ranges` -- ~300+ rows
+
+Expanded SIC code ranges from `committee_jurisdiction`. Each range maps a committee to a contiguous block of SIC codes for efficient matching against `ticker_sic`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `committee_id` | TEXT | Links to `committees` |
+| `sic_start` | INTEGER | Start of SIC range |
+| `sic_end` | INTEGER | End of SIC range |
+| `jurisdiction_tier` | TEXT | `primary`, `secondary`, or `tertiary` |
+
+#### `ticker_sic` -- ~2,000 rows
+
+Maps stock tickers to SIC industry codes from SEC EDGAR. Only includes tickers that appear in `stock_trades`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `ticker` | TEXT PK | Stock ticker symbol |
+| `cik` | TEXT | SEC CIK number |
+| `company_name` | TEXT | Company name from EDGAR |
+| `sic_code` | TEXT | SIC industry code |
+| `sic_description` | TEXT | SIC code description |
+| `exchange` | TEXT | Stock exchange |
+
+---
+
+### Pre-computed Summary Tables
+
+These materialized tables replace expensive GROUP BY queries for the explore pages.
+
+#### `docket_summary` -- ~27,000 rows
+
+Best Federal Register abstract per docket, used to enrich `dockets_fts`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `docket_id` | TEXT | Links to `dockets` |
+| `summary` | TEXT | FR abstract text for the docket |
+
+#### `lobbying_issue_summary` -- 80 rows
+
+Pre-computed lobbying activity counts per issue code.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `issue_code` | TEXT | Issue area code |
+| `description` | TEXT | Issue description |
+| `filing_count` | INTEGER | Number of filings |
+| `client_count` | INTEGER | Unique clients |
+| `total_income` | INTEGER | Total reported income |
+
+#### `legislation_policy_summary` -- ~34 rows
+
+Pre-computed bill counts per policy area.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `policy_area` | TEXT | Policy area classification |
+| `bill_count` | INTEGER | Number of bills |
+| `sponsor_count` | INTEGER | Unique sponsors |
+| `from_congress` | INTEGER | Earliest congress |
+| `to_congress` | INTEGER | Latest congress |
+
+#### `legislation_sponsor_summary` -- ~1,400 rows
+
+Pre-computed bill counts per sponsor.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `sponsor_name` | TEXT | Sponsor name |
+| `sponsor_party` | TEXT | Party |
+| `sponsor_state` | TEXT | State |
+| `sponsor_bioguide_id` | TEXT | Links to `congress_members` |
+| `bill_count` | INTEGER | Number of bills sponsored |
+
+#### `spending_agency_summary` -- ~15 rows
+
+Pre-computed spending totals per agency.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `name` | TEXT | Agency name |
+| `award_count` | INTEGER | Number of awards |
+| `total_spending` | INTEGER | Total award dollars |
+| `sub_count` | INTEGER | Number of sub-agencies |
+
+---
+
+### Research / Cross-Domain Tables
+
+These materialized tables pre-compute expensive cross-domain joins for the Research explore page.
+
+#### `speeches_near_trades` -- varies
+
+Floor speeches delivered within 7 days of a stock trade by the same member. Pre-computed because the live join takes 8+ seconds.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `full_name` | TEXT | Member name |
+| `party` | TEXT | Party |
+| `state` | TEXT | State |
+| `bioguide_id` | TEXT | Links to `congress_members` |
+| `trade_date` | TEXT | Stock trade date |
+| `ticker` | TEXT | Stock ticker traded |
+| `asset_description` | TEXT | Asset description |
+| `transaction_type` | TEXT | Purchase, Sale, etc. |
+| `amount_range` | TEXT | Dollar range |
+| `speech_date` | TEXT | Floor speech date |
+| `speech_title` | TEXT | Speech title |
+| `days_apart` | INTEGER | Days between trade and speech |
+
+#### `committee_trade_conflicts` -- varies
+
+Trades by committee members in stocks whose SIC code falls within the committee's jurisdictional SIC ranges. Uses `ticker_sic` and `committee_sic_ranges` for industry-level matching.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `full_name` | TEXT | Member name |
+| `party` | TEXT | Party |
+| `state` | TEXT | State |
+| `bioguide_id` | TEXT | Links to `congress_members` |
+| `committee_name` | TEXT | Committee name |
+| `jurisdiction_desc` | TEXT | Jurisdiction description |
+| `jurisdiction_tier` | TEXT | primary, secondary, or tertiary |
+| `sic_code` | TEXT | Stock's SIC code |
+| `sic_description` | TEXT | SIC description |
+| `transaction_date` | TEXT | Trade date |
+| `ticker` | TEXT | Stock ticker |
+| `asset_description` | TEXT | Asset description |
+| `transaction_type` | TEXT | Purchase, Sale, etc. |
+| `amount_range` | TEXT | Dollar range |
+
+#### `committee_donor_summary` -- varies
+
+PAC donations to current committee members, pre-computed because the live join takes 95+ seconds.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `committee_name` | TEXT | Congressional committee name |
+| `member_name` | TEXT | Member name |
+| `party` | TEXT | Party |
+| `state` | TEXT | State |
+| `bioguide_id` | TEXT | Links to `congress_members` |
+| `donor_committee` | TEXT | Donating PAC/committee name |
+| `donor_cmte_id` | TEXT | FEC committee ID |
+| `total_donated` | REAL | Total contribution amount |
+| `contribution_count` | INTEGER | Number of contributions |
+
+#### `lobbying_bill_summary` -- varies
+
+Bills most frequently referenced in lobbying filings. Aggregated from `lobbying_bills`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `bill_id` | TEXT | Links to `legislation` |
+| `bill_title` | TEXT | Bill title |
+| `policy_area` | TEXT | Policy area |
+| `lobby_filings` | INTEGER | Number of lobbying filings referencing this bill |
+| `unique_clients` | INTEGER | Number of unique lobbying clients |
+| `issue_codes` | TEXT | Issue area codes |
+| `clients` | TEXT | Client names (concatenated) |
+
+#### `witness_lobby_overlap` -- varies
+
+Organizations that both testified at committee hearings and were lobbying clients. Matched by organization name.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `organization` | TEXT | Organization name |
+| `hearings_testified` | INTEGER | Number of hearings where they testified |
+| `lobby_filings` | INTEGER | Number of lobbying filings as client |
+| `total_lobby_income` | INTEGER | Total lobbying income reported |
+| `first_hearing` | TEXT | Date of first hearing |
+| `last_hearing` | TEXT | Date of last hearing |
+| `lobby_issues` | TEXT | Lobbying issue codes |
+
+#### `commenter_lobby_overlap` -- varies
+
+Organizations that both submitted regulatory comments and were lobbying clients. Matched by organization name from `comment_details`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `organization` | TEXT | Organization name |
+| `comments_filed` | INTEGER | Number of comments filed |
+| `agencies_commented` | INTEGER | Number of agencies commented to |
+| `lobby_filings` | INTEGER | Number of lobbying filings as client |
+| `total_lobby_income` | INTEGER | Total lobbying income reported |
+| `lobby_issues` | TEXT | Lobbying issue codes |
+
+#### `revolving_door` -- varies
+
+Former members of Congress who became registered lobbyists. Matched by name between `congress_members` and `lobbying_lobbyists` where `covered_position` indicates former Congressional service.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `bioguide_id` | TEXT | Links to `congress_members` |
+| `full_name` | TEXT | Member name |
+| `party` | TEXT | Party |
+| `state` | TEXT | State |
+| `congress_chamber` | TEXT | Senate or House (when serving) |
+| `lobbying_filing_count` | INTEGER | Number of lobbying filings |
+| `client_count` | INTEGER | Unique clients lobbied for |
+| `firm_count` | INTEGER | Lobbying firms worked at |
+| `first_lobbying_year` | INTEGER | First year of lobbying activity |
+| `last_lobbying_year` | INTEGER | Most recent lobbying year |
+| `total_reported_income` | INTEGER | Total lobbying income reported |
+| `lobbying_firms` | TEXT | Names of lobbying firms |
+| `covered_position_sample` | TEXT | Sample covered position description |
+
+---
+
 ## Standalone Databases
 
 ### lobbying.db (13 GB)
@@ -658,6 +1135,8 @@ APHIS animal welfare data from Salesforce API.
 | `lobbying_by_year` | Annual lobbying spending |
 | `top_lobbying_clients` | Clients ranked by total spending |
 | `spending_by_agency` | Spending totals per agency/category |
+| `nomination_rates` | Confirmation rates by congress (total, confirmed, withdrawn, returned, rejected, pending) |
+| `hearing_activity` | Hearing counts and unique witnesses by congress and chamber |
 
 ---
 
@@ -677,6 +1156,10 @@ APHIS animal welfare data from Salesforce API.
 | `fara_registrants_fts` | name, business_name, city, state |
 | `fara_foreign_principals_fts` | registrant_name, foreign_principal, country |
 | `fec_employer_fts` | employer |
+| `hearings_fts` | title, chamber, committees |
+| `crs_reports_fts` | title, authors, topics, summary |
+| `nominations_fts` | description, organization, citation, status |
+| `gao_reports_fts` | title, abstract, subjects, report_number |
 
 ---
 
@@ -696,6 +1179,10 @@ APHIS animal welfare data from Salesforce API.
 | `cmte_id` | `fec_committees` to `fec_contributions` | FEC committee ID |
 | `committee_id` | `committees` to `committee_memberships` | Congressional committee ID |
 | `granule_id` | `congressional_record` to `crec_speakers`, `crec_bills` | GovInfo granule ID |
+| `package_id` | `hearings` to `hearing_witnesses`, `hearing_members` | GovInfo package ID |
+| `report_id` | `crs_reports` to `crs_report_bills` | CRS report ID |
+| `nomination_id` | `nominations` to `nomination_actions` | Nomination ID |
+| `treaty_id` | `treaties` to `treaty_actions` | Treaty ID |
 | `cert_number` | `facilities` to `inspections` (aphis.db) | APHIS certificate number |
 
 ### Cross-dataset joins
@@ -713,6 +1200,12 @@ APHIS animal welfare data from Salesforce API.
 | Congress members | Committees | `committee_memberships.bioguide_id` |
 | Bills | Floor speeches | `crec_bills.bill_id` |
 | Bills | Roll call votes | `roll_call_votes.bill_id` |
+| Bills | CRS reports | `crs_report_bills.bill_id` |
+| Bills | Lobbying filings | `lobbying_bills.bill_id` |
+| Hearing witnesses | Lobbying clients | `witness_lobby_overlap` (name matching) |
+| Comment orgs | Lobbying clients | `commenter_lobby_overlap` (name matching) |
+| Committee members | Trades in jurisd. sectors | `committee_trade_conflicts` (SIC matching) |
+| Former members | Lobbying activity | `revolving_door` (name matching) |
 | Senate votes | Bioguide | `lis_to_bioguide` crosswalk (326 senators) |
 
 ---
@@ -720,7 +1213,7 @@ APHIS animal welfare data from Salesforce API.
 ## Directory Structure
 
 ```
-
+openregs/
 ├── openregs.db                     # Primary database (22 GB, deployed)
 ├── lobbying.db                     # Full lobbying data (13 GB)
 ├── fec.db                          # Full FEC data (47 GB)
@@ -748,6 +1241,13 @@ APHIS animal welfare data from Salesforce API.
 │   ├── house_ptrs/                                # House PTR PDFs
 │   ├── senate_raw.json                            # Raw Senate data
 │   └── senate_trades.json                         # Parsed Senate trades
+├── hearings/                                      # GovInfo CHRG hearing metadata JSON
+├── crs_reports/                                   # Congress.gov CRS report JSON
+├── nominations/                                   # Congress.gov nomination JSON
+├── treaties/                                      # Congress.gov treaty JSON
+├── gao_reports/                                   # GovInfo GAOREPORTS metadata JSON
+├── sec_tickers/                                   # SEC EDGAR ticker-SIC mapping
+├── reference/                                     # Committee sector/jurisdiction CSVs
 ├── aphis/
 │   ├── scripts/                                   # APHIS extraction pipeline
 │   └── db/aphis.db                                # APHIS database (53 MB)
@@ -764,7 +1264,7 @@ APHIS animal welfare data from Salesforce API.
 
 ## Pipeline Scripts
 
-Scripts are numbered in execution order. Run from ``.
+Scripts are numbered in execution order. Run from the project root directory.
 
 ### Data download scripts
 
@@ -789,6 +1289,11 @@ Scripts are numbered in execution order. Run from ``.
 | `13_senate_efd.py` | efdsearch.senate.gov | None | ~30 min |
 | `14_house_fd_ptr.py` | House clerk PDFs | None | ~2.5 hr |
 | `15_lobbying_disclosure.py` | Senate LDA API | API key | ~2 hr |
+| `16_committee_hearings.py` | GovInfo CHRG API | API key | ~4 hr |
+| `17_crs_reports.py` | Congress.gov API | API key | ~30 min |
+| `18_nominations_treaties.py` | Congress.gov API | API key | ~1 hr |
+| `19_gao_reports.py` | GovInfo GAOREPORTS API | API key | ~2 hr |
+| `20_sec_ticker_sic.py` | SEC EDGAR | None | ~4 min |
 | `16_backfill_dockets.py` | Regulations.gov | API key | ~1 hr |
 
 ### Build and deploy
@@ -833,6 +1338,6 @@ All scripts: retry up to 3-5 times with exponential backoff on server errors. Gr
 5. **Submitter name parsing** -- Regex-based, ~62% coverage. Organization detection is heuristic.
 6. **5 agencies only** -- Dockets/documents/comments cover EPA, FDA, USDA, FWS, APHIS. Federal Register covers all 444 agencies.
 7. **FR cross-reference coverage** -- 70K of 728K documents linked (9.6%). Most documents lack `fr_doc_num`.
-8. **Lobbying contributions** -- Schema exists but LD-203 data not yet loaded.
+8. **Lobbying contributions loaded** -- 3.5M LD-203 contribution records now populated.
 9. **APHIS sub-tables** -- Annual reports, enforcement actions, and teachable moments have schemas but no data yet.
 10. **FEC in openregs.db** -- Contains 4.4M contributions to candidates. Full individual contributions (104M rows) only in standalone fec.db.
