@@ -54,10 +54,14 @@ log.setLevel(logging.INFO)
 _fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 _fh = logging.FileHandler(LOG_DIR / "regs_gov_dockets_docs.log")
 _fh.setFormatter(_fmt)
-_sh = logging.StreamHandler(sys.stdout)
-_sh.setFormatter(_fmt)
 log.addHandler(_fh)
-log.addHandler(_sh)
+# Only add stdout handler if stdout is available (not broken pipe under nohup)
+try:
+    _sh = logging.StreamHandler(sys.stdout)
+    _sh.setFormatter(_fmt)
+    log.addHandler(_sh)
+except Exception:
+    pass
 
 # === Graceful shutdown ===
 _shutdown = False
