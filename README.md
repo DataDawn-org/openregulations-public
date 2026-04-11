@@ -1212,7 +1212,6 @@ Full-text search indexes (SQLite FTS5):
 | `scripts/21_ig_reports.py` | Download IG reports and recommendations from oversight.gov |
 | `scripts/16_backfill_dockets.py` | Backfill truncated docket lists for EPA/FDA from Regulations.gov |
 | `scripts/build_lis_crosswalk.py` | Build LIS-to-bioguide crosswalk for vote linkage |
-| `scripts/refresh_member_stats.py` | Refresh pre-computed member stats (trades, speeches, votes, bills) |
 | `scripts/repair_crec_metadata.py` | Repair CREC metadata (one-time fix for namespace bug) |
 | `deploy/deploy.sh` | Deploy database + APHIS DB + templates + explore pages to Datasette instance |
 | `deploy/post_deploy_qc.sh` | Post-deployment quality checks (row counts, FTS, canned queries, explore pages) |
