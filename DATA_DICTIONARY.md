@@ -1272,9 +1272,7 @@ Scripts are numbered in execution order. Run from the project root directory.
 |--------|--------|------|------|
 | `01_federal_register.py` | FR API | None | ~30 min |
 | `02_regs_gov_dockets_docs.py` | Regulations.gov | API key | ~4-6 hr |
-| `03_regs_gov_comments.py` | Regulations.gov | API key | ~20-40 hr |
-| `04_backfill_comments.py` | Regulations.gov | API key | ~4 hr |
-| `06_fws_aphis_headers.py` | Regulations.gov | API key | ~12-15 hr |
+| `03_regs_gov_comments.py` | Regulations.gov | API key | ~30-50 hr (all agencies; consolidated from old 03+04+06 on 2026-03-27) |
 | `07_full_comment_details.py` | Regulations.gov | API key | Weeks |
 | `08_usaspending.py` | USAspending.gov | None | ~2 hr |
 | `08_fec_campaign_finance.py` | FEC bulk data | None | ~1 hr |
@@ -1284,10 +1282,7 @@ Scripts are numbered in execution order. Run from the project root directory.
 | `10_congress_votes.py` | Congress.gov API | API key | ~2 hr |
 | `11_congressional_record.py` | GovInfo CREC | None | ~6-8 hr |
 | `11_fara.py` | FARA.gov | None | ~5 min |
-| `12_congress_stock_trades.py` | GitHub + House/Senate | None | ~5 sec |
-| `12_expand_agencies.py` | Local | None | ~1 sec |
-| `13_senate_efd.py` | efdsearch.senate.gov | None | ~30 min |
-| `14_house_fd_ptr.py` | House clerk PDFs | None | ~2.5 hr |
+| `12_congress_stock_trades.py` | Senate eFD + House PTR + FD indexes | None | ~3 hr (consolidated from old 12+13+14 on 2026-03-27) |
 | `15_lobbying_disclosure.py` | Senate LDA API | API key | ~2 hr |
 | `16_committee_hearings.py` | GovInfo CHRG API | API key | ~4 hr |
 | `17_crs_reports.py` | Congress.gov API | API key | ~30 min |

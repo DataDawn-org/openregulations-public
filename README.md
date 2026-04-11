@@ -247,29 +247,26 @@ pip install requests
 Scripts are numbered in execution order. Run from the project root:
 
 ```
-1. python3 scripts/01_federal_register.py        # ~30 min, no API key needed
-2. python3 scripts/02_regs_gov_dockets_docs.py    # ~4-6 hours, needs API key
-3. python3 scripts/03_regs_gov_comments.py        # ~20-40 hours (EPA/FDA/USDA)
-4. python3 scripts/04_backfill_comments.py        # ~4 hours (EPA truncated months)
-5. python3 scripts/06_fws_aphis_headers.py        # ~12-15 hours (FWS/APHIS)
-6. python3 scripts/07_full_comment_details.py     # weeks (optional, full text)
-7. python3 scripts/08_usaspending.py              # ~2 hours (federal spending, 20 agencies)
-8. python3 scripts/09_congress_gov.py --full       # ~50 min (congressional legislation, congresses 93-119)
-9. python3 scripts/10_ecfr.py                     # ~30 sec (eCFR regulatory text, 5 CFR titles)
-10. python3 scripts/11_congressional_record.py     # ~6-8 hours (Congressional Record, 1994-present)
-11. python3 scripts/12_congress_stock_trades.py    # ~5 sec (congress members + stock trades)
-12. python3 scripts/13_senate_efd.py               # ~30 min (Senate stock trades from eFD)
-13. python3 scripts/14_house_fd_ptr.py             # ~2.5 hours (House PTR PDF download + parse)
-14. python3 scripts/15_lobbying_disclosure.py      # ~2 hours (lobbying disclosures from Senate LDA API)
-15. python3 scripts/16_committee_hearings.py       # committee hearings from GovInfo CHRG
-16. python3 scripts/17_crs_reports.py              # CRS reports from Congress.gov API
-17. python3 scripts/18_nominations_treaties.py     # executive nominations + treaties from Congress.gov API
-18. python3 scripts/19_gao_reports.py              # GAO reports from GovInfo GAOREPORTS
-19. python3 scripts/05_build_database.py           # ~5 minutes (builds from raw JSON + APIs)
-20. bash deploy/deploy.sh                          # ~15 min (uploads to server)
+1. python3 scripts/01_federal_register.py           # ~30 min, no API key needed
+2. python3 scripts/02_regs_gov_dockets_docs.py      # ~4-6 hours, needs API key
+3. python3 scripts/03_regs_gov_comments.py          # ~30-50 hours (all agencies — EPA/FDA/USDA/FWS/APHIS; consolidated from old 03+04+06 on 2026-03-27)
+4. python3 scripts/07_full_comment_details.py       # weeks (optional, full text)
+5. python3 scripts/08_usaspending.py                # ~2 hours (federal spending)
+6. python3 scripts/09_congress_gov.py --full         # ~50 min (congressional legislation, congresses 93-119)
+7. python3 scripts/10_ecfr.py                       # ~30 sec (eCFR regulatory text, 5 CFR titles)
+8. python3 scripts/11_congressional_record.py       # ~6-8 hours (Congressional Record, 1994-present)
+9. python3 scripts/12_congress_stock_trades.py      # ~3 hours (Senate eFD + House PTR + FD indexes; consolidated from old 12+13+14 on 2026-03-27)
+10. python3 scripts/15_lobbying_disclosure.py       # ~2 hours (lobbying disclosures from Senate LDA API)
+11. python3 scripts/17_crs_reports.py               # CRS reports from Congress.gov API
+12. python3 scripts/18_nominations_treaties.py      # executive nominations + treaties from Congress.gov API
+13. python3 scripts/19_gao_reports.py               # GAO reports from GovInfo GAOREPORTS
+14. python3 scripts/05_build_database.py            # ~25 min (builds from raw JSON + APIs)
+15. bash deploy/deploy.sh                           # ~30 min (uploads to server)
 ```
 
-Steps 1-18 download raw data and are idempotent (safe to re-run; state files track progress). Step 19 builds the database from whatever raw data exists. You can run step 19 at any point to get a database from partial data.
+Steps 1-13 download raw data and are idempotent (safe to re-run; state files track progress). Step 14 builds the database from whatever raw data exists. You can run step 14 at any point to get a database from partial data.
+
+**Note (2026-03-27 consolidation)**: Scripts 04 and 06 were merged into `03_regs_gov_comments.py`. Scripts 13 and 14 were merged into `12_congress_stock_trades.py`. The weekly and monthly update orchestrators (`weekly_update.sh`, `monthly_update.sh`) also run additional sources (FARA, FEC, OIRA, IG reports, GAO direct). See `PIPELINE.md` for the canonical pipeline manifest.
 
 **Key architectural constraint**: The Regulations.gov API returns a maximum of **5,000 results per query** (20 pages × 250 per page). This drives the entire download strategy:
 - Script 03 queries by year, then subdivides to months if a year exceeds 5,000
@@ -362,8 +359,8 @@ regulations_gov/comments/headers/
 ## Processing
 
 ### Federal Register
-- Paginated through monthly date windows, January 1994 through early 2026.
-- 993,703 documents total.
+- Paginated through monthly date windows, January 1994 through 2026.
+- 994,487 documents total.
 - No records dropped.
 
 ### Dockets
@@ -1193,10 +1190,8 @@ Full-text search indexes (SQLite FTS5):
 |--------|---------|
 | `scripts/01_federal_register.py` | Download all Federal Register documents via the FR API |
 | `scripts/02_regs_gov_dockets_docs.py` | Download dockets and documents from Regulations.gov |
-| `scripts/03_regs_gov_comments.py` | Download comment headers by agency/year/month |
-| `scripts/04_backfill_comments.py` | Re-download truncated months using daily date windows |
+| `scripts/03_regs_gov_comments.py` | Download comment headers for all agencies (EPA/FDA/USDA/FWS/APHIS). Consolidated 2026-03-27 from old 03+04+06 — includes daily-window backfill for truncated months and FWS/APHIS targeted fetch. |
 | `scripts/05_build_database.py` | Build SQLite database from all raw JSON with enrichments |
-| `scripts/06_fws_aphis_headers.py` | Download FWS/APHIS comment headers (targeted, runs after Phase 3) |
 | `scripts/07_full_comment_details.py` | Download full comment details (text, names, location) per comment |
 | `scripts/08_usaspending.py` | Download federal spending (grants + contracts) for 20 agencies from USAspending.gov |
 | `scripts/08_fec_campaign_finance.py` | Download FEC bulk data (candidates, committees, contributions) |
@@ -1206,10 +1201,7 @@ Full-text search indexes (SQLite FTS5):
 | `scripts/10_congress_votes.py` | Download roll call votes and member positions from Congress.gov API |
 | `scripts/11_congressional_record.py` | Download Congressional Record floor proceedings (1994–present) from GovInfo |
 | `scripts/11_fara.py` | Download FARA registrations, foreign principals, documents, short forms |
-| `scripts/12_congress_stock_trades.py` | Download congress member data + House stock trading disclosures |
-| `scripts/12_expand_agencies.py` | Expand agency data and cross-references |
-| `scripts/13_senate_efd.py` | Download Senate stock trades from efdsearch.senate.gov (government source) |
-| `scripts/14_house_fd_ptr.py` | Download and parse House PTR PDFs for transaction-level stock trade data |
+| `scripts/12_congress_stock_trades.py` | Congress member data + stock trades from Senate eFD, House PTR, and FD indexes. Consolidated 2026-03-27 from old 12+13+14. |
 | `scripts/15_lobbying_disclosure.py` | Download lobbying disclosure data from Senate LDA API (filings, contributions, lobbyists) |
 | `scripts/16_committee_hearings.py` | Download committee hearing metadata, witnesses, and member attendance from GovInfo CHRG |
 | `scripts/17_crs_reports.py` | Download CRS reports and related legislation from Congress.gov API |
@@ -1294,7 +1286,7 @@ These items should be addressed in the next `05_build_database.py` rebuild:
 
 8. **Agency coverage varies** — Core agencies (EPA, FDA, USDA, FWS, APHIS) have the deepest coverage. Expansion agencies have comment headers and documents but may lack full docket metadata. The Federal Register table covers all 444 agencies.
 
-9. **Cross-reference coverage** — 185,900 of 1,703,711 Regulations.gov documents (10.9%) are linked to Federal Register records. Most supporting materials and older documents lack a `fr_doc_num` field. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata, but the majority of documents simply don't have FR document numbers.
+9. **Cross-reference coverage** — 395,621 FR↔Regs.gov crossref rows, covering ~23% of the 1,703,711 Regulations.gov documents. The 5-phase matching (direct, normalized, leading-zero strip, date+title, case-insensitive) recovers what's possible from the metadata; the remainder lack a `fr_doc_num` field in their source records.
 
 ---
 
