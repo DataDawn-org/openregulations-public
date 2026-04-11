@@ -1297,7 +1297,6 @@ Scripts are numbered in execution order. Run from the project root directory.
 |--------|---------|------|
 | `05_build_database.py` | Build openregs.db from all raw data | ~5 min |
 | `build_lis_crosswalk.py` | Build Senate LIS-to-bioguide crosswalk | ~1 sec |
-| `refresh_member_stats.py` | Refresh pre-computed member stats | ~1 min |
 | `deploy/deploy.sh` | Upload DB + templates to server | ~15 min |
 
 All download scripts are idempotent. State files in `logs/` track completed work. Safe to re-run at any time. `05_build_database.py` rebuilds the entire database from whatever raw data exists.
