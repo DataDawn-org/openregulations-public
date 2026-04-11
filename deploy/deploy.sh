@@ -138,24 +138,38 @@ else
 fi
 
 # ── Upload databases ──────────────────────────────────────────────────────
+#
+# Upload strategy: write to "${REMOTE_DB}.new", then atomic mv on success.
+#
+# WHY: rsync's `--partial` and `--inplace` options both can corrupt the live
+# DB on transfer interrupt. With `--partial`, rsync renames its in-progress
+# temp file to the destination filename — overwriting the live DB with a
+# half-written copy. With `--inplace`, rsync writes directly to the destination
+# from the start. Either way, an interrupted transfer leaves the live DB in
+# a broken state. The `.new` filename ensures the live DB is never the rsync
+# target until the upload is fully verified-complete on the remote side.
+#
 log "=== Uploading databases ==="
 
 if [[ $DRY_RUN -eq 1 ]]; then
-    log "[DRY-RUN] Would upload ${DB_SIZE_MB}MB to $REMOTE_HOST:$REMOTE_DB"
+    log "[DRY-RUN] Would upload ${DB_SIZE_MB}MB to $REMOTE_HOST:${REMOTE_DB}.new, then atomic mv to $REMOTE_DB"
 else
-    log "Uploading $DB → $REMOTE_HOST:$REMOTE_DB (${DB_SIZE_MB}MB) via rsync..."
-    rsync -aP --inplace --timeout=600 "$DB" "$REMOTE_HOST:$REMOTE_DB"
-    log "Upload complete"
+    log "Uploading $DB → $REMOTE_HOST:${REMOTE_DB}.new (${DB_SIZE_MB}MB) via rsync..."
+    rsync -a --partial-dir=.rsync-partials --progress --timeout=600 "$DB" "$REMOTE_HOST:${REMOTE_DB}.new"
+    log "Upload complete — atomically replacing live database..."
+    ssh "$REMOTE_HOST" "mv ${REMOTE_DB}.new ${REMOTE_DB}"
+    log "openregs.db swap complete"
 fi
 
 if [[ -f "$APHIS_DB" ]]; then
     APHIS_SIZE_MB=$(du -m "$APHIS_DB" | cut -f1)
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "[DRY-RUN] Would upload APHIS DB (${APHIS_SIZE_MB}MB) to $REMOTE_HOST:$REMOTE_APHIS_DB"
+        log "[DRY-RUN] Would upload APHIS DB (${APHIS_SIZE_MB}MB) to $REMOTE_HOST:${REMOTE_APHIS_DB}.new, then atomic mv"
     else
-        log "Uploading $APHIS_DB → $REMOTE_HOST:$REMOTE_APHIS_DB (${APHIS_SIZE_MB}MB)..."
-        scp -q "$APHIS_DB" "$REMOTE_HOST:$REMOTE_APHIS_DB"
-        log "APHIS upload complete"
+        log "Uploading $APHIS_DB → $REMOTE_HOST:${REMOTE_APHIS_DB}.new (${APHIS_SIZE_MB}MB)..."
+        rsync -a --partial-dir=.rsync-partials --progress --timeout=600 "$APHIS_DB" "$REMOTE_HOST:${REMOTE_APHIS_DB}.new"
+        ssh "$REMOTE_HOST" "mv ${REMOTE_APHIS_DB}.new ${REMOTE_APHIS_DB}"
+        log "APHIS swap complete"
     fi
 else
     log "NOTE: APHIS database not found at $APHIS_DB, skipping"
@@ -164,11 +178,12 @@ fi
 if [[ -f "$LOBBYING_DB" ]]; then
     LOBBYING_SIZE_MB=$(du -m "$LOBBYING_DB" | cut -f1)
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "[DRY-RUN] Would upload Lobbying DB (${LOBBYING_SIZE_MB}MB) to $REMOTE_HOST:$REMOTE_LOBBYING_DB"
+        log "[DRY-RUN] Would upload Lobbying DB (${LOBBYING_SIZE_MB}MB) to $REMOTE_HOST:${REMOTE_LOBBYING_DB}.new, then atomic mv"
     else
-        log "Uploading $LOBBYING_DB → $REMOTE_HOST:$REMOTE_LOBBYING_DB (${LOBBYING_SIZE_MB}MB) via rsync..."
-        rsync -aP --inplace --timeout=600 "$LOBBYING_DB" "$REMOTE_HOST:$REMOTE_LOBBYING_DB"
-        log "Lobbying upload complete"
+        log "Uploading $LOBBYING_DB → $REMOTE_HOST:${REMOTE_LOBBYING_DB}.new (${LOBBYING_SIZE_MB}MB) via rsync..."
+        rsync -a --partial-dir=.rsync-partials --progress --timeout=600 "$LOBBYING_DB" "$REMOTE_HOST:${REMOTE_LOBBYING_DB}.new"
+        ssh "$REMOTE_HOST" "mv ${REMOTE_LOBBYING_DB}.new ${REMOTE_LOBBYING_DB}"
+        log "Lobbying swap complete"
     fi
 else
     log "NOTE: Lobbying database not found at $LOBBYING_DB, skipping"
@@ -177,11 +192,12 @@ fi
 if [[ -f "$FARA_DB" ]]; then
     FARA_SIZE_MB=$(du -m "$FARA_DB" | cut -f1)
     if [[ $DRY_RUN -eq 1 ]]; then
-        log "[DRY-RUN] Would upload FARA DB (${FARA_SIZE_MB}MB) to $REMOTE_HOST:$REMOTE_FARA_DB"
+        log "[DRY-RUN] Would upload FARA DB (${FARA_SIZE_MB}MB) to $REMOTE_HOST:${REMOTE_FARA_DB}.new, then atomic mv"
     else
-        log "Uploading $FARA_DB → $REMOTE_HOST:$REMOTE_FARA_DB (${FARA_SIZE_MB}MB)..."
-        scp -q "$FARA_DB" "$REMOTE_HOST:$REMOTE_FARA_DB"
-        log "FARA upload complete"
+        log "Uploading $FARA_DB → $REMOTE_HOST:${REMOTE_FARA_DB}.new (${FARA_SIZE_MB}MB)..."
+        rsync -a --partial-dir=.rsync-partials --progress --timeout=600 "$FARA_DB" "$REMOTE_HOST:${REMOTE_FARA_DB}.new"
+        ssh "$REMOTE_HOST" "mv ${REMOTE_FARA_DB}.new ${REMOTE_FARA_DB}"
+        log "FARA swap complete"
     fi
 else
     log "NOTE: FARA database not found at $FARA_DB, skipping"
