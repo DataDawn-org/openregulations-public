@@ -116,13 +116,27 @@ NINETY_EXPLORE_PAGES = [
     "990.html", "bmf.html", "daf.html", "grants.html", "results.html",
 ]
 
-# Canned queries to test (name, optional params dict)
-OPENREGS_CANNED_QUERIES = [
-    ("most_commented_dockets", {}),
-    ("search_federal_register", {"search": "regulation"}),
-    ("search_comments", {"search": "public"}),
-    ("search_documents", {"search": "rule"}),
-    ("search_dockets", {"search": "proposed"}),
+# Canned queries to test, by Datasette DB. Each entry is (db_route, query_name, params).
+# Picking ones with no required params or stable test params to keep the check deterministic.
+CANNED_QUERIES = [
+    # OpenRegs core search + activity queries
+    ("openregs", "most_commented_dockets", {}),
+    ("openregs", "search_federal_register", {"search": "regulation"}),
+    ("openregs", "search_comments", {"search": "public"}),
+    ("openregs", "search_documents", {"search": "rule"}),
+    ("openregs", "search_dockets", {"search": "proposed"}),
+    ("openregs", "open_for_comment", {}),
+    ("openregs", "recent_rules", {}),
+    # APHIS (animal welfare) -- 4 no-param queries
+    ("aphis", "facilities_by_state", {}),
+    ("aphis", "recent_inspections", {}),
+    ("aphis", "critical_violations", {}),
+    ("aphis", "worst_violators", {}),
+    # Lobbying -- 2 no-param queries
+    ("lobbying", "lobbying_by_issue_area", {}),
+    ("lobbying", "top_lobbying_clients_by_spending", {}),
+    # Open comments (daily VPS-built DB) -- the only canned query
+    ("open_comments", "explore_open_comments", {}),
 ]
 
 # === Severity / Result model ===
@@ -285,7 +299,8 @@ class Audit:
     def check_datasette_internals(self):
         log.info("== Datasette internals ==")
         for label, base, expected_dbs in [
-            ("openregs", OPENREGS_BASE, ["openregs", "aphis"]),
+            ("openregs", OPENREGS_BASE,
+             ["openregs", "aphis", "lobbying", "fara", "open_comments"]),
             ("990", NINETY_BASE, ["990data_public"]),
         ]:
             # /-/versions
@@ -346,21 +361,22 @@ class Audit:
     # ---- Category 5: canned queries ----
     def check_canned_queries(self):
         log.info("== Canned queries ==")
-        for qname, params in OPENREGS_CANNED_QUERIES:
+        for db, qname, params in CANNED_QUERIES:
             qs = {"_shape": "array", "_size": "1", **params}
-            url = f"{OPENREGS_BASE}/openregs/{qname}.json?{urllib.parse.urlencode(qs)}"
+            url = f"{OPENREGS_BASE}/{db}/{qname}.json?{urllib.parse.urlencode(qs)}"
             code, err, ms, body = self.client.get(url)
+            label = f"{db}/{qname}"
             if not (200 <= code < 400) or not body:
-                self.record("canned", qname, False, Severity.CRITICAL,
+                self.record("canned", label, False, Severity.CRITICAL,
                             f"HTTP {code} {err}", ms)
                 continue
             try:
                 rows = json.loads(body)
                 n = len(rows) if isinstance(rows, list) else 0
-                self.record("canned", qname, n > 0, Severity.CRITICAL,
+                self.record("canned", label, n > 0, Severity.CRITICAL,
                             f"{n} rows", ms)
             except Exception as e:
-                self.record("canned", qname, False, Severity.WARNING,
+                self.record("canned", label, False, Severity.WARNING,
                             f"parse error: {e}", ms)
 
     # ---- Category 6: FTS sanity (query LIVE VPS to catch stale deployment) ----
@@ -566,9 +582,10 @@ class Audit:
                 self.record("tls", host, False, Severity.WARNING,
                             f"check failed: {type(e).__name__}: {e}")
 
-    # ---- Category 12: data freshness (local DB sanity) ----
+    # ---- Category 12: data freshness ----
     def check_freshness(self):
         log.info("== Data freshness ==")
+        # Federal Register (local DB; weekly rebuild on Saturday).
         try:
             oc = sqlite3.connect(f"file:{OPENREGS_DB}?mode=ro", uri=True)
             row = oc.execute(
@@ -579,7 +596,6 @@ class Audit:
             if latest:
                 latest_dt = dt.datetime.fromisoformat(latest)
                 age_days = (dt.datetime.now() - latest_dt).days
-                # Weekly rebuild on Saturday; checking Sunday expect age <= ~3 days of FR publication lag.
                 if age_days > 10:
                     self.record("freshness", "federal_register", False, Severity.WARNING,
                                 f"latest FR doc is {age_days} days old ({latest})")
@@ -592,6 +608,35 @@ class Audit:
         except Exception as e:
             self.record("freshness", "federal_register", False, Severity.WARNING,
                         f"check failed: {e}")
+
+        # open_comments (built daily on the VPS by 20_daily_open_comments.py).
+        # Stored as updated_at in the _metadata table. Stale = silent failure of the daily cron.
+        sql = "SELECT value FROM _metadata WHERE key='updated_at'"
+        url = f"{OPENREGS_BASE}/open_comments.json?sql={urllib.parse.quote(sql)}&_shape=array"
+        code, err, ms, body = self.client.get(url)
+        if not (200 <= code < 400) or not body:
+            self.record("freshness", "open_comments", False, Severity.WARNING,
+                        f"HTTP {code} {err}", ms)
+        else:
+            try:
+                rows = json.loads(body)
+                if not rows or not rows[0].get("value"):
+                    self.record("freshness", "open_comments", False, Severity.WARNING,
+                                "no updated_at in _metadata", ms)
+                else:
+                    updated_at = rows[0]["value"]
+                    updated_dt = dt.datetime.fromisoformat(updated_at.replace(" ", "T"))
+                    age_hours = (dt.datetime.now() - updated_dt).total_seconds() / 3600
+                    # Daily VPS cron at 06:30 UTC; allow up to 36h to absorb a single missed run.
+                    if age_hours > 36:
+                        self.record("freshness", "open_comments", False, Severity.CRITICAL,
+                                    f"last updated {age_hours:.1f}h ago ({updated_at})", ms)
+                    else:
+                        self.record("freshness", "open_comments", True, Severity.INFO,
+                                    f"last updated {age_hours:.1f}h ago ({updated_at})", ms)
+            except Exception as e:
+                self.record("freshness", "open_comments", False, Severity.WARNING,
+                            f"parse error: {e}", ms)
 
     # ---- Orchestration ----
     def run(self):
