@@ -464,12 +464,13 @@ class Audit:
         try:
             # CREC → govinfo
             rows = oc.execute(
-                "SELECT granule_id FROM congressional_record "
+                "SELECT granule_id, date FROM congressional_record "
                 "WHERE date >= date('now', '-180 days') AND granule_id IS NOT NULL "
                 "ORDER BY random() LIMIT ?", (self.sample_size,),
             ).fetchall()
-            for (gid,) in rows:
-                url = f"https://www.govinfo.gov/app/details/{gid}"
+            for gid, crec_date in rows:
+                package_id = f"CREC-{crec_date}"
+                url = f"https://www.govinfo.gov/app/details/{package_id}/{gid}"
                 code, err, ms = self.client.head_or_get(url)
                 self.record("external", f"govinfo/{gid}", code in LINK_OK_CODES,
                             Severity.WARNING, f"HTTP {code}" if code else err, ms)
