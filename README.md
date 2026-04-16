@@ -287,6 +287,30 @@ State files in `logs/` track completed work. To re-download data:
 
 ---
 
+## Monitoring (Synthetic Site Audit)
+
+`scripts/site_audit.py` runs a weekly synthetic-monitoring pass against the live deployment. It's what catches:
+
+- Broken external links to `govinfo.gov`, `federalregister.gov`, `regulations.gov`, etc. — sampled randomly from recent DB rows each week, so coverage rotates
+- FTS tables that became empty or missing after a deploy (the class of bug that keeps silent pipelines silent)
+- Detail-page template regressions (random sample of rows per table, verifies the page renders with >2 KB of HTML)
+- Datasette health (both DBs attached, canned queries return non-empty results)
+- 990 form viewer renders on Cloudflare R2
+- TLS cert expiry (<14 d = warning, <7 d = critical)
+- Stale Federal Register data (latest published doc older than expected)
+
+Runs in ~2 minutes end-to-end. Tiered severity so transient external flakiness (regulations.gov sometimes 403s automated requests, govinfo occasionally 5xxs) doesn't page anyone — only genuinely user-visible breakage turns the check red.
+
+Driven by `scripts/run_site_audit.sh` from cron:
+
+```bash
+0 9 * * 0 /path/to/scripts/run_site_audit.sh <healthchecks.io-uuid>
+```
+
+The wrapper tees output to a rolling log and posts the summary body to healthchecks.io so pass/fail counts plus the specific failing URLs appear in the hc.io dashboard — no SSH needed to triage. See `scripts/site_audit.py --help` for the full list of checks.
+
+---
+
 ## APHIS Animal Welfare Sub-Project
 
 A separate extraction pipeline for the USDA APHIS Animal Care Public Search Tool, which uses a Salesforce Aura API (not Regulations.gov). Lives in `aphis/`.
