@@ -19,8 +19,10 @@
 set -uo pipefail
 
 UUID="${1:-}"
-AUDIT=/mnt/data/datadawn/openregs/scripts/site_audit.py
-LOG_DIR=/mnt/data/datadawn/openregs/logs
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+AUDIT="$SCRIPT_DIR/site_audit.py"
+LOG_DIR="$PROJECT_DIR/logs"
 LOG="$LOG_DIR/site_audit_cron.log"
 BODY="$LOG_DIR/site_audit_latest.txt"
 

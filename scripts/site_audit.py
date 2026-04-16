@@ -36,6 +36,7 @@ import argparse
 import datetime as dt
 import json
 import logging
+import os
 import random
 import socket
 import sqlite3
@@ -54,12 +55,14 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # === Configuration ===
-PROJECT_DIR = Path("/mnt/data/datadawn/openregs")
+PROJECT_DIR = Path(__file__).resolve().parent.parent  # openregs/
 LOG_DIR = PROJECT_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 OPENREGS_DB = PROJECT_DIR / "openregs.db"
-NINETY_DB = Path("/mnt/data/datadawn/990project/990data_public.db")
+# 990 DB lives in a sibling project; override with NINETY_DB env var if your layout differs.
+NINETY_DB = Path(os.environ.get("NINETY_DB",
+                                str(PROJECT_DIR.parent / "990project" / "990data_public.db")))
 
 OPENREGS_BASE = "https://regs.datadawn.org"
 NINETY_BASE = "https://data.datadawn.org"
