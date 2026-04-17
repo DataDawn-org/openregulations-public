@@ -35,7 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("build_db")
 
 # === Paths ===
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path("/mnt/data/datadawn/openregs")
 FR_DIR = BASE_DIR / "federal_register" / "raw"
 REGS_DIR = BASE_DIR / "regulations_gov"
 DOCKETS_DIR = REGS_DIR / "dockets"
@@ -1668,7 +1668,92 @@ def import_federal_register(conn: sqlite3.Connection):
 
     conn.commit()
     log.info(f"  Done: {count:,} Federal Register documents, {len(agencies_seen)} agencies")
+
+    enrich_regulation_id_numbers(conn)
     return count
+
+
+def enrich_regulation_id_numbers(conn: sqlite3.Connection):
+    """Backfill regulation_id_numbers from the FR API for rows that are still NULL.
+
+    Only fetches Rules and Proposed Rules (the document types that carry RINs).
+    Uses minimal fields to keep bandwidth low. Idempotent — skips if already populated.
+    """
+    null_count = conn.execute(
+        "SELECT COUNT(*) FROM federal_register "
+        "WHERE regulation_id_numbers IS NULL AND type IN ('Rule', 'Proposed Rule')"
+    ).fetchone()[0]
+    if null_count == 0:
+        log.info("  RIN enrichment: all Rules/Proposed Rules already have regulation_id_numbers")
+        return
+
+    log.info(f"  RIN enrichment: {null_count:,} Rules/Proposed Rules missing regulation_id_numbers, fetching from FR API...")
+
+    import requests
+    session = requests.Session()
+    session.headers["User-Agent"] = "DataDawn/1.0 (data@datadawn.org)"
+
+    updated = 0
+    api_types = {"RULE": "Rule", "PRORULE": "Proposed Rule"}
+
+    # Query year-by-year to avoid the FR API's 10,000-result cap per query.
+    min_year = conn.execute(
+        "SELECT MIN(pub_year) FROM federal_register WHERE type IN ('Rule', 'Proposed Rule')"
+    ).fetchone()[0] or 1994
+    max_year = conn.execute(
+        "SELECT MAX(pub_year) FROM federal_register WHERE type IN ('Rule', 'Proposed Rule')"
+    ).fetchone()[0] or 2026
+
+    for year in range(min_year, max_year + 1):
+        for api_type, label in api_types.items():
+            page = 1
+            while True:
+                try:
+                    resp = session.get(
+                        "https://www.federalregister.gov/api/v1/documents.json",
+                        params={
+                            "per_page": 1000,
+                            "page": page,
+                            "conditions[type]": api_type,
+                            "conditions[publication_date][gte]": f"{year}-01-01",
+                            "conditions[publication_date][lte]": f"{year}-12-31",
+                            "fields[]": ["document_number", "regulation_id_numbers"],
+                            "order": "oldest",
+                        },
+                        timeout=60,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                except Exception as e:
+                    log.warning(f"  RIN enrichment: API error on {year} page {page} ({label}): {e}")
+                    break
+
+                results = data.get("results", [])
+                if not results:
+                    break
+
+                for doc in results:
+                    rins = doc.get("regulation_id_numbers") or []
+                    if rins:
+                        rin_str = ", ".join(rins)
+                        cur = conn.execute(
+                            "UPDATE federal_register SET regulation_id_numbers = ? "
+                            "WHERE document_number = ? AND regulation_id_numbers IS NULL",
+                            (rin_str, doc["document_number"]),
+                        )
+                        updated += cur.rowcount
+
+                total_pages = data.get("total_pages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+                time.sleep(0.3)
+        conn.commit()
+        if updated and year % 5 == 0:
+            log.info(f"  RIN enrichment: through {year}, {updated:,} updated so far")
+
+    conn.commit()
+    log.info(f"  RIN enrichment: {updated:,} documents updated with regulation_id_numbers")
 
 
 def import_dockets(conn: sqlite3.Connection):

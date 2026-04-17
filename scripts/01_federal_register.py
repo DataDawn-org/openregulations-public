@@ -23,9 +23,8 @@ from urllib3.util.retry import Retry
 
 # === Configuration ===
 BASE_URL = "https://www.federalregister.gov/api/v1/documents.json"
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = PROJECT_DIR / "federal_register" / "raw"
-LOG_DIR = PROJECT_DIR / "logs"
+DATA_DIR = Path("/mnt/data/datadawn/openregs/federal_register/raw")
+LOG_DIR = Path("/mnt/data/datadawn/openregs/logs")
 STATE_FILE = LOG_DIR / "fr_state.json"
 PROGRESS_FILE = LOG_DIR / "progress.txt"
 
@@ -105,6 +104,11 @@ def fetch_month(session, year, month):
             "conditions[publication_date][gte]": start_date,
             "conditions[publication_date][lte]": end_date,
             "order": "oldest",
+            "fields[]": [
+                "document_number", "title", "type", "abstract",
+                "publication_date", "html_url", "pdf_url",
+                "agencies", "excerpts", "regulation_id_numbers",
+            ],
         }
 
         resp = session.get(BASE_URL, params=params, timeout=120)
