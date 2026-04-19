@@ -2,7 +2,7 @@
 # run_site_audit.sh -- Cron wrapper for site_audit.py.
 #
 # Runs the audit, logs output to the rolling log, saves the last summary for
-# debugging, and pings healthchecks.io with the summary body so Tony can see
+# debugging, and pings healthchecks.io with the summary body so we can see
 # pass/fail counts and the specific failing URLs in the hc.io dashboard
 # without having to SSH in.
 #
