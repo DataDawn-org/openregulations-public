@@ -296,6 +296,23 @@ def build_database(db_path, rows):
     conn.commit()
     conn.close()
 
+    # Sanity check: refuse to swap in a dataset that dropped >50% vs live,
+    # which almost always means a transient API blip (partial-page returns).
+    # A 0-row or near-empty open_comments.db would break the explore page.
+    if db_path.exists():
+        try:
+            old_conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            old_count = old_conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            old_conn.close()
+            if old_count > 0 and len(rows) < max(10, old_count * 0.5):
+                tmp_path.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"Refusing DB swap: new count {len(rows)} dropped >50% vs live "
+                    f"{old_count}. Likely transient API issue — leaving live DB intact."
+                )
+        except sqlite3.DatabaseError:
+            pass  # live DB unreadable, fall through and swap
+
     # Atomic rename into place
     if db_path.exists():
         db_path.unlink()

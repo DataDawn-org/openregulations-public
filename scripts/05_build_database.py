@@ -2054,9 +2054,11 @@ def import_presidential_documents(conn: sqlite3.Connection):
                 resp = session.get(url, params=params, timeout=60)
                 resp.raise_for_status()
                 data = resp.json()
-            except Exception as e:
-                log.error(f"  Error fetching {doc_type} page {page}: {e}")
-                break
+            except requests.RequestException as e:
+                raise RuntimeError(
+                    f"Federal Register API fetch failed for {doc_type} page {page}: {e}. "
+                    f"Aborting build rather than silently producing partial data."
+                ) from e
 
             results = data.get("results", [])
             if not results:
