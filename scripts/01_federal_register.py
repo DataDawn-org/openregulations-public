@@ -23,8 +23,9 @@ from urllib3.util.retry import Retry
 
 # === Configuration ===
 BASE_URL = "https://www.federalregister.gov/api/v1/documents.json"
-DATA_DIR = Path("/mnt/data/datadawn/openregs/federal_register/raw")
-LOG_DIR = Path("/mnt/data/datadawn/openregs/logs")
+PROJECT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_DIR / "federal_register" / "raw"
+LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "fr_state.json"
 PROGRESS_FILE = LOG_DIR / "progress.txt"
 

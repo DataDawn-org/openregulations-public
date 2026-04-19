@@ -35,7 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("build_db")
 
 # === Paths ===
-BASE_DIR = Path("/mnt/data/datadawn/openregs")
+BASE_DIR = Path(__file__).resolve().parent.parent
 FR_DIR = BASE_DIR / "federal_register" / "raw"
 REGS_DIR = BASE_DIR / "regulations_gov"
 DOCKETS_DIR = REGS_DIR / "dockets"
