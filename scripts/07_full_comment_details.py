@@ -25,6 +25,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import signal
 import sqlite3
 import sys
@@ -196,6 +197,9 @@ def load_state_downloaded():
 
 
 def save_state(downloaded, failed_count):
+    """fsync before rename so ENOSPC or power loss leaves either the old
+    state or the new one — never a partial write that loses hours of
+    fetched-comment-id progress."""
     state = {
         "downloaded": list(downloaded),
         "total_fetched": len(downloaded),
@@ -204,7 +208,10 @@ def save_state(downloaded, failed_count):
         "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state))
+    with open(tmp, "w") as f:
+        f.write(json.dumps(state))
+        f.flush()
+        os.fsync(f.fileno())
     tmp.rename(STATE_FILE)
 
 

@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import time
 import logging
@@ -204,10 +205,15 @@ def load_state():
 
 
 def save_state(state):
-    """Atomically write state to disk."""
+    """Atomically write state to disk. fsync before rename so ENOSPC or a
+    power loss leaves either the old state or the new one — never a partial
+    write that corrupts resume progress."""
     state["api_calls"] = rate.count
     tmp = STATE_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=2))
+    with open(tmp, "w") as f:
+        f.write(json.dumps(state, indent=2))
+        f.flush()
+        os.fsync(f.fileno())
     tmp.rename(STATE_FILE)
 
 
