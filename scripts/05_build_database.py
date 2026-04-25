@@ -6159,8 +6159,10 @@ def validate_freshness(conn: sqlite3.Connection):
          "actions during session; 14d covers brief recess + 1 missed Sat"),
         ("spending_awards", "start_date", 90,
          "USAspending: lagging indicator, 90d typical lag from action to publish"),
-        ("fec_operating_expenditures", "expenditure_date", 120,
-         "FEC: monthly filings, 120d covers quarterly cycle"),
+        # fec_operating_expenditures excluded: transaction_dt is MM/DD/YYYY
+        # not ISO, so SQLite's julianday() can't parse it for the age math.
+        # Source also contains clearly-bad dates (1416, 2114). Re-add when
+        # we either normalize to ISO at ingest or add MDY-aware comparison.
         ("stock_trades", "transaction_date", 60,
          "STOCK Act 45-day disclosure window + 15d safety"),
         ("legislation", "introduced_date", 14,
@@ -6172,8 +6174,16 @@ def validate_freshness(conn: sqlite3.Connection):
     findings = []
     for table, date_col, max_age_days, _why in expectations:
         try:
+            # Clamp to today: future-dated entries (e.g., FEC dates the week
+            # after the filing, USAspending action dates set forward by months,
+            # SEC stock_trades with mis-typed years) would otherwise let MAX
+            # return a future date and the freshness check pass falsely.
+            # We want "what is the freshest *real* observation we have" —
+            # if every recent ingest landed only future-dated rows, that's
+            # still a freshness gap.
             row = conn.execute(
-                f"SELECT MAX({date_col}), COUNT(*) FROM {table}"
+                f"SELECT MAX({date_col}), COUNT(*) FROM {table} "
+                f"WHERE {date_col} <= date('now')"
             ).fetchone()
             latest, n = row[0], row[1]
             if not latest or n == 0:
@@ -6184,7 +6194,13 @@ def validate_freshness(conn: sqlite3.Connection):
                 (latest,)
             ).fetchone()[0]
             if age_days is None:
-                # Date string unparseable — skip silently, validate_dates handles outliers
+                # Date string unparseable by julianday (e.g. MM/DD/YYYY).
+                # validate_dates handles outliers; here we log so future-Tony
+                # knows the freshness check silently skipped this table.
+                log.info(
+                    f"  - {table}.{date_col} skipped (date format not "
+                    f"julianday-parseable; latest raw value was {latest!r})"
+                )
                 continue
             if age_days > max_age_days:
                 findings.append((table, date_col, latest, age_days, max_age_days))
