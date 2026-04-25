@@ -230,6 +230,10 @@ CREATE TABLE IF NOT EXISTS spending_awards (
     award_type TEXT,
     recipient_name TEXT,
     recipient_name_normalized TEXT,
+    recipient_uei TEXT,
+    recipient_duns TEXT,
+    recipient_id TEXT,
+    recipient_location_state TEXT,
     award_amount REAL,
     total_outlays REAL,
     description TEXT,
@@ -247,6 +251,8 @@ CREATE INDEX IF NOT EXISTS idx_spending_category ON spending_awards(award_catego
 CREATE INDEX IF NOT EXISTS idx_spending_fy ON spending_awards(fiscal_year);
 CREATE INDEX IF NOT EXISTS idx_spending_recipient ON spending_awards(recipient_name);
 CREATE INDEX IF NOT EXISTS idx_spending_recipient_norm ON spending_awards(recipient_name_normalized);
+CREATE INDEX IF NOT EXISTS idx_spending_uei ON spending_awards(recipient_uei) WHERE recipient_uei IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_spending_duns ON spending_awards(recipient_duns) WHERE recipient_duns IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_spending_state ON spending_awards(state_code);
 
 -- Lobbying disclosure filings (from Senate LDA API)
@@ -255,16 +261,36 @@ CREATE TABLE IF NOT EXISTS lobbying_filings (
     filing_type TEXT NOT NULL,
     registrant_id INTEGER,
     registrant_name TEXT,
+    registrant_state TEXT,
+    registrant_country TEXT,
+    registrant_house_id INTEGER,
     client_id INTEGER,
     client_name TEXT,
+    client_state TEXT,
+    client_ppb_state TEXT,
+    client_country TEXT,
+    client_ppb_country TEXT,
+    client_general_description TEXT,
+    client_government_entity INTEGER,
     filing_year INTEGER,
     filing_period TEXT,
     received_date TEXT,
     amount_reported REAL,
     is_amendment INTEGER DEFAULT 0,
     is_no_activity INTEGER DEFAULT 0,
-    is_termination INTEGER DEFAULT 0
+    is_termination INTEGER DEFAULT 0,
+    affiliated_org_count INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS lobbying_affiliated_orgs (
+    id INTEGER PRIMARY KEY,
+    filing_uuid TEXT NOT NULL,
+    org_name TEXT,
+    country TEXT,
+    country_code TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_lobby_aff_filing ON lobbying_affiliated_orgs(filing_uuid);
+CREATE INDEX IF NOT EXISTS idx_lobby_aff_name ON lobbying_affiliated_orgs(org_name);
 
 CREATE TABLE IF NOT EXISTS lobbying_activities (
     id INTEGER PRIMARY KEY,
@@ -318,6 +344,10 @@ CREATE TABLE IF NOT EXISTS lobbying_issue_codes (
 CREATE INDEX IF NOT EXISTS idx_lobby_filing_type ON lobbying_filings(filing_type);
 CREATE INDEX IF NOT EXISTS idx_lobby_client ON lobbying_filings(client_name);
 CREATE INDEX IF NOT EXISTS idx_lobby_year ON lobbying_filings(filing_year);
+CREATE INDEX IF NOT EXISTS idx_lobby_client_state ON lobbying_filings(client_state);
+CREATE INDEX IF NOT EXISTS idx_lobby_registrant_state ON lobbying_filings(registrant_state);
+CREATE INDEX IF NOT EXISTS idx_lobby_house_id ON lobbying_filings(registrant_house_id) WHERE registrant_house_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_lobby_govt_entity ON lobbying_filings(client_government_entity) WHERE client_government_entity = 1;
 CREATE INDEX IF NOT EXISTS idx_lobby_act_client ON lobbying_activities(client_name);
 CREATE INDEX IF NOT EXISTS idx_lobby_act_client_norm ON lobbying_activities(client_name_normalized);
 CREATE INDEX IF NOT EXISTS idx_lobby_act_issue ON lobbying_activities(issue_code);
@@ -578,6 +608,7 @@ CREATE TABLE IF NOT EXISTS stock_trades (
     transaction_date TEXT,
     disclosure_date TEXT,
     ticker TEXT,
+    cik INTEGER,              -- SEC EDGAR CIK, populated from ticker_sic+sec_companies
     asset_description TEXT,
     asset_type TEXT,
     transaction_type TEXT,
@@ -592,6 +623,7 @@ CREATE TABLE IF NOT EXISTS stock_trades (
 
 CREATE INDEX IF NOT EXISTS idx_st_bioguide ON stock_trades(bioguide_id);
 CREATE INDEX IF NOT EXISTS idx_st_ticker ON stock_trades(ticker);
+CREATE INDEX IF NOT EXISTS idx_st_cik ON stock_trades(cik) WHERE cik IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_st_date ON stock_trades(transaction_date);
 CREATE INDEX IF NOT EXISTS idx_st_member ON stock_trades(member_name);
 CREATE INDEX IF NOT EXISTS idx_st_type ON stock_trades(transaction_type);
@@ -1282,6 +1314,190 @@ CREATE TABLE IF NOT EXISTS fara_registrant_docs (
 );
 CREATE INDEX IF NOT EXISTS idx_fara_rd_reg ON fara_registrant_docs(registration_number);
 CREATE INDEX IF NOT EXISTS idx_fara_rd_type ON fara_registrant_docs(document_type);
+
+-- ==========================================================================
+-- Entity resolution tables (entities / public_actors / entity_relationships)
+-- Architecture: /mnt/data/datadawn/bestpractices/entity_architecture.md
+-- Policy:       /mnt/data/datadawn/bestpractices/data_sourcing_policy.md
+-- All-government-data only. Matchers built in-house from primary sources.
+-- ==========================================================================
+
+-- entities: organizations only (corporations, nonprofits, PACs, foreign).
+-- Not people. Not governments. The FK target for org-carrying source rows.
+CREATE TABLE IF NOT EXISTS entities (
+    entity_id INTEGER PRIMARY KEY,
+    canonical_name TEXT NOT NULL,
+    name_normalized TEXT NOT NULL,
+    display_name TEXT,                   -- lazy; NULL falls back to canonical_name
+    entity_type TEXT,                    -- 'public_company' | 'private_company' | 'nonprofit'
+                                         -- | 'foreign_entity' | 'pac' | 'trade_association'
+                                         -- | 'union' | 'political_committee' | 'unknown'
+    ein TEXT,                            -- IRS (9 digits)
+    cik INTEGER,                         -- SEC Central Index Key
+    uei TEXT,                            -- SAM.gov Unique Entity Identifier (12 chars)
+    lei TEXT,                            -- GLEIF Legal Entity Identifier (20 chars)
+    ticker TEXT,                         -- SEC primary ticker, UPPERCASE
+    fec_committee_id TEXT,               -- FEC 9-char C00XXXXXX (for PACs/parties)
+    duns TEXT,                           -- legacy D&B; federal-adopted subset only
+    sic_code TEXT,
+    naics_code TEXT,
+    ntee_code TEXT,
+    state_of_incorporation TEXT,
+    primary_state TEXT,                  -- 2-letter USPS (country='US') or ISO-3166-2 subdivision code
+                                         -- without country prefix; country lives in country col
+    country TEXT,                        -- 2-letter ISO code
+    status TEXT,                         -- 'active' | 'merged' | 'defunct' | 'unknown'
+    merged_into_entity_id INTEGER,
+    source_provenance TEXT,              -- comma-separated set from {'sec', 'bmf', 'gleif',
+                                         -- 'fec', 'sam', 'manual'}; tracks which sources
+                                         -- contributed to this entity. Unordered set semantics.
+    -- Historical names preserved for attribution. JSON array:
+    --   [{"name": "Wyeth LLC", "until": "2009-10-15", "reason": "acquired_by_pfizer"},
+    --    {"name": "American Home Products", "until": "2002-03-11", "reason": "rebranded"}]
+    predecessor_names TEXT,              -- JSON array (added 2026-04-19 per acronym_curation doc)
+    -- Industry taxonomy tags (see bestpractices/datadawn_industry_taxonomy.md).
+    -- Rule: industry = policy area affected, not corporate-structural classification.
+    -- Foreign parents, advocacy orgs, think tanks tagged by US policy area they influence.
+    industry_codes TEXT,                 -- JSON array of industry slugs: ["pharmaceuticals", "big_tech"]
+    primary_industry TEXT,               -- single most-representative slug (for default queries)
+    first_seen_date TEXT,
+    last_seen_date TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notes TEXT,
+    -- Canonical DataDawn identifier (virtual — no storage). Format: DD-E-{entity_id}.
+    -- See entity_architecture.md §"Future: canonical DataDawn identifiers (DD-IDs)".
+    dd_id TEXT GENERATED ALWAYS AS ('DD-E-' || entity_id) VIRTUAL,
+    FOREIGN KEY (merged_into_entity_id) REFERENCES entities(entity_id),
+    CHECK (merged_into_entity_id IS NULL OR merged_into_entity_id != entity_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_ein ON entities(ein) WHERE ein IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_cik ON entities(cik) WHERE cik IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_uei ON entities(uei) WHERE uei IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_lei ON entities(lei) WHERE lei IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_entity_fec_cmte ON entities(fec_committee_id) WHERE fec_committee_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_entity_name_norm ON entities(name_normalized);
+CREATE INDEX IF NOT EXISTS idx_entity_name_state ON entities(name_normalized, primary_state);
+CREATE INDEX IF NOT EXISTS idx_entity_ticker ON entities(ticker) WHERE ticker IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_entity_type ON entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entity_provenance ON entities(source_provenance) WHERE source_provenance IS NOT NULL;
+
+-- entity_aliases: preserves source-specific name variants for reverse lookup.
+CREATE TABLE IF NOT EXISTS entity_aliases (
+    entity_id INTEGER NOT NULL,
+    alias_name TEXT NOT NULL,
+    alias_normalized TEXT NOT NULL,
+    alias_source TEXT NOT NULL,          -- '990_filer' | 'sec_former_name' | 'lobbying_client'
+                                         -- | 'fara_registrant' | 'sam_legal_name' | 'manual'
+    effective_start TEXT,
+    effective_end TEXT,
+    FOREIGN KEY (entity_id) REFERENCES entities(entity_id),
+    PRIMARY KEY (entity_id, alias_name, alias_source)
+);
+CREATE INDEX IF NOT EXISTS idx_alias_norm ON entity_aliases(alias_normalized);
+CREATE INDEX IF NOT EXISTS idx_alias_norm_src ON entity_aliases(alias_normalized, alias_source);
+
+-- public_actors: named individuals in public-role contexts, Model 2.
+-- One row per (person, role-context); never fuzzy-merged across sources.
+-- source_id format for composite keys: '{id_part}:{normalized_name}' using a
+-- single colon. normalize_name() strips all non-alphanumeric+space, so colons
+-- never appear in the name part. See entity_architecture.md §"Table: public_actors".
+CREATE TABLE IF NOT EXISTS public_actors (
+    public_actor_id INTEGER PRIMARY KEY,
+    role_context TEXT NOT NULL,          -- 'congress_member' | 'fara_agent' | 'fec_candidate'
+                                         -- | 'oge_pas_filer' | 'sec_form4_reporter'
+                                         -- | 'nonprofit_officer' | 'lobbyist_lda'
+    source_id TEXT NOT NULL,             -- '{id_part}:{normalized_name}' or bare id — see doc
+    name_full TEXT NOT NULL,
+    name_normalized TEXT NOT NULL,
+    name_first TEXT,
+    name_last TEXT,
+
+    -- Canonical IDs (populated where applicable)
+    bioguide_id TEXT,
+    fec_cand_id TEXT,
+    fara_registration_number TEXT,
+    oge_filer_slug TEXT,
+    sec_reporter_cik INTEGER,
+
+    -- Employer/organization
+    employer_entity_id INTEGER,
+    employer_entity_name TEXT,
+    employer_ein TEXT,
+    employer_cik INTEGER,
+    employer_lda_registrant_id INTEGER,
+
+    -- Role details
+    role_title TEXT,
+    role_start_date TEXT,
+    role_end_date TEXT,
+    is_current INTEGER,
+
+    -- Materiality (two-pass: Pass 1 sets defaults; Pass 2 refines)
+    materiality_tier INTEGER NOT NULL DEFAULT 2,
+    materiality_reason TEXT,
+
+    -- Merge tracking (Model 2 — deterministic evidence only)
+    merged_into_public_actor_id INTEGER,
+    merge_method TEXT,                   -- 'bioguide_match' | 'fec_crosswalk' | 'cik_match' | 'manual'
+    merge_confidence REAL,
+
+    -- Provenance
+    first_seen_date TEXT,
+    last_seen_date TEXT,
+    source_table TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notes TEXT,
+
+    -- Canonical DataDawn identifier (virtual). Format: DD-P-{public_actor_id}.
+    dd_id TEXT GENERATED ALWAYS AS ('DD-P-' || public_actor_id) VIRTUAL,
+
+    UNIQUE(role_context, source_id),
+    FOREIGN KEY (employer_entity_id) REFERENCES entities(entity_id),
+    FOREIGN KEY (merged_into_public_actor_id) REFERENCES public_actors(public_actor_id),
+    CHECK (merged_into_public_actor_id IS NULL OR merged_into_public_actor_id != public_actor_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pa_name_norm ON public_actors(name_normalized);
+CREATE INDEX IF NOT EXISTS idx_pa_role_context ON public_actors(role_context);
+CREATE INDEX IF NOT EXISTS idx_pa_bioguide ON public_actors(bioguide_id) WHERE bioguide_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pa_fec_cand ON public_actors(fec_cand_id) WHERE fec_cand_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pa_fara ON public_actors(fara_registration_number) WHERE fara_registration_number IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pa_employer ON public_actors(employer_entity_id) WHERE employer_entity_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pa_merged ON public_actors(merged_into_public_actor_id) WHERE merged_into_public_actor_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_pa_tier ON public_actors(materiality_tier);
+
+-- entity_relationships: parent/subsidiary/merger/successor/affiliate graph.
+-- Unified table across all source systems.
+CREATE TABLE IF NOT EXISTS entity_relationships (
+    relationship_id INTEGER PRIMARY KEY,
+    parent_entity_id INTEGER,            -- NULL when parent is unknown (e.g., BMF GEN with no resolved central)
+    child_entity_id INTEGER NOT NULL,
+    relationship_type TEXT NOT NULL,     -- 'subsidiary_of' | 'parent_of' | 'affiliated_pac'
+                                         -- | 'founder_family' | 'foreign_controlled' | 'joint_venture'
+                                         -- | 'predecessor_to' | 'successor_to'
+                                         -- | 'bmf_group_exemption' | 'lobbying_affiliate'
+    source TEXT NOT NULL,                -- 'bmf' | 'sec_exhibit_21' | 'lobbying_affiliated_orgs'
+                                         -- | 'gleif_successor' | 'fec_connected_org' | 'manual'
+    source_ref TEXT,                     -- filing_uuid / accession_number / GEN / etc.
+    gen TEXT,                            -- IRS Group Exemption Number when source='bmf'
+    effective_start TEXT,
+    effective_end TEXT,
+    confidence_score REAL NOT NULL DEFAULT 1.0,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (parent_entity_id) REFERENCES entities(entity_id),
+    FOREIGN KEY (child_entity_id) REFERENCES entities(entity_id),
+    CHECK (parent_entity_id IS NULL OR parent_entity_id != child_entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_er_parent ON entity_relationships(parent_entity_id) WHERE parent_entity_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_er_child ON entity_relationships(child_entity_id);
+CREATE INDEX IF NOT EXISTS idx_er_type ON entity_relationships(relationship_type);
+CREATE INDEX IF NOT EXISTS idx_er_gen ON entity_relationships(gen) WHERE gen IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_er_source ON entity_relationships(source);
 """
 
 VIEWS = """
@@ -1493,6 +1709,48 @@ CREATE VIRTUAL TABLE IF NOT EXISTS gao_reports_fts USING fts5(
 CREATE VIRTUAL TABLE IF NOT EXISTS earmarks_fts USING fts5(
     recipient, project_description, member_name, recipient_address,
     content='earmarks', content_rowid='id'
+);
+
+-- Staging imports — FTS on entity resolution + disbursements + WH visits + OGE PAS.
+-- All content-linked so they rebuild cleanly from source tables.
+CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+    canonical_name, display_name, ticker, ein, cik, uei, lei,
+    content='entities', content_rowid='entity_id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS entity_aliases_fts USING fts5(
+    alias_name, alias_source,
+    content='entity_aliases', content_rowid='rowid'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS public_actors_fts USING fts5(
+    name_full, role_context, role_title, bioguide_id, fec_cand_id,
+    employer_entity_name,
+    content='public_actors', content_rowid='public_actor_id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS senate_office_totals_fts USING fts5(
+    office_name, line_category, report_id,
+    content='senate_office_totals', content_rowid='id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS house_pre2016_office_totals_fts USING fts5(
+    office_name, category, quarter,
+    content='house_pre2016_office_totals', content_rowid='id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS house_disbursements_nonpersonnel_fts USING fts5(
+    organization, program, vendor_name, description,
+    content='house_disbursements_nonpersonnel', content_rowid='id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS wh_visits_fts USING fts5(
+    visitor_name_full, visitee_name_last, visitee_name_first,
+    visitee_full, meeting_loc, meeting_room, description,
+    content='wh_visits', content_rowid='visit_id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS oge_pas_filings_fts USING fts5(
+    filer_name_full, department, position, doc_type,
+    content='oge_pas_filings', content_rowid='filing_id'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS oge_pas_transactions_fts USING fts5(
+    filer_last, filer_first, asset_description, asset_name, ticker,
+    tx_type, department, position,
+    content='oge_pas_transactions', content_rowid='transaction_id'
 );
 """
 
@@ -2132,10 +2390,12 @@ def import_spending(conn: sqlite3.Connection):
                     INSERT OR IGNORE INTO spending_awards
                     (generated_internal_id, award_id, agency, sub_agency,
                      award_category, award_type, recipient_name,
+                     recipient_uei, recipient_duns, recipient_id,
+                     recipient_location_state,
                      award_amount, total_outlays, description,
                      start_date, end_date, fiscal_year,
                      state_code, cfda_number, naics_code, naics_description)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     internal_id,
                     rec.get("Award ID"),
@@ -2144,6 +2404,10 @@ def import_spending(conn: sqlite3.Connection):
                     rec.get("_award_category"),
                     rec.get("Award Type") or rec.get("Contract Award Type"),
                     rec.get("Recipient Name"),
+                    rec.get("Recipient UEI"),
+                    rec.get("Recipient DUNS"),
+                    rec.get("recipient_id"),
+                    rec.get("Recipient Location State Code"),
                     rec.get("Award Amount"),
                     rec.get("Total Outlays"),
                     rec.get("Description"),
@@ -2184,14 +2448,31 @@ def import_lobbying(conn: sqlite3.Connection):
     count = conn.execute("""
         INSERT OR IGNORE INTO lobbying_filings
         (filing_uuid, filing_type, registrant_id, registrant_name,
-         client_id, client_name, filing_year, filing_period,
-         received_date, amount_reported, is_amendment, is_no_activity, is_termination)
+         registrant_state, registrant_country, registrant_house_id,
+         client_id, client_name,
+         client_state, client_ppb_state, client_country, client_ppb_country,
+         client_general_description, client_government_entity,
+         filing_year, filing_period,
+         received_date, amount_reported, is_amendment, is_no_activity, is_termination,
+         affiliated_org_count)
         SELECT filing_uuid, filing_type, registrant_id, registrant_name,
-               client_id, client_name, filing_year, filing_period,
-               received_date, amount_reported, is_amendment, is_no_activity, is_termination
+               registrant_state, registrant_country, registrant_house_id,
+               client_id, client_name,
+               client_state, client_ppb_state, client_country, client_ppb_country,
+               client_general_description, client_government_entity,
+               filing_year, filing_period,
+               received_date, amount_reported, is_amendment, is_no_activity, is_termination,
+               affiliated_org_count
         FROM ldb.lobbying_filings_raw
     """).rowcount
     log.info(f"  Filings: {count:,}")
+
+    count = conn.execute("""
+        INSERT OR IGNORE INTO lobbying_affiliated_orgs (id, filing_uuid, org_name, country, country_code)
+        SELECT id, filing_uuid, org_name, country, country_code
+        FROM ldb.lobbying_affiliated_orgs
+    """).rowcount
+    log.info(f"  Affiliated orgs: {count:,}")
 
     count = conn.execute("""
         INSERT OR IGNORE INTO lobbying_activities
@@ -2239,6 +2520,8 @@ FARA_DB = BASE_DIR / "fara.db"
 FEC_DB = BASE_DIR / "fec.db"
 FEC_EMPLOYERS_DB = BASE_DIR / "fec_employers.db"
 OIRA_DB = BASE_DIR / "oira_meetings" / "oira.db"
+GOVERNMENT_UNITS_DB = BASE_DIR / "government_units" / "government_units.db"
+BMF_GROUPS_DB = BASE_DIR / "bmf_groups" / "bmf_groups.db"
 VOTES_DB = BASE_DIR / "votes.db"
 CONGRESS_DIR = BASE_DIR / "congress_gov"
 ECFR_DIR = BASE_DIR / "ecfr"
@@ -2503,6 +2786,61 @@ def import_fec(conn: sqlite3.Connection):
 
     log.info(f"  FEC import complete ({total:,} total rows)")
     return total
+
+
+def import_bmf_groups(conn: sqlite3.Connection):
+    """Import IRS BMF group exemption membership (subordinate→GEN) from bmf_groups.db."""
+    if not BMF_GROUPS_DB.exists():
+        log.info("Skipping bmf_groups (bmf_groups.db not found — run 26_bmf_group_exemptions.py)")
+        return 0
+
+    log.info("Importing BMF group exemption data...")
+    # ATTACH read-only + qualify DROPs with main. (same latent bug class as
+    # import_government_units — fixed 2026-04-21.)
+    conn.execute(f"ATTACH DATABASE 'file:{BMF_GROUPS_DB}?mode=ro' AS bgdb")
+    conn.executescript("""
+        DROP TABLE IF EXISTS main.bmf_group_members;
+        DROP TABLE IF EXISTS main.bmf_group_exemptions;
+        CREATE TABLE main.bmf_group_members AS SELECT * FROM bgdb.bmf_group_members;
+        CREATE TABLE main.bmf_group_exemptions AS SELECT * FROM bgdb.bmf_group_exemptions;
+        CREATE INDEX IF NOT EXISTS idx_bgm_gen ON bmf_group_members(gen);
+        CREATE INDEX IF NOT EXISTS idx_bgm_ein ON bmf_group_members(ein);
+        CREATE INDEX IF NOT EXISTS idx_bgm_state_gen ON bmf_group_members(state, gen);
+    """)
+    conn.execute("DETACH DATABASE bgdb")
+    n = conn.execute("SELECT COUNT(*) FROM bmf_group_members").fetchone()[0]
+    log.info(f"  BMF group members: {n:,}")
+    return n
+
+
+def import_government_units(conn: sqlite3.Connection):
+    """Import Census-derived government units registry (~92K local govts + 56 state/territory)."""
+    if not GOVERNMENT_UNITS_DB.exists():
+        log.info("Skipping government_units (government_units.db not found — run 25_government_units.py)")
+        return 0
+
+    log.info("Importing government_units registry...")
+    # ATTACH with mode=ro so a stray DROP/DELETE can't wipe the source DB.
+    # (Fixed 2026-04-21: un-qualified DROP TABLE would fall through to the
+    # attached schema when main had no matching table, destroying the
+    # government_units.db source file on fresh builds.)
+    conn.execute(f"ATTACH DATABASE 'file:{GOVERNMENT_UNITS_DB}?mode=ro' AS gudb")
+    conn.executescript("""
+        DROP TABLE IF EXISTS main.government_units;
+        CREATE TABLE main.government_units AS SELECT * FROM gudb.government_units;
+        -- Canonical DataDawn identifier (virtual). Format: DD-G-{gov_unit_id}.
+        ALTER TABLE main.government_units ADD COLUMN dd_id TEXT
+            GENERATED ALWAYS AS ('DD-G-' || gov_unit_id) VIRTUAL;
+        CREATE INDEX IF NOT EXISTS idx_gu_name_norm ON government_units(name_normalized);
+        CREATE INDEX IF NOT EXISTS idx_gu_name_state ON government_units(name_normalized, state);
+        CREATE INDEX IF NOT EXISTS idx_gu_state ON government_units(state);
+        CREATE INDEX IF NOT EXISTS idx_gu_level ON government_units(level);
+        CREATE INDEX IF NOT EXISTS idx_gu_pid6 ON government_units(census_pid6) WHERE census_pid6 IS NOT NULL;
+    """)
+    conn.execute("DETACH DATABASE gudb")
+    n = conn.execute("SELECT COUNT(*) FROM government_units").fetchone()[0]
+    log.info(f"  Government units: {n:,}")
+    return n
 
 
 def import_oira(conn: sqlite3.Connection):
@@ -3362,7 +3700,30 @@ def import_stock_trades(conn: sqlite3.Connection):
         "SELECT COUNT(*) FROM stock_trades WHERE bioguide_id != ''"
     ).fetchone()[0]
     log.info(f"  Done: {total:,} stock trades ({matched:,} matched to bioguide_id)")
+
     return total
+
+
+def enrich_stock_trades_cik(conn: sqlite3.Connection):
+    """Backfill stock_trades.cik from ticker_sic. Must run AFTER ticker_sic is loaded."""
+    if conn.execute("SELECT COUNT(*) FROM ticker_sic").fetchone()[0] == 0:
+        log.info("Skipping stock_trades CIK enrichment (ticker_sic empty)")
+        return 0
+    total = conn.execute("SELECT COUNT(*) FROM stock_trades").fetchone()[0]
+    if total == 0:
+        return 0
+    conn.execute("""
+        UPDATE stock_trades SET cik = (
+            SELECT CAST(ts.cik AS INTEGER) FROM ticker_sic ts
+            WHERE UPPER(ts.ticker) = UPPER(stock_trades.ticker)
+            LIMIT 1
+        )
+        WHERE cik IS NULL AND ticker IS NOT NULL
+    """)
+    conn.commit()
+    n_with_cik = conn.execute("SELECT COUNT(*) FROM stock_trades WHERE cik IS NOT NULL").fetchone()[0]
+    log.info(f"stock_trades CIK enrichment: {n_with_cik:,} of {total:,} trades linked to SEC CIK ({100*n_with_cik/total:.1f}%)")
+    return n_with_cik
 
 
 def import_committees(conn: sqlite3.Connection):
@@ -3952,6 +4313,187 @@ def import_ig_reports(conn: sqlite3.Connection):
     conn.commit()
     log.info(f"  IG reports: {count:,}, recommendations: {rec_count:,}")
     return count
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Staging-DB imports (entities, disbursements, OGE PAS, WH visits).
+#
+# These DBs live under /mnt/data/datadawn/staging/ and are built by a separate
+# pipeline (scripts 24/40-47, entity_population_phase_*). We attach them
+# read-only and copy tables + indexes into openregs.db, preserving original
+# table names (no collisions with the rest of the schema).
+#
+# WAL snapshot-read: ATTACH ...?mode=ro gives us SQLite's read-transaction
+# snapshot. Any concurrent writers (Form 4 backfill, NAICS enrichment) keep
+# writing to the staging WAL; our read sees a consistent point-in-time view.
+# ═════════════════════════════════════════════════════════════════════════════
+
+STAGING_ENTITIES_DB = Path('/mnt/data/datadawn/staging/entities_phase_a.db')
+STAGING_DISBURSEMENTS_DB = Path('/mnt/data/datadawn/staging/disbursements/disbursements.db')
+STAGING_OGE_PAS_DB = Path('/mnt/data/datadawn/staging/oge_pas.db')
+STAGING_WH_VISITS_DB = Path('/mnt/data/datadawn/staging/wh_visits.db')
+
+
+def _attach_ro(conn: sqlite3.Connection, db_path: Path, alias: str):
+    """ATTACH staging DB read-only (so concurrent writers don't affect us).
+    Uses SQLite URI syntax; caller's sqlite3 connection must have uri=True."""
+    conn.execute(f"ATTACH DATABASE 'file:{db_path}?mode=ro' AS {alias}")
+
+
+def _copy_table_with_schema(conn: sqlite3.Connection, src_alias: str,
+                             src_table: str, dest_table: str | None = None):
+    """Copy a table + its indexes from attached alias into main DB.
+    Uses PRAGMA table_info (not sqlite_master.sql) to resolve columns, since
+    ALTER TABLE ADD COLUMN doesn't update the stored DDL string."""
+    dest_table = dest_table or src_table
+    cols = list(conn.execute(f'PRAGMA {src_alias}.table_info("{src_table}")'))
+    if not cols:
+        log.warning(f"  {src_alias}.{src_table}: table not found, skipping")
+        return 0
+    # Read original DDL to preserve PRIMARY KEY / AUTOINCREMENT / NOT NULL intent.
+    ddl_row = conn.execute(
+        f"SELECT sql FROM {src_alias}.sqlite_master WHERE type='table' AND name=?",
+        (src_table,)
+    ).fetchone()
+    sql = ddl_row[0] if ddl_row else None
+    # Qualify with main. so SQLite doesn't resolve to the (readonly) attached DB.
+    conn.execute(f'DROP TABLE IF EXISTS main."{dest_table}"')
+    if sql:
+        # Use the original DDL as the baseline (preserves constraints).
+        if src_table != dest_table:
+            sql = sql.replace(f'TABLE "{src_table}"', f'TABLE "{dest_table}"')
+            sql = sql.replace(f'TABLE {src_table}', f'TABLE {dest_table}')
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            # Fall back to synthesized DDL if original fails (e.g. reserved-word clash)
+            col_defs = ', '.join(f'"{c[1]}" {c[2]}' for c in cols)
+            conn.execute(f'CREATE TABLE main."{dest_table}" ({col_defs})')
+    else:
+        col_defs = ', '.join(f'"{c[1]}" {c[2]}' for c in cols)
+        conn.execute(f'CREATE TABLE main."{dest_table}" ({col_defs})')
+    # If the dest table's column set doesn't fully match the source (e.g. later
+    # ALTER TABLE ADD COLUMN added cols to source that aren't in stored DDL),
+    # add the missing ones before INSERT.
+    dest_cols = {c[1] for c in conn.execute(f'PRAGMA main.table_info("{dest_table}")')}
+    for c in cols:
+        if c[1] not in dest_cols:
+            conn.execute(f'ALTER TABLE main."{dest_table}" ADD COLUMN "{c[1]}" {c[2]}')
+    # Explicit column list so ordering is unambiguous
+    col_list = ', '.join(f'"{c[1]}"' for c in cols)
+    conn.execute(
+        f'INSERT INTO main."{dest_table}" ({col_list}) '
+        f'SELECT {col_list} FROM {src_alias}."{src_table}"'
+    )
+    count = conn.execute(f'SELECT COUNT(*) FROM main."{dest_table}"').fetchone()[0]
+    # Copy indexes (skip auto-indexes sqlite creates for PKs)
+    for (idx_sql,) in conn.execute(
+        f"SELECT sql FROM {src_alias}.sqlite_master "
+        f"WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+        (src_table,)
+    ):
+        # Indexes reference table name; if we renamed, adjust
+        s = idx_sql
+        if src_table != dest_table:
+            s = s.replace(f'ON "{src_table}"', f'ON "{dest_table}"')
+            s = s.replace(f'ON {src_table}', f'ON {dest_table}')
+        try:
+            conn.execute(s)
+        except sqlite3.OperationalError as e:
+            log.warning(f"    index skipped ({e}): {s[:80]}")
+    return count
+
+
+def import_staging_entities(conn: sqlite3.Connection):
+    """Copy entities_phase_a.db — the entity-resolution master layer."""
+    if not STAGING_ENTITIES_DB.exists():
+        log.info("Skipping entities staging (entities_phase_a.db not found)")
+        return 0
+    log.info("Importing staging entities_phase_a...")
+    _attach_ro(conn, STAGING_ENTITIES_DB, 'ent_stg')
+    tables = [
+        'entities', 'public_actors', 'entity_aliases', 'entity_relationships',
+        'entity_dominance', 'industries', 'industries_sic_map',
+        'industries_ntee_map', 'uei_registry',
+    ]
+    total = 0
+    for t in tables:
+        n = _copy_table_with_schema(conn, 'ent_stg', t)
+        log.info(f"  {t}: {n:,}")
+        total += n
+    conn.commit()
+    conn.execute("DETACH DATABASE ent_stg")
+    log.info(f"  entities staging import complete: {total:,} rows")
+    return total
+
+
+def import_staging_disbursements(conn: sqlite3.Connection):
+    """Copy disbursements.db — House CSV + PDF + Senate PDF office spending."""
+    if not STAGING_DISBURSEMENTS_DB.exists():
+        log.info("Skipping disbursements staging")
+        return 0
+    log.info("Importing staging disbursements...")
+    _attach_ro(conn, STAGING_DISBURSEMENTS_DB, 'dis_stg')
+    tables = [
+        'house_disbursements_nonpersonnel',
+        'house_disbursements_personnel_agg',
+        'house_disbursements_summary',
+        'house_pre2016_office_totals',
+        'senate_office_totals',
+    ]
+    total = 0
+    for t in tables:
+        n = _copy_table_with_schema(conn, 'dis_stg', t)
+        log.info(f"  {t}: {n:,}")
+        total += n
+    # Also copy the dedup view (qualify main. so SQLite doesn't resolve to attached)
+    conn.execute('DROP VIEW IF EXISTS main.house_pre2016_office_totals_dedup')
+    view_sql = conn.execute(
+        "SELECT sql FROM dis_stg.sqlite_master WHERE type='view' AND name=?",
+        ('house_pre2016_office_totals_dedup',)
+    ).fetchone()
+    if view_sql and view_sql[0]:
+        conn.execute(view_sql[0])
+    conn.commit()
+    conn.execute("DETACH DATABASE dis_stg")
+    log.info(f"  disbursements import complete: {total:,} rows + dedup view")
+    return total
+
+
+def import_staging_oge_pas(conn: sqlite3.Connection):
+    """Copy OGE PAS (senior executive ethics disclosures)."""
+    if not STAGING_OGE_PAS_DB.exists():
+        log.info("Skipping OGE PAS staging")
+        return 0
+    log.info("Importing staging OGE PAS...")
+    _attach_ro(conn, STAGING_OGE_PAS_DB, 'oge_stg')
+    total = 0
+    for t in ('oge_pas_filings', 'oge_pas_transactions'):
+        n = _copy_table_with_schema(conn, 'oge_stg', t)
+        log.info(f"  {t}: {n:,}")
+        total += n
+    conn.commit()
+    conn.execute("DETACH DATABASE oge_stg")
+    log.info(f"  OGE PAS import complete: {total:,} rows")
+    return total
+
+
+def import_staging_wh_visits(conn: sqlite3.Connection):
+    """Copy WH visitor logs (tour PII-redacted + policy visits with name)."""
+    if not STAGING_WH_VISITS_DB.exists():
+        log.info("Skipping WH visits staging")
+        return 0
+    log.info("Importing staging WH visits...")
+    _attach_ro(conn, STAGING_WH_VISITS_DB, 'wh_stg')
+    total = 0
+    for t in ('wh_visits', 'wh_visits_daily_agg'):
+        n = _copy_table_with_schema(conn, 'wh_stg', t)
+        log.info(f"  {t}: {n:,}")
+        total += n
+    conn.commit()
+    conn.execute("DETACH DATABASE wh_stg")
+    log.info(f"  WH visits import complete: {total:,} rows")
+    return total
 
 
 def import_cosponsors(conn: sqlite3.Connection):
@@ -5376,7 +5918,12 @@ def build_fts(conn: sqlite3.Connection):
                    "fara_registrants_fts", "fara_foreign_principals_fts",
                    "fec_employer_fts",
                    "hearings_fts", "crs_reports_fts", "nominations_fts",
-                   "gao_reports_fts", "earmarks_fts"]:
+                   "gao_reports_fts", "earmarks_fts",
+                   "entities_fts", "entity_aliases_fts", "public_actors_fts",
+                   "senate_office_totals_fts", "house_pre2016_office_totals_fts",
+                   "house_disbursements_nonpersonnel_fts",
+                   "wh_visits_fts",
+                   "oge_pas_filings_fts", "oge_pas_transactions_fts"]:
         try:
             source_map = {'cfr_fts': 'cfr_sections', 'crec_fts': 'congressional_record', 'lobbying_fts': 'lobbying_activities', 'spending_awards_fts': 'spending_awards', 'legislation_fts': 'legislation', 'fara_registrants_fts': 'fara_registrants', 'fara_foreign_principals_fts': 'fara_foreign_principals', 'fec_employer_fts': 'fec_employer_totals', 'hearings_fts': 'hearings', 'crs_reports_fts': 'crs_reports', 'nominations_fts': 'nominations', 'gao_reports_fts': 'gao_reports', 'earmarks_fts': 'earmarks'}
             source_table = source_map.get(table, table.replace('_fts', ''))
@@ -5399,6 +5946,269 @@ def build_fts(conn: sqlite3.Connection):
     conn.commit()
 
     log.info("  FTS indexes built")
+
+
+def validate_critical_tables(conn: sqlite3.Connection):
+    """Fail-loud post-build check that every critical table exists and has
+    at least a lower-bound row count. Catches silent failures where a build
+    swallows an error in one phase but deploys a mutilated DB anyway.
+
+    Uncovered history: from ~2026-04-19 through 2026-04-21, every fresh
+    openregs.db build silently lost `government_units` + `bmf_group_*` tables
+    due to an unqualified `DROP TABLE IF EXISTS` that fell through to the
+    (read-write-attached) source DB, destroying the source. `executescript`
+    then failed, but `weekly_update.sh` runs with `set -uo pipefail` (no -e)
+    so the deploy shipped the broken DB. This check makes that class of
+    failure impossible to miss.
+
+    Raises SystemExit(5) on any missing/undersized critical table so the
+    build aborts and deploy is skipped.
+    """
+    log.info("\n" + "=" * 60)
+    log.info("CRITICAL TABLES VALIDATION")
+    log.info("=" * 60)
+    # (table_name, min_rows) — thresholds set at ~70% of current production
+    # so natural data-pull variance doesn't trip them.
+    critical = [
+        ("federal_register", 900_000),
+        ("dockets", 200_000),
+        ("documents", 1_500_000),
+        ("comments", 9_000_000),
+        ("cfr_sections", 100_000),
+        ("legislation", 370_000),
+        ("congress_members", 12_000),
+        ("committees", 200),
+        ("spending_awards", 800_000),
+        ("congressional_record", 800_000),
+        ("fec_operating_expenditures", 15_000_000),
+        ("oira_reviews", 40_000),
+        ("lobbying_filings", 1_500_000),
+        ("government_units", 80_000),     # wiped silently pre-2026-04-21
+        ("bmf_group_members", 350_000),   # same bug class
+        # Staging-imports (2026-04-21+)
+        ("entities", 2_000_000),
+        ("public_actors", 10_000_000),
+        ("entity_aliases", 400_000),
+        ("wh_visits", 7_000_000),
+        ("senate_office_totals", 20_000),
+        ("house_pre2016_office_totals", 200_000),
+        ("oge_pas_filings", 700),
+    ]
+    failures = []
+    for table, min_rows in critical:
+        exists = conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+            (table,)
+        ).fetchone()[0]
+        if not exists:
+            failures.append(f"MISSING: {table}")
+            log.error(f"  ✗ {table}: table does not exist")
+            continue
+        try:
+            n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+        except sqlite3.OperationalError as e:
+            failures.append(f"UNREADABLE: {table} ({e})")
+            log.error(f"  ✗ {table}: {e}")
+            continue
+        if n < min_rows:
+            failures.append(f"UNDERCOUNT: {table} has {n:,} rows (expected ≥ {min_rows:,})")
+            log.error(f"  ✗ {table}: {n:,} rows (expected ≥ {min_rows:,})")
+        else:
+            log.info(f"  ✓ {table}: {n:,}")
+    if failures:
+        log.error("\n" + "=" * 60)
+        log.error(f"CRITICAL TABLES VALIDATION FAILED: {len(failures)} issue(s)")
+        for f in failures:
+            log.error(f"  - {f}")
+        log.error("Aborting before save_build_report/deploy — do NOT ship this DB.")
+        log.error("=" * 60)
+        raise SystemExit(5)
+    log.info(f"  All {len(critical)} critical tables present and sized OK.")
+
+
+def validate_dates(conn: sqlite3.Connection):
+    """Post-build sanity check on date columns.
+
+    Warns (does not fail) on:
+    - Dates outside [1900, 2050] in any table/column (catches typos like 2205
+      postmark or 2999 comment date, plus non-date strings in date columns
+      like "UKRAINE" that landed in fara_foreign_principals.fp_registration_date)
+    - `policy_area` coverage for current-year bills below 70% (catches
+      Congress.gov pipeline regressions like the 2026-04-19 audit found)
+
+    Rationale: caught dozens of source-side data errors (1905, 1940, 2029 typos)
+    during the expansion-pull audit and keeps future runs from silently ingesting
+    malformed dates. Separate from generate_audit_report() which is comprehensive;
+    this is a targeted sanity-guard.
+    """
+    log.info("\n" + "=" * 60)
+    log.info("DATE SANITY + COVERAGE VALIDATION")
+    log.info("=" * 60)
+
+    # 1. Date-range outliers across all tables with date-like columns
+    tables = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%_fts%' "
+        "AND name NOT LIKE '%_data' AND name NOT LIKE '%_idx' AND name NOT LIKE '%_content' "
+        "AND name NOT LIKE '%_config' AND name NOT LIKE '%_docsize'"
+    ).fetchall()]
+
+    outlier_findings = []
+    for t in tables:
+        cols = [r[1] for r in conn.execute(f'PRAGMA table_info("{t}")').fetchall()]
+        for col in cols:
+            if 'date' not in col.lower() or col.endswith('_iso'):
+                continue
+            # Sample to determine format (YYYY-prefix vs MM/DD/YYYY)
+            try:
+                sample = conn.execute(
+                    f'SELECT "{col}" FROM "{t}" WHERE "{col}" IS NOT NULL AND "{col}" != "" LIMIT 1'
+                ).fetchone()
+                if not sample:
+                    continue
+                s = str(sample[0])
+                # Pick extract based on format
+                if s[:4].isdigit() and len(s) >= 4:
+                    extract = f'SUBSTR("{col}", 1, 4)'
+                elif len(s) >= 10 and s[2] in '/-' and s[5] in '/-':
+                    extract = f'SUBSTR("{col}", -4, 4)'
+                else:
+                    continue  # unknown format — skip
+                # Count outliers
+                n_outlier = conn.execute(
+                    f'SELECT COUNT(*) FROM "{t}" WHERE "{col}" IS NOT NULL AND "{col}" != "" '
+                    f'AND ({extract} NOT GLOB "[0-9][0-9][0-9][0-9]" OR '
+                    f'CAST({extract} AS INTEGER) < 1900 OR CAST({extract} AS INTEGER) > 2050)'
+                ).fetchone()[0]
+                if n_outlier > 0:
+                    # Get samples
+                    examples = conn.execute(
+                        f'SELECT DISTINCT "{col}" FROM "{t}" WHERE "{col}" IS NOT NULL AND "{col}" != "" '
+                        f'AND ({extract} NOT GLOB "[0-9][0-9][0-9][0-9]" OR '
+                        f'CAST({extract} AS INTEGER) < 1900 OR CAST({extract} AS INTEGER) > 2050) LIMIT 3'
+                    ).fetchall()
+                    outlier_findings.append((t, col, n_outlier, [e[0] for e in examples]))
+            except Exception:
+                pass
+
+    if outlier_findings:
+        log.warning(f"\n  ⚠  {len(outlier_findings)} (table, column) pairs have date outliers:")
+        for t, col, n, samples in outlier_findings:
+            log.warning(f"    {t}.{col}: {n:,} rows outside [1900, 2050]. e.g. {samples}")
+    else:
+        log.info("  ✓ No date outliers outside [1900, 2050] across any table.")
+
+    # 2. policy_area coverage for current-year bills (catches Congress.gov pipeline breaks)
+    from datetime import datetime
+    current_year = str(datetime.now().year)
+    try:
+        totals = conn.execute(
+            "SELECT COUNT(*), SUM(CASE WHEN policy_area IS NOT NULL AND policy_area != '' THEN 1 ELSE 0 END) "
+            "FROM legislation WHERE substr(introduced_date, 1, 4) = ?", (current_year,)
+        ).fetchone()
+        total, with_pa = totals[0] or 0, totals[1] or 0
+        if total == 0:
+            log.warning(f"  ⚠  No bills in legislation for introduced_date year {current_year} — pipeline may be stalled")
+        else:
+            pct = with_pa / total * 100
+            if pct < 70:
+                log.warning(f"  ⚠  policy_area coverage for {current_year} bills: {with_pa:,}/{total:,} ({pct:.0f}%) — below 70% threshold")
+            else:
+                log.info(f"  ✓ policy_area coverage for {current_year} bills: {with_pa:,}/{total:,} ({pct:.0f}%)")
+    except sqlite3.Error as e:
+        log.warning(f"  policy_area coverage check failed: {e}")
+
+
+def validate_freshness(conn: sqlite3.Connection):
+    """Post-build freshness check: surface tables whose newest row is too old.
+
+    Warn-only (never aborts the build) — old data is still useful, the build
+    succeeded structurally, and aborting would prevent the rest of the build
+    from shipping. The job here is to surface that ingestion broke at the
+    source, so weekly_update.sh can ping a dedicated "operational health"
+    hc.io check (separate from the deploy-broken main check).
+
+    History: added 2026-04-25 after `01_federal_register.py` silently went
+    14+ days stale due to a state-file bug that marked the current month
+    "complete" too aggressively. The bug had been live since at least
+    Apr 11; nobody noticed until a manual site audit on Apr 25 surfaced it.
+    A freshness check at build time would have flagged it the next Saturday
+    after the bug landed. See bestpractices/pipeline_verification.md
+    "## The 2026-04-25 incident" for context.
+
+    Threshold rationale: each table's window is generous enough to absorb
+    a single missed Saturday + normal upstream cadence quirks. A table
+    crossing its threshold doesn't mean prod is broken — it means we should
+    investigate the upstream ingest before next Saturday. If a table is
+    genuinely catastrophically stale (e.g., FR > 60 days), the
+    "FRESHNESS_WARNING" log marker is still emitted and aggregated by the
+    operational-health check; the build never aborts on freshness alone.
+    """
+    log.info("\n" + "=" * 60)
+    log.info("FRESHNESS VALIDATION")
+    log.info("=" * 60)
+
+    # (table, date_column, max_age_days, why_this_window)
+    expectations = [
+        ("federal_register", "publication_date", 14,
+         "FR publishes M-F; 14d covers a missed Saturday + 1 week"),
+        ("comments", "posted_date", 14,
+         "Regs.gov comments daily; 14d covers a missed Saturday"),
+        ("congressional_record", "date", 30,
+         "session days only; 30d covers normal recess + 1 missed Saturday"),
+        ("legislation_actions", "action_date", 14,
+         "actions during session; 14d covers brief recess + 1 missed Sat"),
+        ("spending_awards", "start_date", 90,
+         "USAspending: lagging indicator, 90d typical lag from action to publish"),
+        ("fec_operating_expenditures", "expenditure_date", 120,
+         "FEC: monthly filings, 120d covers quarterly cycle"),
+        ("stock_trades", "transaction_date", 60,
+         "STOCK Act 45-day disclosure window + 15d safety"),
+        ("legislation", "introduced_date", 14,
+         "Bill introductions; 14d covers a missed Saturday + recess week"),
+        ("presidential_documents", "publication_date", 30,
+         "Sporadic; 30d covers normal cadence"),
+    ]
+
+    findings = []
+    for table, date_col, max_age_days, _why in expectations:
+        try:
+            row = conn.execute(
+                f"SELECT MAX({date_col}), COUNT(*) FROM {table}"
+            ).fetchone()
+            latest, n = row[0], row[1]
+            if not latest or n == 0:
+                findings.append((table, date_col, "NO_DATA", n, max_age_days))
+                continue
+            age_days = conn.execute(
+                "SELECT CAST(julianday('now') - julianday(?) AS INTEGER)",
+                (latest,)
+            ).fetchone()[0]
+            if age_days is None:
+                # Date string unparseable — skip silently, validate_dates handles outliers
+                continue
+            if age_days > max_age_days:
+                findings.append((table, date_col, latest, age_days, max_age_days))
+                log.warning(
+                    f"  ⚠  FRESHNESS_WARNING: {table}.{date_col} latest={latest} "
+                    f"({age_days}d old, threshold={max_age_days}d)"
+                )
+            else:
+                log.info(
+                    f"  ✓ {table}.{date_col} latest={latest} "
+                    f"({age_days}d old, threshold={max_age_days}d)"
+                )
+        except sqlite3.Error as e:
+            log.warning(f"  freshness check failed for {table}.{date_col}: {e}")
+
+    if findings:
+        log.warning(
+            f"\n  FRESHNESS_WARNING: {len(findings)} table(s) past expected freshness window."
+        )
+        log.warning(
+            "  This is non-fatal. Investigate upstream ingest before next Saturday."
+        )
+    else:
+        log.info(f"\n  ✓ All {len(expectations)} freshness expectations met.")
 
 
 def print_stats(conn: sqlite3.Connection):
@@ -6316,6 +7126,31 @@ def validate_pipeline():
         "19_gao_reports", "19_hearing_transcripts", "19b_gao_direct",
         "20_daily_open_comments", "20_sec_ticker_sic",
         "21_ig_reports", "22_oira_meetings",
+        # Staging-integration + entity-resolution scripts (feeds staging DBs
+        # merged in build). These run asynchronously from the weekly pipeline
+        # but their outputs land in openregs.db via the import_staging_* fns.
+        "15b_enrich_lobbying",
+        "23_cbo_backfill",
+        "24_sec_form4_backfill",
+        "25_government_units",
+        "26_bmf_group_exemptions",
+        "27_tribes_and_federal_agencies",
+        "28_state_agencies_and_universities",
+        "29_acronym_curation_ingest",
+        "30_industry_classifier",
+        "31_trade_association_tagging",
+        "32_data_cleanup_pass",
+        "33_uei_entity_creation",
+        "36_form4_to_public_actors",
+        "39_naics_from_usaspending_detail",
+        "40_congressional_disbursements_download",
+        "41_parse_house_disbursements",
+        "42_wh_visitors_integrate",
+        "43_oge_pas_integrate",
+        "44_faca_integrate",
+        "45_wh_visitor_to_actor",
+        "46_parse_senate_disbursements",
+        "47_parse_house_pre2016_disbursements",
     }
     scripts_dir = BASE_DIR / "scripts"
     for py_file in scripts_dir.glob("[0-9][0-9]*.py"):
@@ -6402,7 +7237,7 @@ def main():
         DB_PATH.unlink()
         log.info("Removed existing database")
 
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), uri=True)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA cache_size=-256000")  # 256MB cache
@@ -6435,6 +7270,24 @@ def main():
         import_gao_reports(conn)
         import_ig_reports(conn)
         import_earmarks(conn)
+        import_government_units(conn)
+        import_bmf_groups(conn)
+        # Staging-phase imports — wrap in try/except and emit a phase-marker
+        # line so downstream (weekly_update.sh) can ping hc.io staging check
+        # distinctly from the overall build status.
+        staging_failures = []
+        for fn in (import_staging_entities, import_staging_disbursements,
+                   import_staging_oge_pas, import_staging_wh_visits):
+            try:
+                fn(conn)
+            except Exception as e:
+                staging_failures.append(f"{fn.__name__}: {e}")
+                log.error(f"STAGING PHASE FAIL: {fn.__name__}: {e}", exc_info=True)
+        if staging_failures:
+            log.error(f"STAGING_IMPORT_FAILED: {len(staging_failures)} phase(s) errored: "
+                      + "; ".join(staging_failures))
+        else:
+            log.info("STAGING_IMPORT_OK: all 4 staging DBs imported cleanly")
         import_cosponsors(conn)
         build_crec_junction_tables(conn)
         link_hearing_members(conn)
@@ -6446,10 +7299,14 @@ def main():
         build_member_stats(conn)
         build_docket_summary(conn)
         import_reference_tables(conn)
+        enrich_stock_trades_cik(conn)
         build_lobbying_bill_refs(conn)
         build_summary_tables(conn)
         build_fts(conn)
         print_stats(conn)
+        validate_critical_tables(conn)  # fail-loud; aborts on missing/undersized
+        validate_dates(conn)
+        validate_freshness(conn)  # warn-only; emits FRESHNESS_WARNING markers for hc.io
         elapsed = time.time() - start
         save_build_report(conn, elapsed)
         generate_audit_report(conn)

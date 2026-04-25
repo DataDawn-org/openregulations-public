@@ -167,7 +167,31 @@ def main():
 
             key = f"{year}-{month:02d}"
 
-            if key in state["completed_months"]:
+            # The current month and the immediately-prior month are still
+            # mutable upstream — FR back-publishes documents within ~7 days
+            # of the publication date, so we should re-pull them every run
+            # rather than trust a previous "complete" mark. Older months
+            # are immutable and safe to skip via state.
+            #
+            # Bug history: prior to 2026-04-25 the code skipped any month
+            # in completed_months unconditionally, including the current
+            # in-progress month. Result: April 2026 got marked complete on
+            # its first run (with whatever was published so far) and every
+            # subsequent Saturday skipped it. 1,105 documents accumulated
+            # at the source between Apr 11 and Apr 25 with zero pulled.
+            # See bestpractices/pipeline_verification.md for the incident.
+            is_current_or_recent = (
+                year == today.year and month >= today.month - 1
+            ) or (
+                # Handle Jan/Feb edge case where prior month is in last year
+                year == today.year - 1 and today.month == 1 and month == 12
+            )
+            # Year-boundary verification (locks the logic in writing):
+            #   today=2027-01 → re-pull 2027-01 + 2026-12, skip 2026-11 ✓
+            #   today=2027-02 → re-pull 2027-02 + 2027-01, skip 2026-12 ✓
+            #   today=2027-03 → re-pull 2027-03 + 2027-02, skip 2027-01 ✓
+
+            if key in state["completed_months"] and not is_current_or_recent:
                 year_skipped += state["completed_months"][key]
                 year_total += state["completed_months"][key]
                 continue
@@ -176,7 +200,14 @@ def main():
                 count = fetch_month(session, year, month)
                 if not _shutdown:
                     state["completed_months"][key] = count
-                    state["total_documents"] += count
+                    if is_current_or_recent:
+                        # Don't double-count when re-pulling: subtract any
+                        # previous count for this month from total_documents.
+                        prev = state.get("_per_month_for_dedup", {}).get(key, 0)
+                        state["total_documents"] += (count - prev)
+                        state.setdefault("_per_month_for_dedup", {})[key] = count
+                    else:
+                        state["total_documents"] += count
                     save_state(state)
                     year_total += count
                     session_docs += count

@@ -19,21 +19,21 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Regulatory documents | 1,703,711 | Regulations.gov API |
 | Public comment headers | 9,764,809 | Regulations.gov API |
 | Comment full details | 428,838 | Regulations.gov API (4.4% of headers, in progress) |
-| Presidential documents | 5,925 | Federal Register API |
+| Presidential documents | 5,926 | Federal Register API |
 | Congressional legislation | 375,620 | GovInfo BILLSTATUS + Congress.gov API |
 | Legislation actions | 2,310,777 | GovInfo BILLSTATUS |
 | Legislation subjects | 3,036,186 | GovInfo BILLSTATUS |
 | Legislation cosponsors | 4,067,601 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,117 | GovInfo eCFR bulk XML |
+| CFR regulatory sections | 123,069 | GovInfo eCFR bulk XML |
 | Congressional Record entries | 878,583 | GovInfo CREC packages |
 | CREC speakers (bioguide-linked) | 944,216 | Derived from MODS XML |
 | CREC bill references | 1,561,719 | Derived from MODS XML |
-| Roll call votes | 26,439 | Congress.gov API |
-| Member vote records | 8,336,815 | Congress.gov API |
+| Roll call votes | 26,472 | Congress.gov API |
+| Member vote records | 8,344,407 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
-| Congress members | 12,765 | congress-legislators GitHub |
-| Stock trading disclosures | 61,895 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Congress members | 12,766 | congress-legislators GitHub |
+| Stock trading disclosures | 61,928 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
 | Lobbying filings | 1,915,098 | Senate LDA API |
 | Lobbying lobbyists | 4,730,966 | Senate LDA API |
 | Lobbying activities | 3,811,121 | Senate LDA API |
@@ -48,7 +48,7 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | FEC operating expenditures | 15,358,447 | FEC bulk data |
 | FEC independent expenditures | 666,910 | FEC bulk data |
 | FEC PAC summary | 98,614 | FEC bulk data |
-| Federal spending awards | 863,632 | USAspending.gov API |
+| Federal spending awards | 903,135 | USAspending.gov API |
 | FR agencies | 444 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
 | APHIS inspections | 110,400 | APHIS Salesforce API |
@@ -57,8 +57,8 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
 | CRS reports | 13,727 | Congress.gov API |
 | CRS report–bill cross-references | 136,443 | Congress.gov API |
-| Executive nominations | 40,167 | Congress.gov API |
-| Nomination actions | 190,117 | Congress.gov API |
+| Executive nominations | 40,184 | Congress.gov API |
+| Nomination actions | 190,156 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
 | GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
