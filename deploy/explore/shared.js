@@ -15,13 +15,19 @@ function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
 
 // --- Datasette query helper ---
 
-async function query(sql, retries = 1) {
+async function query(sql, retries = 2) {
     const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
         const resp = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
+        if (resp.status === 429 && retries > 0) {
+            // Rate limited. Honor Retry-After (seconds) or fall back to 1.5s, then retry.
+            const retryAfter = parseFloat(resp.headers.get('Retry-After')) || 1.5;
+            await new Promise(r => setTimeout(r, retryAfter * 1000));
+            return query(sql, retries - 1);
+        }
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.error || `HTTP ${resp.status}`);
@@ -36,6 +42,36 @@ async function query(sql, retries = 1) {
         }
         throw e;
     }
+}
+
+// queryCount(sql): Run a SELECT COUNT(*) query and return the integer count.
+// Used for displaying true total result counts in search pages — never display
+// "30+" when you can display the actual number. Returns null on error so the
+// caller can fall back to displaying the page-size count.
+//
+// The SQL must return a single row with a single column (the count). Both
+// "SELECT COUNT(*) FROM ..." and "SELECT COUNT(*) AS cnt FROM ..." work.
+async function queryCount(sql) {
+    try {
+        const rows = await query(sql);
+        if (!rows || rows.length === 0) return null;
+        const row = rows[0];
+        // First value in the row, regardless of column name
+        const v = Object.values(row)[0];
+        return typeof v === 'number' ? v : (v != null ? Number(v) : null);
+    } catch (e) {
+        console.warn('queryCount failed:', e.message);
+        return null;
+    }
+}
+
+// formatResultCount(totalCount, displayLength, hasMore): Build the display
+// label for a search result count. Prefers the true total count from a
+// COUNT(*) query; falls back to "${displayLength}+" if the count is unavailable.
+// Used by all explore pages to keep result count display consistent.
+function formatResultCount(totalCount, displayLength, hasMore) {
+    if (totalCount != null) return Number(totalCount).toLocaleString();
+    return `${displayLength}${hasMore ? '+' : ''}`;
 }
 
 // --- URL state management ---
