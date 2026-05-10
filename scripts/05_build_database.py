@@ -5993,6 +5993,23 @@ def validate_critical_tables(conn: sqlite3.Connection):
         ("senate_office_totals", 20_000),
         ("house_pre2016_office_totals", 200_000),
         ("oge_pas_filings", 700),
+        # Expansion 2026-05-10 — coverage gap audit (companion to 990
+        # schedule_i_grants incident; openregs hadn't been bitten yet but
+        # had 13 ≥1M-row tables sitting outside the floor guard).
+        # Floors at ~70% of current values to absorb natural variance.
+        ("member_votes", 5_800_000),
+        ("lobbying_lobbyists", 3_300_000),
+        ("fec_contributions", 3_000_000),
+        ("legislation_cosponsors", 2_800_000),
+        ("lobbying_activities", 2_600_000),
+        ("lobbying_contributions", 2_500_000),
+        ("lobbying_bills", 2_500_000),
+        ("house_disbursements_nonpersonnel", 2_500_000),
+        ("legislation_subjects", 2_100_000),
+        ("legislation_actions", 1_600_000),
+        ("crec_bills", 1_100_000),
+        ("federal_register_agencies", 1_000_000),
+        ("hearing_members", 800_000),
     ]
     failures = []
     for table, min_rows in critical:
@@ -6151,8 +6168,9 @@ def validate_freshness(conn: sqlite3.Connection):
     expectations = [
         ("federal_register", "publication_date", 14,
          "FR publishes M-F; 14d covers a missed Saturday + 1 week"),
-        ("comments", "posted_date", 14,
-         "Regs.gov comments daily; 14d covers a missed Saturday"),
+        ("comments", "posted_date", 35,
+         "Regs.gov comments only download in the monthly pipeline (15th); "
+         "35d covers monthly cadence + 1 missed run buffer"),
         ("congressional_record", "date", 30,
          "session days only; 30d covers normal recess + 1 missed Saturday"),
         ("legislation_actions", "action_date", 14,
@@ -6169,6 +6187,27 @@ def validate_freshness(conn: sqlite3.Connection):
          "Bill introductions; 14d covers a missed Saturday + recess week"),
         ("presidential_documents", "publication_date", 30,
          "Sporadic; 30d covers normal cadence"),
+        # Trip-wires added 2026-05-02 after the FR-fix-port audit found 4 more
+        # vulnerable scripts (02 dockets, 21 IG, 22 OIRA, 15 lobbying — 15 fixed
+        # same day). All four affected tables download in the monthly pipeline,
+        # so threshold is 45d (monthly cadence + 1 missed run buffer). These
+        # checks are EXPECTED to fire FRESHNESS_WARNING on the next Saturday
+        # after they ship — that's how we know which scripts still need patching.
+        ("lobbying_filings", "received_date", 45,
+         "monthly pipeline (15th); 45d covers monthly cadence + 1 missed run"),
+        ("dockets", "last_modified", 45,
+         "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
+         "Vulnerable to script 02 state-tracker bug — see incident_log 2026-05-02"),
+        ("oira_reviews", "date_received", 45,
+         "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
+         "Vulnerable to script 22 state-tracker bug"),
+        ("ig_reports", "date_issued", 45,
+         "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
+         "Vulnerable to script 21 listing-complete bug"),
+        # oira_meetings.meeting_date deliberately omitted: date format is
+        # 'DD-MMM-YY' (e.g. '20-NOV-24'), not julianday-parseable. The freshness
+        # check would silently skip and emit a log line. Re-add once we either
+        # normalize meeting_date to ISO-8601 at ingest or add MDY-aware comparison.
     ]
 
     findings = []
