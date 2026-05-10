@@ -5967,50 +5967,15 @@ def validate_critical_tables(conn: sqlite3.Connection):
     log.info("\n" + "=" * 60)
     log.info("CRITICAL TABLES VALIDATION")
     log.info("=" * 60)
-    # (table_name, min_rows) — thresholds set at ~70% of current production
-    # so natural data-pull variance doesn't trip them.
-    critical = [
-        ("federal_register", 900_000),
-        ("dockets", 200_000),
-        ("documents", 1_500_000),
-        ("comments", 9_000_000),
-        ("cfr_sections", 100_000),
-        ("legislation", 370_000),
-        ("congress_members", 12_000),
-        ("committees", 200),
-        ("spending_awards", 800_000),
-        ("congressional_record", 800_000),
-        ("fec_operating_expenditures", 15_000_000),
-        ("oira_reviews", 40_000),
-        ("lobbying_filings", 1_500_000),
-        ("government_units", 80_000),     # wiped silently pre-2026-04-21
-        ("bmf_group_members", 350_000),   # same bug class
-        # Staging-imports (2026-04-21+)
-        ("entities", 2_000_000),
-        ("public_actors", 10_000_000),
-        ("entity_aliases", 400_000),
-        ("wh_visits", 7_000_000),
-        ("senate_office_totals", 20_000),
-        ("house_pre2016_office_totals", 200_000),
-        ("oge_pas_filings", 700),
-        # Expansion 2026-05-10 — coverage gap audit (companion to 990
-        # schedule_i_grants incident; openregs hadn't been bitten yet but
-        # had 13 ≥1M-row tables sitting outside the floor guard).
-        # Floors at ~70% of current values to absorb natural variance.
-        ("member_votes", 5_800_000),
-        ("lobbying_lobbyists", 3_300_000),
-        ("fec_contributions", 3_000_000),
-        ("legislation_cosponsors", 2_800_000),
-        ("lobbying_activities", 2_600_000),
-        ("lobbying_contributions", 2_500_000),
-        ("lobbying_bills", 2_500_000),
-        ("house_disbursements_nonpersonnel", 2_500_000),
-        ("legislation_subjects", 2_100_000),
-        ("legislation_actions", 1_600_000),
-        ("crec_bills", 1_100_000),
-        ("federal_register_agencies", 1_000_000),
-        ("hearing_members", 800_000),
-    ]
+    # Floors live in openregs/criticality.json — single source of truth shared
+    # with weekly_update.sh's validate_delta + snapshot_counts. Adding a new
+    # critical table means one entry in that JSON, not edits in three places.
+    # Refactored 2026-05-10 PM (mirrors 990 update.sh registry pattern).
+    import json
+    from pathlib import Path
+    crit_path = Path(__file__).resolve().parent.parent / "criticality.json"
+    crit = json.load(open(crit_path))["tables"]
+    critical = [(t, info["floor"]) for t, info in crit.items() if info.get("floor") is not None]
     failures = []
     for table, min_rows in critical:
         exists = conn.execute(
