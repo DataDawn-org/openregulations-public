@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# deploy.sh — Deploy OpenRegs database to Digital Ocean Datasette instance.
+# deploy.sh — Deploy OpenRegs database to the production Datasette instance.
 #
 # This mirrors the DataDawn (990project) deployment pattern:
 #   - Caddy reverse proxy on port 443
@@ -41,7 +41,6 @@ DOMAIN="regs.datadawn.org"  # Subdomain for the regs data
 #                                       severs a silent connection
 # See bestpractices/incident_log.md "2026-05-02 deploy hang" for context.
 SSH_OPTS="-o ConnectTimeout=15 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
-RSYNC_RSH="ssh $SSH_OPTS"
 
 DRY_RUN=0
 SETUP=0
