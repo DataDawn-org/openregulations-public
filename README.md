@@ -14,26 +14,26 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 <!-- COUNTS-START -->
 | Dataset | Records | Source |
 |---------|---------|--------|
-| Federal Register documents | 994,487 | Federal Register API |
+| Federal Register documents | 998,754 | Federal Register API |
 | Regulatory dockets | 254,910 | Regulations.gov API + derived from documents/comments |
 | Regulatory documents | 1,703,711 | Regulations.gov API |
 | Public comment headers | 9,764,809 | Regulations.gov API |
 | Comment full details | 428,838 | Regulations.gov API (4.4% of headers, in progress) |
-| Presidential documents | 5,926 | Federal Register API |
-| Congressional legislation | 375,620 | GovInfo BILLSTATUS + Congress.gov API |
-| Legislation actions | 2,310,777 | GovInfo BILLSTATUS |
-| Legislation subjects | 3,036,186 | GovInfo BILLSTATUS |
-| Legislation cosponsors | 4,067,601 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,069 | GovInfo eCFR bulk XML |
-| Congressional Record entries | 878,583 | GovInfo CREC packages |
-| CREC speakers (bioguide-linked) | 944,216 | Derived from MODS XML |
-| CREC bill references | 1,561,719 | Derived from MODS XML |
-| Roll call votes | 26,472 | Congress.gov API |
-| Member vote records | 8,344,407 | Congress.gov API |
+| Presidential documents | 5,935 | Federal Register API |
+| Congressional legislation | 377,512 | GovInfo BILLSTATUS + Congress.gov API |
+| Legislation actions | 2,318,012 | GovInfo BILLSTATUS |
+| Legislation subjects | 3,036,651 | GovInfo BILLSTATUS |
+| Legislation cosponsors | 4,076,656 | GovInfo BILLSTATUS |
+| CFR regulatory sections | 123,225 | GovInfo eCFR bulk XML |
+| Congressional Record entries | 884,471 | GovInfo CREC packages |
+| CREC speakers (bioguide-linked) | 948,814 | Derived from MODS XML |
+| CREC bill references | 1,573,659 | Derived from MODS XML |
+| Roll call votes | 26,498 | Congress.gov API |
+| Member vote records | 8,352,993 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,766 | congress-legislators GitHub |
-| Stock trading disclosures | 61,928 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Stock trading disclosures | 62,101 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
 | Lobbying filings | 1,915,098 | Senate LDA API |
 | Lobbying lobbyists | 4,730,966 | Senate LDA API |
 | Lobbying activities | 3,811,121 | Senate LDA API |
@@ -49,16 +49,16 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | FEC independent expenditures | 666,910 | FEC bulk data |
 | FEC PAC summary | 98,614 | FEC bulk data |
 | Federal spending awards | 903,135 | USAspending.gov API |
-| FR agencies | 444 | Federal Register API |
+| FR agencies | 445 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
 | APHIS inspections | 110,400 | APHIS Salesforce API |
 | Committee hearings | 46,177 | GovInfo CHRG collection |
 | Hearing witnesses | 109,242 | GovInfo CHRG collection |
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
-| CRS reports | 13,727 | Congress.gov API |
-| CRS report–bill cross-references | 136,443 | Congress.gov API |
-| Executive nominations | 40,184 | Congress.gov API |
-| Nomination actions | 190,156 | Congress.gov API |
+| CRS reports | 13,794 | Congress.gov API |
+| CRS report–bill cross-references | 136,827 | Congress.gov API |
+| Executive nominations | 40,219 | Congress.gov API |
+| Nomination actions | 190,193 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
 | GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
@@ -70,7 +70,7 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Earmarks | 70,826 | House/Senate Appropriations |
 | Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
-| FR ↔ Regs.gov cross-references | 395,621 | Derived |
+| FR ↔ Regs.gov cross-references | 395,987 | Derived |
 <!-- COUNTS-END -->
 
 **Total**: ~120 million rows across 188 tables.
