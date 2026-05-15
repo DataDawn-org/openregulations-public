@@ -6231,6 +6231,111 @@ def validate_freshness(conn: sqlite3.Connection):
         log.info(f"\n  ✓ All {len(expectations)} freshness expectations met.")
 
 
+def validate_schema_fingerprint(conn: sqlite3.Connection):
+    """Post-build schema-drift detector (audit M5).
+
+    Computes a SHA-256 fingerprint of the current schema and compares it
+    against the most recent local backup's manifest sidecar. On drift,
+    logs a SCHEMA_DRIFT_WARNING with the table-level diff (added/dropped/
+    altered) so the operator can confirm whether the change was intended.
+
+    Algorithm must match deploy.sh's manifest writer. Manifest sidecars are
+    written by propagate_backup_to_local_and_b2; `schema_objects` was added
+    to that manifest 2026-05-15 to make table-level diff possible (the
+    fingerprint alone tells you *that* something changed, not *what*).
+
+    Warn-only — schema drift is usually intentional (new column, new
+    table). Aborting the build on drift would cause every legitimate
+    schema change to require a code-side override. The operator reviews
+    the warning; if expected, no action; if not, investigate.
+    """
+    log.info("\n" + "=" * 60)
+    log.info("SCHEMA FINGERPRINT VALIDATION")
+    log.info("=" * 60)
+
+    import hashlib, json
+    from pathlib import Path
+
+    # Compute current fingerprint — keep in lockstep with deploy.sh.
+    schema_rows = conn.execute(
+        "SELECT type, name, sql FROM sqlite_schema "
+        "WHERE sql IS NOT NULL ORDER BY type, name"
+    ).fetchall()
+    schema_text = "\n".join(f"{t}\t{n}\t{s}" for t, n, s in schema_rows)
+    current_fp = hashlib.sha256(schema_text.encode()).hexdigest()
+    current_objects = {f"{t}:{n}": s for t, n, s in schema_rows}
+    log.info(f"  Current fingerprint: {current_fp[:16]}... ({len(current_objects)} objects)")
+
+    backup_dir = Path(__file__).resolve().parent.parent / "backups"
+    if not backup_dir.exists():
+        log.info(f"  (no local backups dir at {backup_dir}; skipping drift check)")
+        return
+
+    manifests = sorted(
+        backup_dir.glob("openregs-predeploy-*.db.manifest.json"),
+        key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    if not manifests:
+        log.info("  (no manifest sidecars in local backups yet — manifest writing")
+        log.info("   started 2026-05-15; baseline established after next deploy.)")
+        return
+
+    prior = manifests[0]
+    try:
+        prior_manifest = json.load(open(prior))
+        prior_fp = prior_manifest.get("schema_fingerprint_sha256")
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning(f"  Could not read prior manifest {prior.name}: {e}")
+        return
+
+    if not prior_fp:
+        log.warning(f"  Prior manifest {prior.name} has no schema_fingerprint_sha256 field; skipping.")
+        return
+
+    log.info(f"  Prior fingerprint:   {prior_fp[:16]}... (from {prior.name})")
+
+    if current_fp == prior_fp:
+        log.info("  ✓ No schema drift since last build.")
+        return
+
+    # Drift! Try to enumerate what changed using prior schema_objects.
+    log.warning("  ⚠  SCHEMA_DRIFT_WARNING: schema fingerprint changed since last build.")
+    log.warning(f"     Prior: {prior.name}")
+    log.warning(f"     Prior timestamp: {prior_manifest.get('manifest_timestamp_utc', 'unknown')}")
+
+    prior_objects = prior_manifest.get("schema_objects", {})
+    if not prior_objects:
+        log.warning("     (prior manifest predates schema_objects field — cannot show object diff)")
+        log.warning("     Inspect schema manually if change was unexpected.")
+        return
+
+    added = sorted(current_objects.keys() - prior_objects.keys())
+    dropped = sorted(prior_objects.keys() - current_objects.keys())
+    altered = sorted(
+        k for k in current_objects.keys() & prior_objects.keys()
+        if current_objects[k] != prior_objects[k]
+    )
+
+    if added:
+        log.warning(f"     Added ({len(added)}):")
+        for k in added[:20]:
+            log.warning(f"       + {k}")
+        if len(added) > 20:
+            log.warning(f"       ... and {len(added) - 20} more")
+    if dropped:
+        log.warning(f"     Dropped ({len(dropped)}) — investigate if unexpected:")
+        for k in dropped[:20]:
+            log.warning(f"       - {k}")
+        if len(dropped) > 20:
+            log.warning(f"       ... and {len(dropped) - 20} more")
+    if altered:
+        log.warning(f"     Altered DDL ({len(altered)}):")
+        for k in altered[:20]:
+            log.warning(f"       ~ {k}")
+        if len(altered) > 20:
+            log.warning(f"       ... and {len(altered) - 20} more")
+
+
 def print_stats(conn: sqlite3.Connection):
     """Print database statistics."""
     log.info("\n" + "=" * 50)
@@ -7327,6 +7432,7 @@ def main():
         validate_critical_tables(conn)  # fail-loud; aborts on missing/undersized
         validate_dates(conn)
         validate_freshness(conn)  # warn-only; emits FRESHNESS_WARNING markers for hc.io
+        validate_schema_fingerprint(conn)  # warn-only; emits SCHEMA_DRIFT_WARNING (M5)
         elapsed = time.time() - start
         save_build_report(conn, elapsed)
         generate_audit_report(conn)

@@ -9,9 +9,11 @@
 #
 # Usage:
 #   ./deploy.sh              # full deploy
-#   ./deploy.sh --setup      # first-time server setup
 #   ./deploy.sh --db-only    # just upload new database
 #   ./deploy.sh --dry-run    # show what would happen
+#
+# (--setup was deprecated 2026-05-10 — for fresh-server provisioning, see
+# bestpractices/disaster_recovery.md instead.)
 #
 set -euo pipefail
 
@@ -43,16 +45,23 @@ DOMAIN="regs.datadawn.org"  # Subdomain for the regs data
 SSH_OPTS="-o ConnectTimeout=15 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
 
 DRY_RUN=0
-SETUP=0
 DB_ONLY=0
 
 for arg in "$@"; do
     case $arg in
         --dry-run) DRY_RUN=1 ;;
-        --setup) SETUP=1 ;;
         --db-only) DB_ONLY=1 ;;
+        --setup)
+            # Deprecated 2026-05-10 — kept as an error path so anyone using
+            # muscle memory or stale docs gets a clear redirect instead of
+            # silently falling through into a full deploy.
+            echo "ERROR: --setup is no longer supported (the path was last current in March 2026)."
+            echo "For fresh-server provisioning, follow bestpractices/disaster_recovery.md instead."
+            echo "For incremental config edits, use the vps-config/ local mirror + caddy-reload."
+            exit 1
+            ;;
         --help)
-            echo "Usage: $0 [--setup|--db-only|--dry-run]"
+            echo "Usage: $0 [--db-only|--dry-run]"
             exit 0
             ;;
     esac
@@ -166,6 +175,11 @@ schema_rows = conn.execute(
 ).fetchall()
 schema_text = "\n".join(f"{t}\t{n}\t{s}" for t, n, s in schema_rows)
 schema_fp = hashlib.sha256(schema_text.encode()).hexdigest()
+# schema_objects enables table-level diff in validate_schema_fingerprint
+# (audit M5 follow-up). Keys are "{type}:{name}" so 'table:returns' won't
+# collide with a hypothetical 'index:returns'. Adds ~100-300 KB to the
+# manifest — negligible.
+schema_objects = {f"{t}:{n}": s for t, n, s in schema_rows}
 existing = {r[0] for r in conn.execute(
     "SELECT name FROM sqlite_schema WHERE type='table'").fetchall()}
 row_counts = {}
@@ -183,6 +197,7 @@ manifest = {
     "db_size_bytes": os.path.getsize(backup),
     "quick_check": "ok",
     "schema_fingerprint_sha256": schema_fp,
+    "schema_objects": schema_objects,
     "sqlite_version": sqlite3.sqlite_version,
     "row_counts": row_counts,
     "row_count_tables_present": sum(1 for v in row_counts.values() if v is not None),
@@ -291,26 +306,6 @@ fi
 
 DB_SIZE_MB=$(du -m "$DB" | cut -f1)
 log "Database: $DB (${DB_SIZE_MB}MB)"
-
-# ── First-time server setup (REMOVED 2026-05-10) ─────────────────────────
-# The --setup path was last useful during a March 2026 server migration. It
-# is now stale: it would chown to the SSH operator user (services now run as
-# a dedicated `datasette` system user, per 2026-04-20 hardening), pip-install
-# datasette globally (we use per-service venvs at /opt/datasette +
-# /opt/openregs), set the systemd unit User to the operator (no longer
-# correct), and instruct a manual Caddyfile edit (Caddy now uses a
-# per-tenant include split from 2026-05-07). Running it on a fresh box would
-# produce a half-broken bootstrap.
-#
-# For bare-metal DR or fresh-server provisioning, see:
-#   bestpractices/disaster_recovery.md   (full validated runbook)
-#   vps-config/                          (canonical Caddyfile + systemd units)
-if [[ $SETUP -eq 1 ]]; then
-    log "ERROR: --setup is no longer supported (the path was last current in March 2026)."
-    log "For fresh-server provisioning, follow bestpractices/disaster_recovery.md instead."
-    log "For incremental config edits, use the vps-config/ local mirror + caddy-reload."
-    exit 1
-fi
 
 # BACKUP_DIR is referenced by the disk-check error message and the
 # backup step further down. Define it once up top so the disk-check abort
