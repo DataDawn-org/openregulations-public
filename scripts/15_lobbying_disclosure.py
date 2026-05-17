@@ -957,6 +957,44 @@ def build_summary_tables():
         conn.execute("CREATE INDEX idx_lcs_total ON lobbying_client_summary(total_reported DESC)")
         n_client = conn.execute("SELECT COUNT(*) FROM lobbying_client_summary").fetchone()[0]
         log.info(f"  lobbying_client_summary: {n_client:,} rows ({time.time()-t0:.1f}s)")
+
+        t0 = time.time()
+        conn.execute("DROP TABLE IF EXISTS lobbying_registrant_summary")
+        conn.execute("""
+            CREATE TABLE lobbying_registrant_summary AS
+            SELECT
+                registrant_name,
+                COUNT(*) AS activity_count,
+                COUNT(DISTINCT client_name) AS unique_clients,
+                COUNT(DISTINCT issue_code) AS issue_areas,
+                CAST(SUM(income_amount) AS INTEGER) AS total_income,
+                MIN(filing_year) AS first_year,
+                MAX(filing_year) AS last_year
+            FROM lobbying_activities
+            WHERE income_amount > 0
+            GROUP BY registrant_name
+        """)
+        conn.execute("CREATE INDEX idx_lrs_total ON lobbying_registrant_summary(total_income DESC)")
+        n_reg = conn.execute("SELECT COUNT(*) FROM lobbying_registrant_summary").fetchone()[0]
+        log.info(f"  lobbying_registrant_summary: {n_reg:,} rows ({time.time()-t0:.1f}s)")
+
+        t0 = time.time()
+        conn.execute("DROP TABLE IF EXISTS lobbying_year_summary")
+        conn.execute("""
+            CREATE TABLE lobbying_year_summary AS
+            SELECT
+                filing_year,
+                COUNT(*) AS activity_count,
+                COUNT(DISTINCT client_name) AS unique_clients,
+                COUNT(DISTINCT registrant_name) AS unique_registrants,
+                CAST(SUM(income_amount) AS INTEGER) AS total_income,
+                CAST(SUM(expense_amount) AS INTEGER) AS total_expenses
+            FROM lobbying_activities
+            WHERE filing_year IS NOT NULL
+            GROUP BY filing_year
+        """)
+        n_year = conn.execute("SELECT COUNT(*) FROM lobbying_year_summary").fetchone()[0]
+        log.info(f"  lobbying_year_summary: {n_year:,} rows ({time.time()-t0:.1f}s)")
         conn.commit()
     finally:
         conn.close()
