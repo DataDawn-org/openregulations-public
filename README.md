@@ -14,30 +14,30 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 <!-- COUNTS-START -->
 | Dataset | Records | Source |
 |---------|---------|--------|
-| Federal Register documents | 998,754 | Federal Register API |
-| Regulatory dockets | 254,910 | Regulations.gov API + derived from documents/comments |
+| Federal Register documents | 999,253 | Federal Register API |
+| Regulatory dockets | 254,917 | Regulations.gov API + derived from documents/comments |
 | Regulatory documents | 1,703,711 | Regulations.gov API |
-| Public comment headers | 9,764,809 | Regulations.gov API |
-| Comment full details | 428,838 | Regulations.gov API (4.4% of headers, in progress) |
-| Presidential documents | 5,935 | Federal Register API |
-| Congressional legislation | 377,512 | GovInfo BILLSTATUS + Congress.gov API |
-| Legislation actions | 2,318,012 | GovInfo BILLSTATUS |
-| Legislation subjects | 3,036,651 | GovInfo BILLSTATUS |
-| Legislation cosponsors | 4,076,656 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,225 | GovInfo eCFR bulk XML |
-| Congressional Record entries | 884,471 | GovInfo CREC packages |
-| CREC speakers (bioguide-linked) | 948,814 | Derived from MODS XML |
-| CREC bill references | 1,573,659 | Derived from MODS XML |
-| Roll call votes | 26,498 | Congress.gov API |
-| Member vote records | 8,352,993 | Congress.gov API |
+| Public comment headers | 9,940,592 | Regulations.gov API |
+| Comment full details | 433,838 | Regulations.gov API (4.4% of headers, in progress) |
+| Presidential documents | 5,936 | Federal Register API |
+| Congressional legislation | 377,789 | GovInfo BILLSTATUS + Congress.gov API |
+| Legislation actions | 2,318,806 | GovInfo BILLSTATUS |
+| Legislation subjects | 3,036,655 | GovInfo BILLSTATUS |
+| Legislation cosponsors | 4,078,084 | GovInfo BILLSTATUS |
+| CFR regulatory sections | 123,358 | GovInfo eCFR bulk XML |
+| Congressional Record entries | 885,224 | GovInfo CREC packages |
+| CREC speakers (bioguide-linked) | 949,408 | Derived from MODS XML |
+| CREC bill references | 1,575,699 | Derived from MODS XML |
+| Roll call votes | 26,529 | Congress.gov API |
+| Member vote records | 8,362,696 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,766 | congress-legislators GitHub |
-| Stock trading disclosures | 62,101 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
-| Lobbying filings | 1,915,098 | Senate LDA API |
-| Lobbying lobbyists | 4,730,966 | Senate LDA API |
-| Lobbying activities | 3,811,121 | Senate LDA API |
-| Lobbying contributions | 3,670,570 | Senate LDA API |
+| Stock trading disclosures | 62,248 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Lobbying filings | 1,934,917 | Senate LDA API |
+| Lobbying lobbyists | 4,794,448 | Senate LDA API |
+| Lobbying activities | 3,860,624 | Senate LDA API |
+| Lobbying contributions | 3,670,829 | Senate LDA API |
 | FARA registrants | 7,043 | FARA.gov |
 | FARA foreign principals | 17,652 | FARA.gov |
 | FARA registrant documents | 151,987 | FARA.gov |
@@ -55,10 +55,10 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Committee hearings | 46,177 | GovInfo CHRG collection |
 | Hearing witnesses | 109,242 | GovInfo CHRG collection |
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
-| CRS reports | 13,794 | Congress.gov API |
-| CRS report–bill cross-references | 136,827 | Congress.gov API |
-| Executive nominations | 40,219 | Congress.gov API |
-| Nomination actions | 190,193 | Congress.gov API |
+| CRS reports | 13,814 | Congress.gov API |
+| CRS report–bill cross-references | 136,953 | Congress.gov API |
+| Executive nominations | 40,275 | Congress.gov API |
+| Nomination actions | 190,255 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
 | GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
@@ -600,8 +600,6 @@ All current and historical members of Congress (12,700+).
 | `state` | Most recent state |
 | `chamber` | Senate or House (most recent term) |
 | `is_current` | 1 if currently serving |
-| `opensecrets_id` | OpenSecrets (CRP) ID for campaign finance data |
-| `govtrack_id` | GovTrack.us ID |
 | `fec_ids` | FEC candidate IDs (JSON array) |
 
 ### stock_trades

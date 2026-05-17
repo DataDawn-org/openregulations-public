@@ -318,9 +318,7 @@ All current and historical members of Congress. The universal linkage table.
 | `state` | TEXT | Most recent state |
 | `chamber` | TEXT | Senate or House (most recent) |
 | `is_current` | INTEGER | Currently serving |
-| `opensecrets_id` | TEXT | CRP ID |
 | `fec_ids` | TEXT | FEC candidate IDs (JSON array) |
-| `govtrack_id` | INTEGER | GovTrack ID |
 | `lis_id` | TEXT | LIS ID (Senate votes) |
 | `trade_count` / `speech_count` / `bills_sponsored` / `vote_count` | INTEGER | Pre-computed stats |
 

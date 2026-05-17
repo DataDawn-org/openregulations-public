@@ -579,14 +579,9 @@ CREATE TABLE IF NOT EXISTS congress_members (
     first_served TEXT,
     last_served TEXT,
     is_current INTEGER,
-    opensecrets_id TEXT,
     fec_ids TEXT,
-    govtrack_id INTEGER,
     thomas_id TEXT,
-    votesmart_id INTEGER,
     lis_id TEXT,
-    wikipedia_id TEXT,
-    ballotpedia_id TEXT,
     birthday TEXT,
     gender TEXT,
     terms_count INTEGER,
@@ -3308,10 +3303,10 @@ def import_congress_members(conn: sqlite3.Connection):
                 INSERT OR REPLACE INTO congress_members
                 (bioguide_id, first_name, last_name, full_name, nickname,
                  party, state, chamber, district, first_served, last_served,
-                 is_current, opensecrets_id, fec_ids, govtrack_id, thomas_id,
-                 votesmart_id, lis_id, wikipedia_id, ballotpedia_id, birthday, gender,
+                 is_current, fec_ids, thomas_id,
+                 lis_id, birthday, gender,
                  terms_count, served_until)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bid,
                 m.get("first_name", ""),
@@ -3325,14 +3320,9 @@ def import_congress_members(conn: sqlite3.Connection):
                 m.get("first_served", ""),
                 m.get("last_served", ""),
                 1 if m.get("is_current") else 0,
-                m.get("opensecrets_id", ""),
                 m.get("fec_ids", ""),
-                m.get("govtrack_id"),
                 m.get("thomas_id", ""),
-                m.get("votesmart_id"),
                 bio_to_lis.get(bid),
-                m.get("wikipedia_id", ""),
-                m.get("ballotpedia_id", ""),
                 m.get("birthday", ""),
                 m.get("gender", ""),
                 terms_count,
