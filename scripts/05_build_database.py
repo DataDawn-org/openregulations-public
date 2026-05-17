@@ -582,7 +582,6 @@ CREATE TABLE IF NOT EXISTS congress_members (
     fec_ids TEXT,
     thomas_id TEXT,
     lis_id TEXT,
-    wikipedia_id TEXT,
     birthday TEXT,
     gender TEXT,
     terms_count INTEGER,
@@ -3305,9 +3304,9 @@ def import_congress_members(conn: sqlite3.Connection):
                 (bioguide_id, first_name, last_name, full_name, nickname,
                  party, state, chamber, district, first_served, last_served,
                  is_current, fec_ids, thomas_id,
-                 lis_id, wikipedia_id, birthday, gender,
+                 lis_id, birthday, gender,
                  terms_count, served_until)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bid,
                 m.get("first_name", ""),
@@ -3324,7 +3323,6 @@ def import_congress_members(conn: sqlite3.Connection):
                 m.get("fec_ids", ""),
                 m.get("thomas_id", ""),
                 bio_to_lis.get(bid),
-                m.get("wikipedia_id", ""),
                 m.get("birthday", ""),
                 m.get("gender", ""),
                 terms_count,

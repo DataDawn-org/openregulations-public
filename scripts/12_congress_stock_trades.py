@@ -218,11 +218,12 @@ def phase_members(session):
                 "first_served": first_term.get("start", ""),
                 "last_served": latest_term.get("end", ""),
                 "is_current": label == "current",
-                # ID mappings (only federal-source IDs retained; NGO-derived
-                # crosswalks dropped per bestpractices/data_sourcing_policy.md)
+                # ID mappings — only federal-source IDs (FEC, LoC THOMAS, LIS)
+                # retained per bestpractices/data_sourcing_policy.md. NGO and
+                # encyclopedic crosswalks (OpenSecrets, GovTrack, Vote Smart,
+                # Ballotpedia, Wikipedia) are not propagated.
                 "fec_ids": json.dumps(ids.get("fec", [])),
                 "thomas_id": ids.get("thomas", ""),
-                "wikipedia_id": ids.get("wikipedia", ""),
                 # Name variants for fuzzy matching
                 "name_variants": json.dumps(sorted(name_variants)),
                 # Birthday for disambiguation

@@ -604,7 +604,7 @@
                 "search_members": {
                     "title": "Search Congress Members",
                     "description": "Find current or historical members of Congress by name.",
-                    "sql": "SELECT bioguide_id, full_name, party, state, chamber, CASE WHEN is_current THEN 'Yes' ELSE 'No' END AS current, first_served, last_served, wikipedia_id FROM congress_members WHERE full_name LIKE '%' || :name || '%' OR last_name LIKE '%' || :name || '%' ORDER BY is_current DESC, last_served DESC LIMIT 200",
+                    "sql": "SELECT bioguide_id, full_name, party, state, chamber, CASE WHEN is_current THEN 'Yes' ELSE 'No' END AS current, first_served, last_served FROM congress_members WHERE full_name LIKE '%' || :name || '%' OR last_name LIKE '%' || :name || '%' ORDER BY is_current DESC, last_served DESC LIMIT 200",
                     "params": {"name": "Grassley"}
                 },
                 "member_profile": {
