@@ -943,7 +943,7 @@
 
         function renderClientCard(r) {
             return `
-                <div class="result-card" onclick="openClient('${esc(r.client_name).replace(/'/g, "\\'")}')">
+                <div class="result-card" onclick="openClient('${jsAttr(r.client_name)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.client_name)}</div>
                         <span class="money-badge">${formatMoney(r.total_income)}</span>
@@ -959,7 +959,7 @@
 
         function renderFirmCard(r) {
             return `
-                <div class="result-card" onclick="openFirm('${esc(r.registrant_name).replace(/'/g, "\\'")}')">
+                <div class="result-card" onclick="openFirm('${jsAttr(r.registrant_name)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.registrant_name)}</div>
                         <span class="money-badge">${formatMoney(r.total_income)}</span>
@@ -974,7 +974,7 @@
 
         function renderIssueCard(r) {
             return `
-                <div class="result-card" onclick="openIssue('${esc(r.issue_code).replace(/'/g, "\\'")}', '${esc(r.description || r.issue_code).replace(/'/g, "\\'")}')">
+                <div class="result-card" onclick="openIssue('${jsAttr(r.issue_code)}', '${jsAttr(r.description || r.issue_code)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.description || r.issue_code)}</div>
                         <span class="issue-badge">${esc(r.issue_code)}</span>
@@ -989,7 +989,7 @@
 
         function renderRevDoorCard(r) {
             return `
-                <div class="result-card" onclick="openClient('${esc(r.client_name).replace(/'/g, "\\'")}')">
+                <div class="result-card" onclick="openClient('${jsAttr(r.client_name)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.lobbyist_name)}</div>
                         <span class="revdoor-badge">Revolving Door</span>
@@ -1238,7 +1238,7 @@
                     html += `<div class="section-title">Clients (${topClients.length}${s.client_count > 100 ? ' of ' + formatNumber(s.client_count) : ''})</div>`;
                     html += '<div class="top-list">';
                     topClients.forEach((c, i) => {
-                        html += `<div class="top-item" onclick="event.stopPropagation(); openClient('${esc(c.client_name).replace(/'/g, "\\'")}')">
+                        html += `<div class="top-item" onclick="event.stopPropagation(); openClient('${jsAttr(c.client_name)}')">
                             <span class="top-rank">${i + 1}</span>
                             <div class="top-info">
                                 <div class="top-name">${esc(c.client_name)}</div>
@@ -1255,7 +1255,7 @@
                     html += `<div class="section-title">Issue Areas (${issueAreas.length})</div>`;
                     html += '<div class="top-list">';
                     issueAreas.forEach(ia => {
-                        html += `<div class="top-item" onclick="event.stopPropagation(); openIssue('${esc(ia.issue_code).replace(/'/g, "\\'")}', '${esc(ia.description || ia.issue_code).replace(/'/g, "\\'")}')">
+                        html += `<div class="top-item" onclick="event.stopPropagation(); openIssue('${jsAttr(ia.issue_code)}', '${jsAttr(ia.description || ia.issue_code)}')">
                             <div class="top-info">
                                 <div class="top-name">${esc(ia.description || ia.issue_code)}</div>
                                 <div class="top-meta">${formatNumber(ia.filing_count)} filings &middot; ${formatMoney(ia.total_income)}</div>
@@ -1384,7 +1384,7 @@
                     html += `<div class="section-title">Top Clients (${topClients.length}${s.client_count > 100 ? ' of ' + formatNumber(s.client_count) : ''})</div>`;
                     html += '<div class="top-list">';
                     topClients.forEach((c, i) => {
-                        html += `<div class="top-item" onclick="openClient('${esc(c.client_name).replace(/'/g, "\\'")}')">
+                        html += `<div class="top-item" onclick="openClient('${jsAttr(c.client_name)}')">
                             <span class="top-rank">${i + 1}</span>
                             <div class="top-info">
                                 <div class="top-name">${esc(c.client_name)}</div>
