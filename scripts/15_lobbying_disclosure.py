@@ -909,6 +909,60 @@ def pull_contributions(session):
     return total_fetched, total_parsed, parse_errors
 
 
+# === Summary tables ===
+def build_summary_tables():
+    """Precompute small aggregate tables so canned queries stay under
+    Datasette's sql_time_limit_ms. As of 2026-05-17 lobbying_activities is
+    3.86M rows and the full-table COUNT(DISTINCT client_name) + COUNT(DISTINCT
+    registrant_name) crossed the 10s limit between weekly cron runs."""
+    log.info("=" * 60)
+    log.info("Building summary tables for canned queries")
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        t0 = time.time()
+        conn.execute("DROP TABLE IF EXISTS lobbying_issue_summary")
+        conn.execute("""
+            CREATE TABLE lobbying_issue_summary AS
+            SELECT
+                la.issue_code,
+                COALESCE(lic.description, la.issue_code) AS issue_description,
+                COUNT(*) AS filing_count,
+                COUNT(DISTINCT la.client_name) AS unique_clients,
+                COUNT(DISTINCT la.registrant_name) AS unique_registrants,
+                CAST(SUM(la.income_amount) AS INTEGER) AS total_income
+            FROM lobbying_activities la
+            LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code
+            GROUP BY la.issue_code
+        """)
+        conn.execute("CREATE INDEX idx_lis_filing_count ON lobbying_issue_summary(filing_count DESC)")
+        n_issue = conn.execute("SELECT COUNT(*) FROM lobbying_issue_summary").fetchone()[0]
+        log.info(f"  lobbying_issue_summary: {n_issue:,} rows ({time.time()-t0:.1f}s)")
+
+        t0 = time.time()
+        conn.execute("DROP TABLE IF EXISTS lobbying_client_summary")
+        conn.execute("""
+            CREATE TABLE lobbying_client_summary AS
+            SELECT
+                client_name,
+                COUNT(*) AS activity_count,
+                COUNT(DISTINCT registrant_name) AS firms_hired,
+                COUNT(DISTINCT issue_code) AS issue_areas,
+                CAST(SUM(income_amount) AS INTEGER) AS total_reported,
+                MIN(filing_year) AS first_year,
+                MAX(filing_year) AS last_year
+            FROM lobbying_activities
+            WHERE income_amount > 0
+            GROUP BY client_name
+        """)
+        conn.execute("CREATE INDEX idx_lcs_total ON lobbying_client_summary(total_reported DESC)")
+        n_client = conn.execute("SELECT COUNT(*) FROM lobbying_client_summary").fetchone()[0]
+        log.info(f"  lobbying_client_summary: {n_client:,} rows ({time.time()-t0:.1f}s)")
+        conn.commit()
+    finally:
+        conn.close()
+    log.info("=" * 60)
+
+
 # === Summary ===
 def print_summary():
     """Print database summary counts."""
@@ -989,6 +1043,13 @@ def main():
     if (run_all or args.contributions) and not _shutdown:
         log.info("--- Step 3: Pulling contributions ---")
         contrib_fetched, contrib_parsed, contrib_errors = pull_contributions(session)
+
+    # Step 4: Summary tables (always rebuild from current state; cheap, idempotent)
+    if not _shutdown:
+        try:
+            build_summary_tables()
+        except Exception as e:
+            log.error(f"Failed to build summary tables: {e}")
 
     # Summary
     elapsed = time.time() - start_time
