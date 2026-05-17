@@ -600,8 +600,6 @@ All current and historical members of Congress (12,700+).
 | `state` | Most recent state |
 | `chamber` | Senate or House (most recent term) |
 | `is_current` | 1 if currently serving |
-| `opensecrets_id` | OpenSecrets (CRP) ID for campaign finance data |
-| `govtrack_id` | GovTrack.us ID |
 | `fec_ids` | FEC candidate IDs (JSON array) |
 
 ### stock_trades
