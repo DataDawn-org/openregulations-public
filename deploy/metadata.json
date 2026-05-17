@@ -1039,12 +1039,12 @@
                 "lobbying_by_issue_area": {
                     "title": "Lobbying by Issue Area",
                     "description": "Count of lobbying activity filings by issue code, showing which policy areas attract the most lobbying.",
-                    "sql": "SELECT la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description, COUNT(*) AS filing_count, COUNT(DISTINCT la.client_name) AS unique_clients, COUNT(DISTINCT la.registrant_name) AS unique_registrants, CAST(SUM(la.income_amount) AS INTEGER) AS total_income FROM lobbying_activities la LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code GROUP BY la.issue_code ORDER BY filing_count DESC"
+                    "sql": "SELECT issue_code, issue_description, filing_count, unique_clients, unique_registrants, total_income FROM lobbying_issue_summary ORDER BY filing_count DESC"
                 },
                 "top_lobbying_clients_by_spending": {
                     "title": "Top Lobbying Clients by Spending",
                     "description": "Clients that spend the most on lobbying, ranked by total reported income across all filings and issue areas.",
-                    "sql": "SELECT client_name, COUNT(*) AS activity_count, COUNT(DISTINCT registrant_name) AS firms_hired, COUNT(DISTINCT issue_code) AS issue_areas, CAST(SUM(income_amount) AS INTEGER) AS total_reported, MIN(filing_year) AS first_year, MAX(filing_year) AS last_year FROM lobbying_activities WHERE income_amount > 0 GROUP BY client_name ORDER BY total_reported DESC LIMIT 100"
+                    "sql": "SELECT client_name, activity_count, firms_hired, issue_areas, total_reported, first_year, last_year FROM lobbying_client_summary ORDER BY total_reported DESC LIMIT 100"
                 },
                 "top_lobbying_firms": {
                     "title": "Top Lobbying Firms (Registrants)",
