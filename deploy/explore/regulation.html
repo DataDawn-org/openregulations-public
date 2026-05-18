@@ -1362,7 +1362,7 @@
         function renderPolicyCard(r) {
             if (!r.policy_area) return '';
             return `
-                <div class="result-card" onclick="openPolicyArea('${esc(r.policy_area).replace(/'/g, "\\'")}')">
+                <div class="result-card" onclick="openPolicyArea('${jsAttr(r.policy_area)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.policy_area)}</div>
                     </div>
@@ -1550,7 +1550,7 @@
                 for (const a of cat.agencies) {
                     const safeName = Object.entries(AGENCY_REGS_MAP).find(([,v]) => v === a.code)?.[0] || a.name;
                     html += `
-                        <div class="agency-chip" onclick="openAgency('${safeName.replace(/'/g, "\\'")}', '${a.code}')">
+                        <div class="agency-chip" onclick="openAgency('${jsAttr(safeName)}', '${jsAttr(a.code)}')">
                             <span class="chip-code">${a.code}</span>
                             <div class="chip-info">
                                 <span class="chip-name">${a.name}</span>
@@ -1567,9 +1567,9 @@
 
         function renderAgencyCard(r) {
             const regsCode = AGENCY_REGS_MAP[r.name] || '';
-            const safeName = esc(r.name).replace(/'/g, "\\'");
+            const safeName = jsAttr(r.name);
             return `
-                <div class="result-card" onclick="openAgency('${safeName}', '${esc(regsCode)}')">
+                <div class="result-card" onclick="openAgency('${safeName}', '${jsAttr(regsCode)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(r.name)}</div>
                         ${regsCode ? '<span class="agency-badge">' + esc(regsCode) + '</span>' : ''}
