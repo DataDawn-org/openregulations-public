@@ -63,9 +63,15 @@ Floor proceedings from Congressional Record (1994–present).
 Key columns: `granule_id` (PK), `date`, `congress`, `chamber`, `title`, `full_text`
 
 ### lobbying_filings (1.9M rows)
-Lobbying disclosure filings (1999–2026).
+Lobbying disclosure filings (1999–2026). Filing types: LD-1 (registration), LD-2 (quarterly activity, "lobbying spending"), LD-203 (semi-annual contribution reports).
 
-Key columns: `filing_uuid` (PK), `registrant_name`, `client_name`, `amount_reported`, `filing_year`, `filing_period`
+Key columns: `filing_uuid` (PK), `filing_type`, `registrant_name`, `client_name`, `income_amount`, `expense_amount`, `filing_year`, `filing_period`
+
+**Schema change 2026-05-22 (S-C1 fix):** Previously, `lobbying_activities.income_amount` carried filing-level data replicated across activity rows, inflating SUMs by activity-count. That column was removed. Use `lobbying_filings.income_amount` instead — it's canonical, one row per filing. The deprecated `lobbying_filings.amount_reported` was also removed; switch to `income_amount`, `expense_amount`, or `COALESCE(income_amount, expense_amount)`.
+
+**"Lobbying spending" aggregations** should filter to LD-2 quarterly activity reports: `WHERE filing_type GLOB '[1234Q]*'`. LD-203 contribution reports include their own income field that semantically isn't client-to-firm lobbying payment, and including LD-203 in aggregates double-counts for some clients. To include LD-203 in a custom query, remove the filter.
+
+`lobbying_activities` joins to `lobbying_filings` by `filing_uuid` and carries per-activity attributes (issue_code, specific_issues, government_entities). It does NOT carry income_amount/expense_amount — those are filing-level.
 
 ### spending_awards (864K rows)
 Federal spending from USAspending.gov. 20 agencies, FY2017-2026.
@@ -143,12 +149,14 @@ WHERE bioguide_id = 'W000817'
 ORDER BY transaction_date DESC LIMIT 20
 ```
 
-Search lobbying by client:
+Search lobbying by client (LD-2 quarterly activity scope):
 ```sql
-SELECT la.registrant_name, la.client_name, la.issue_code, la.income_amount, la.filing_year
+SELECT la.registrant_name, la.client_name, la.issue_code, f.income_amount, la.filing_year
 FROM lobbying_activities la
+JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
 WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"Google"')
-ORDER BY la.income_amount DESC LIMIT 20
+  AND f.filing_type GLOB '[1234Q]*'
+ORDER BY f.income_amount DESC LIMIT 20
 ```
 
 Bills on a topic:

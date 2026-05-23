@@ -14,26 +14,26 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 <!-- COUNTS-START -->
 | Dataset | Records | Source |
 |---------|---------|--------|
-| Federal Register documents | 999,253 | Federal Register API |
-| Regulatory dockets | 254,917 | Regulations.gov API + derived from documents/comments |
-| Regulatory documents | 1,703,711 | Regulations.gov API |
+| Federal Register documents | 999,760 | Federal Register API |
+| Regulatory dockets | 256,336 | Regulations.gov API + derived from documents/comments |
+| Regulatory documents | 1,711,198 | Regulations.gov API |
 | Public comment headers | 9,940,592 | Regulations.gov API |
 | Comment full details | 433,838 | Regulations.gov API (4.4% of headers, in progress) |
-| Presidential documents | 5,936 | Federal Register API |
-| Congressional legislation | 377,789 | GovInfo BILLSTATUS + Congress.gov API |
-| Legislation actions | 2,318,806 | GovInfo BILLSTATUS |
+| Presidential documents | 5,939 | Federal Register API |
+| Congressional legislation | 378,088 | GovInfo BILLSTATUS + Congress.gov API |
+| Legislation actions | 2,319,665 | GovInfo BILLSTATUS |
 | Legislation subjects | 3,036,655 | GovInfo BILLSTATUS |
-| Legislation cosponsors | 4,078,084 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,358 | GovInfo eCFR bulk XML |
-| Congressional Record entries | 885,224 | GovInfo CREC packages |
-| CREC speakers (bioguide-linked) | 949,408 | Derived from MODS XML |
-| CREC bill references | 1,575,699 | Derived from MODS XML |
-| Roll call votes | 26,529 | Congress.gov API |
-| Member vote records | 8,362,696 | Congress.gov API |
+| Legislation cosponsors | 4,079,442 | GovInfo BILLSTATUS |
+| CFR regulatory sections | 123,310 | GovInfo eCFR bulk XML |
+| Congressional Record entries | 886,051 | GovInfo CREC packages |
+| CREC speakers (bioguide-linked) | 949,978 | Derived from MODS XML |
+| CREC bill references | 1,577,644 | Derived from MODS XML |
+| Roll call votes | 26,551 | Congress.gov API |
+| Member vote records | 8,370,176 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,766 | congress-legislators GitHub |
-| Stock trading disclosures | 62,248 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Stock trading disclosures | 62,351 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
 | Lobbying filings | 1,934,917 | Senate LDA API |
 | Lobbying lobbyists | 4,794,448 | Senate LDA API |
 | Lobbying activities | 3,860,624 | Senate LDA API |
@@ -57,20 +57,20 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
 | CRS reports | 13,814 | Congress.gov API |
 | CRS report–bill cross-references | 136,953 | Congress.gov API |
-| Executive nominations | 40,275 | Congress.gov API |
-| Nomination actions | 190,255 | Congress.gov API |
+| Executive nominations | 40,296 | Congress.gov API |
+| Nomination actions | 190,276 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
 | GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
-| OIRA regulatory reviews | 48,434 | Reginfo.gov |
+| OIRA regulatory reviews | 48,570 | Reginfo.gov |
 | OIRA review meetings | 8,663 | Reginfo.gov |
 | OIRA meeting attendees | 90,711 | Reginfo.gov |
-| IG reports | 34,880 | oversight.gov |
-| IG recommendations | 11,999 | oversight.gov |
+| IG reports | 35,088 | oversight.gov |
+| IG recommendations | 12,346 | oversight.gov |
 | Earmarks | 70,826 | House/Senate Appropriations |
 | Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
-| FR ↔ Regs.gov cross-references | 395,987 | Derived |
+| FR ↔ Regs.gov cross-references | 396,489 | Derived |
 <!-- COUNTS-END -->
 
 **Total**: ~120 million rows across 188 tables.
@@ -733,12 +733,12 @@ Full comment details from Regulations.gov (in progress — 423K of 9.7M download
 
 ### lobbying_filings
 
-Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present).
+Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present). Filing types: LD-1 (registration), LD-2 (quarterly activity, "lobbying spending"), LD-203 (semi-annual contribution reports).
 
 | Column | Description |
 |---|---|
 | `filing_uuid` (PK) | Unique filing identifier |
-| `filing_type` | Filing type code |
+| `filing_type` | Filing type code (`Q1`–`Q4`/amendments for LD-2; `MM`/`YY` for LD-203; `RR`/`RA` for LD-1) |
 | `registrant_id` | Registrant ID |
 | `registrant_name` | Lobbying firm or self-filing organization |
 | `client_id` | Client ID |
@@ -746,9 +746,14 @@ Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present).
 | `filing_year` | Year of filing |
 | `filing_period` | Filing period (Q1, Q2, mid-year, etc.) |
 | `received_date` | Date received by Senate |
-| `amount_reported` | Dollar amount reported |
+| `income_amount` | Income from client (outside-firm filings, XOR with `expense_amount`) |
+| `expense_amount` | Lobbying expenses (in-house filings, XOR with `income_amount`) |
 | `is_no_activity` | 1 if no lobbying activity |
 | `is_termination` | 1 if terminating registration |
+
+**For "lobbying spending" aggregations**, filter to LD-2 quarterly activity reports: `WHERE filing_type GLOB '[1234Q]*'`. To include LD-203 contribution reports in a custom query, remove the filter.
+
+> **Schema change 2026-05-22 (S-C1 fix):** `amount_reported` was dropped; use `income_amount`, `expense_amount`, or `COALESCE(income_amount, expense_amount)`. `income_amount`/`expense_amount` on `lobbying_activities` were also dropped — those values lived at the wrong grain (replicated across activity rows, inflating SUMs 2-3×). All amounts are now filing-level on `lobbying_filings`. See `bestpractices/decisions_log.md` §64-65.
 
 ### lobbying_lobbyists
 
@@ -763,7 +768,7 @@ Individual lobbyists listed on filings (3.5M+ records).
 
 ### lobbying_activities
 
-Lobbying activities by issue area (2.8M+ records).
+Lobbying activities by issue area (3.86M+ records). Income/expense are filing-level — JOIN to `lobbying_filings` by `filing_uuid`.
 
 | Column | Description |
 |---|---|
@@ -771,7 +776,6 @@ Lobbying activities by issue area (2.8M+ records).
 | `issue_code` | General issue area code (links to lobbying_issue_codes) |
 | `specific_issues` | Detailed description of issues lobbied on |
 | `government_entities` | Government bodies contacted |
-| `income_amount` / `expense_amount` | Amounts reported |
 
 ### lobbying_contributions
 

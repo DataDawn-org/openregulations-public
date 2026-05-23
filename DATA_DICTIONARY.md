@@ -35,12 +35,12 @@ API keys are stored in `scripts/config.json` (never committed to git).
 
 | Database | Path | Size | Tables | Purpose |
 |----------|------|------|--------|---------|
-| openregs.db | `openregs.db` | 22 GB | 60+ | Primary database (deployed to Datasette) |
-| lobbying.db | `lobbying.db` | 13 GB | 8 | Full lobbying data with raw JSON |
-| fec.db | `fec.db` | 47 GB | 7 | Full FEC data (104M individual contributions) |
-| fara.db | `fara.db` | 42 MB | 4 | Full FARA data |
-| votes.db | `votes.db` | 985 MB | 2 | Full vote records |
-| aphis.db | `aphis/db/aphis.db` | 53 MB | 5 | APHIS animal welfare |
+| openregs.db | `/mnt/data/datadawn/openregs/openregs.db` | 22 GB | 60+ | Primary database (deployed to Datasette) |
+| lobbying.db | `/mnt/data/datadawn/openregs/lobbying.db` | 13 GB | 8 | Full lobbying data with raw JSON |
+| fec.db | `/mnt/data/datadawn/openregs/fec.db` | 47 GB | 7 | Full FEC data (104M individual contributions) |
+| fara.db | `/mnt/data/datadawn/openregs/fara.db` | 42 MB | 4 | Full FARA data |
+| votes.db | `/mnt/data/datadawn/openregs/votes.db` | 985 MB | 2 | Full vote records |
+| aphis.db | `/mnt/data/datadawn/openregs/aphis/db/aphis.db` | 53 MB | 5 | APHIS animal welfare |
 
 The `openregs.db` is the production database deployed to Datasette. It contains curated subsets from all sources. The standalone databases (`lobbying.db`, `fec.db`, `fara.db`, `votes.db`) hold the complete raw downloads and are used as build sources.
 
@@ -405,20 +405,25 @@ Congressional financial disclosures. Senate from efdsearch.senate.gov (15K+), Ho
 
 ### Lobbying Disclosures
 
-#### `lobbying_filings` -- 1,908,114 rows
+#### `lobbying_filings` -- 1,934,917 rows
 
-Senate LDA filings (LD-1 registrations, LD-2 activity reports), 1999--present.
+Senate LDA filings (LD-1 registrations, LD-2 quarterly activity reports, LD-203 contribution reports), 1999--present.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `filing_uuid` | TEXT PK | Unique filing ID |
-| `filing_type` | TEXT | Filing type code |
+| `filing_type` | TEXT | Filing type code — `Q1`/`Q2`/`Q3`/`Q4` quarterly LD-2, `1A`/`2A`/`3A`/`4A` amendments, `1T`/`2T` terminations, `RR`/`RA` LD-1, `MM`/`YY`/`YYY` LD-203 |
 | `registrant_name` | TEXT | Lobbying firm or self-filing org |
 | `client_name` | TEXT | Client being represented |
 | `filing_year` | INTEGER | Year |
 | `filing_period` | TEXT | Q1, Q2, mid-year, etc. |
-| `amount_reported` | REAL | Dollar amount |
+| `income_amount` | REAL | Income from client (outside-firm filings). XOR-populated with `expense_amount` |
+| `expense_amount` | REAL | Lobbying expenses (in-house lobbyist filings). XOR-populated with `income_amount` |
 | `is_no_activity` / `is_termination` | INTEGER | Boolean flags |
+
+**For "lobbying spending" aggregations:** filter to LD-2 quarterly activity reports: `WHERE filing_type GLOB '[1234Q]*'`. To include LD-203 contribution reports (different semantic — individual lobbyist contribution disclosures), remove the filter.
+
+**Schema change 2026-05-22 (S-C1 fix):** Previously, `lobbying_filings` had `amount_reported` (COALESCE of income+expense) and `lobbying_activities` had `income_amount`/`expense_amount` columns that replicated the filing-level value across activity rows. SUMs against the activity table inflated by 2-3x. Both column sets were redesigned: amounts now live only on `lobbying_filings`, separated into `income_amount` and `expense_amount`. See decisions_log §64-65 and incident_log 2026-05-22.
 
 #### `lobbying_lobbyists` -- 4,376,087 rows
 
@@ -430,9 +435,9 @@ Individual lobbyists listed on filings.
 | `lobbyist_name` | TEXT | Lobbyist name |
 | `covered_position` | TEXT | Former government position (revolving door) |
 
-#### `lobbying_activities` -- 3,528,264 rows
+#### `lobbying_activities` -- 3,860,624 rows
 
-Activities by issue area, with specific issues lobbied and government entities contacted.
+Activities by issue area, with specific issues lobbied and government entities contacted. **Does NOT carry income/expense** — those are filing-level facts on `lobbying_filings`. JOIN by `filing_uuid` to get amounts.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -440,7 +445,6 @@ Activities by issue area, with specific issues lobbied and government entities c
 | `issue_code` | TEXT | General issue area (links to `lobbying_issue_codes`) |
 | `specific_issues` | TEXT | Detailed description |
 | `government_entities` | TEXT | Bodies contacted |
-| `income_amount` / `expense_amount` | INTEGER | Amounts reported |
 
 #### `lobbying_contributions` -- 3,492,672 rows
 
@@ -1211,7 +1215,7 @@ APHIS animal welfare data from Salesforce API.
 ## Directory Structure
 
 ```
-openregs/
+/mnt/data/datadawn/openregs/
 ├── openregs.db                     # Primary database (22 GB, deployed)
 ├── lobbying.db                     # Full lobbying data (13 GB)
 ├── fec.db                          # Full FEC data (47 GB)
@@ -1262,7 +1266,7 @@ openregs/
 
 ## Pipeline Scripts
 
-Scripts are numbered in execution order. Run from the project root directory.
+Scripts are numbered in execution order. Run from `/mnt/data/datadawn/openregs/`.
 
 ### Data download scripts
 

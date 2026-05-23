@@ -810,17 +810,20 @@
             paginationDiv.style.display = 'none';
 
             try {
-                let rows;
+                let result;
                 const qSafe = currentQuery.replace(/'/g, "''");
                 const qFTS = currentQuery.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
 
                 switch (currentTab) {
-                    case 'clients': rows = await searchClients(qSafe, qFTS); break;
-                    case 'firms': rows = await searchFirms(qSafe, qFTS); break;
-                    case 'issues': rows = await searchIssues(qSafe, qFTS); break;
-                    case 'revdoor': rows = await searchRevolvingDoor(qSafe, qFTS); break;
+                    case 'clients': result = await searchClients(qSafe, qFTS); break;
+                    case 'firms': result = await searchFirms(qSafe, qFTS); break;
+                    case 'issues': result = await searchIssues(qSafe, qFTS); break;
+                    case 'revdoor': result = await searchRevolvingDoor(qSafe, qFTS); break;
                 }
 
+                // Each search* function returns { rows, totalCount }
+                const rows = result.rows || [];
+                const totalCount = result.totalCount;
                 hasMore = rows.length > PAGE_SIZE;
                 const display = rows.slice(0, PAGE_SIZE);
 
@@ -835,7 +838,9 @@
                     return;
                 }
 
-                statusDiv.innerHTML = `<span class="count">${display.length}${hasMore ? '+' : ''}</span> results`;
+                const countLabel = formatResultCount(totalCount, display.length, hasMore);
+                const offsetLabel = currentOffset > 0 ? ` (showing ${currentOffset + 1}-${currentOffset + display.length})` : '';
+                statusDiv.innerHTML = `<span class="count">${countLabel}</span> results${offsetLabel}`;
                 const legalNote = currentTab === 'revdoor' ? `
                     <div class="legal-note">
                         <strong>About this data:</strong> "Covered positions" are disclosed by lobbyists as required under the
@@ -860,76 +865,123 @@
             }
         }
 
+        // All aggregators below scope to LD-2 quarterly activity reports
+        // (filing_type GLOB '[1234Q]*') and source income from lobbying_filings.
+        // Pattern: FTS narrows activities → DISTINCT filing_uuid set → JOIN to
+        // filings (1 row per filing) → SUM(income_amount) is canonical, not
+        // replicated. See decisions_log §64 (2026-05-22 S-C1 fix).
         async function searchClients(q, qFTS) {
-            if (!q) return [];
-            return await query(`
-                SELECT client_name,
-                    SUM(income_amount) AS total_income,
-                    COUNT(DISTINCT registrant_name) AS firm_count,
+            if (!q) return { rows: [], totalCount: 0 };
+            const dataSql = `
+                WITH matched_filings AS (
+                    SELECT DISTINCT la.filing_uuid
+                    FROM lobbying_activities la
+                    WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                ),
+                client_issue_counts AS (
+                    SELECT la.client_name, COUNT(DISTINCT la.issue_code) AS issue_count
+                    FROM lobbying_activities la
+                    WHERE la.filing_uuid IN (SELECT filing_uuid FROM matched_filings)
+                    GROUP BY la.client_name
+                )
+                SELECT f.client_name,
+                    CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                    COUNT(DISTINCT f.registrant_name) AS firm_count,
                     COUNT(*) AS filing_count,
-                    MIN(filing_year) AS year_from,
-                    MAX(filing_year) AS year_to,
-                    COUNT(DISTINCT issue_code) AS issue_count
-                FROM lobbying_activities
-                WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
-                GROUP BY client_name
+                    MIN(f.filing_year) AS year_from,
+                    MAX(f.filing_year) AS year_to,
+                    COALESCE(ci.issue_count, 0) AS issue_count
+                FROM matched_filings mf
+                JOIN lobbying_filings f ON f.filing_uuid = mf.filing_uuid
+                LEFT JOIN client_issue_counts ci ON ci.client_name = f.client_name
+                WHERE f.filing_type GLOB '[1234Q]*'
+                GROUP BY f.client_name
                 ORDER BY total_income DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(DISTINCT f.client_name) FROM lobbying_activities la JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"') AND f.filing_type GLOB '[1234Q]*'`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchFirms(q, qFTS) {
-            if (!q) return [];
-            return await query(`
-                SELECT registrant_name,
-                    SUM(income_amount) AS total_income,
-                    COUNT(DISTINCT client_name) AS client_count,
+            if (!q) return { rows: [], totalCount: 0 };
+            const dataSql = `
+                WITH matched_filings AS (
+                    SELECT DISTINCT la.filing_uuid
+                    FROM lobbying_activities la
+                    WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                )
+                SELECT f.registrant_name,
+                    CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                    COUNT(DISTINCT f.client_name) AS client_count,
                     COUNT(*) AS filing_count,
-                    MIN(filing_year) AS year_from,
-                    MAX(filing_year) AS year_to
-                FROM lobbying_activities
-                WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
-                GROUP BY registrant_name
+                    MIN(f.filing_year) AS year_from,
+                    MAX(f.filing_year) AS year_to
+                FROM matched_filings mf
+                JOIN lobbying_filings f ON f.filing_uuid = mf.filing_uuid
+                WHERE f.filing_type GLOB '[1234Q]*'
+                GROUP BY f.registrant_name
                 ORDER BY total_income DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(DISTINCT f.registrant_name) FROM lobbying_activities la JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"') AND f.filing_type GLOB '[1234Q]*'`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchIssues(q, qFTS) {
             if (!q) {
-                // Use pre-computed summary table for browsing (~instant vs ~29s)
-                return await query(`
+                // Use pre-computed summary table for browsing (LD-2 scope, canonical)
+                const rows = await query(`
                     SELECT issue_code, description, filing_count, client_count, total_income
                     FROM lobbying_issue_summary
                     ORDER BY filing_count DESC
                     LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
                 `);
+                const totalCount = await queryCount(`SELECT COUNT(*) FROM lobbying_issue_summary`);
+                return { rows, totalCount };
             }
-            return await query(`
-                SELECT la.issue_code, ic.description,
-                    COUNT(*) AS filing_count,
-                    COUNT(DISTINCT la.client_name) AS client_count,
-                    SUM(la.income_amount) AS total_income
-                FROM lobbying_activities la
-                LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code
-                WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
-                GROUP BY la.issue_code
+            const dataSql = `
+                WITH per_issue_per_filing AS (
+                    SELECT DISTINCT la.issue_code, la.filing_uuid, la.client_name, f.income_amount
+                    FROM lobbying_activities la
+                    JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                    WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                      AND f.filing_type GLOB '[1234Q]*'
+                )
+                SELECT p.issue_code, ic.description,
+                    COUNT(DISTINCT p.filing_uuid) AS filing_count,
+                    COUNT(DISTINCT p.client_name) AS client_count,
+                    CAST(SUM(p.income_amount) AS INTEGER) AS total_income
+                FROM per_issue_per_filing p
+                LEFT JOIN lobbying_issue_codes ic ON p.issue_code = ic.code
+                GROUP BY p.issue_code
                 ORDER BY filing_count DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(DISTINCT la.issue_code) FROM lobbying_activities la JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"') AND f.filing_type GLOB '[1234Q]*'`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchRevolvingDoor(q, qFTS) {
             const where = q ? `AND la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')` : '';
-            return await query(`
-                SELECT ll.lobbyist_name, ll.covered_position,
-                    la.client_name, la.registrant_name, la.filing_year
+            const baseFrom = `
                 FROM lobbying_lobbyists ll
                 JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid
                 WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' AND ll.covered_position != 'N/A' ${where}
+            `;
+            const dataSql = `
+                SELECT ll.lobbyist_name, ll.covered_position,
+                    la.client_name, la.registrant_name, la.filing_year
+                ${baseFrom}
                 ORDER BY la.filing_year DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(*) ${baseFrom}`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         function renderCard(r) {
@@ -1019,22 +1071,28 @@
 
                 const [summary, activities, lobbyists, spending] = await Promise.all([
                     query(`
-                        SELECT client_name,
-                            SUM(income_amount) AS total_income,
+                        WITH client_issues AS (
+                            SELECT COUNT(DISTINCT issue_code) AS issue_count
+                            FROM lobbying_activities WHERE client_name = '${cSafe}'
+                        )
+                        SELECT f.client_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            COUNT(DISTINCT registrant_name) AS firm_count,
-                            COUNT(DISTINCT issue_code) AS issue_count,
-                            MIN(filing_year) AS year_from,
-                            MAX(filing_year) AS year_to
-                        FROM lobbying_activities
-                        WHERE client_name = '${cSafe}'
+                            COUNT(DISTINCT f.registrant_name) AS firm_count,
+                            (SELECT issue_count FROM client_issues) AS issue_count,
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM lobbying_filings f
+                        WHERE f.client_name = '${cSafe}' AND f.filing_type GLOB '[1234Q]*'
                     `),
                     query(`
-                        SELECT filing_uuid, registrant_name, filing_year, filing_period, issue_code,
-                               income_amount, specific_issues, government_entities
-                        FROM lobbying_activities
-                        WHERE client_name = '${cSafe}'
-                        ORDER BY filing_year DESC, filing_period DESC
+                        SELECT la.filing_uuid, la.registrant_name, la.filing_year, la.filing_period, la.issue_code,
+                               CAST(f.income_amount AS INTEGER) AS income_amount,
+                               la.specific_issues, la.government_entities
+                        FROM lobbying_activities la
+                        JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                        WHERE la.client_name = '${cSafe}'
+                        ORDER BY la.filing_year DESC, la.filing_period DESC
                         LIMIT 51
                     `),
                     query(`
@@ -1149,11 +1207,13 @@
 
         window.loadMoreActivities = async function(clientName, offset) {
             const acts = await query(`
-                SELECT filing_uuid, registrant_name, filing_year, filing_period, issue_code,
-                       income_amount, specific_issues, government_entities
-                FROM lobbying_activities
-                WHERE client_name = '${clientName}'
-                ORDER BY filing_year DESC, filing_period DESC
+                SELECT la.filing_uuid, la.registrant_name, la.filing_year, la.filing_period, la.issue_code,
+                       CAST(f.income_amount AS INTEGER) AS income_amount,
+                       la.specific_issues, la.government_entities
+                FROM lobbying_activities la
+                JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                WHERE la.client_name = '${clientName}'
+                ORDER BY la.filing_year DESC, la.filing_period DESC
                 LIMIT 51 OFFSET ${offset}
             `);
             const hasMore = acts.length > 50;
@@ -1178,36 +1238,45 @@
 
                 const [summary, topClients, issueAreas] = await Promise.all([
                     query(`
-                        SELECT registrant_name,
-                            SUM(income_amount) AS total_income,
+                        WITH firm_issues AS (
+                            SELECT COUNT(DISTINCT issue_code) AS issue_count
+                            FROM lobbying_activities WHERE registrant_name = '${fSafe}'
+                        )
+                        SELECT f.registrant_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            COUNT(DISTINCT client_name) AS client_count,
-                            COUNT(DISTINCT issue_code) AS issue_count,
-                            MIN(filing_year) AS year_from,
-                            MAX(filing_year) AS year_to
-                        FROM lobbying_activities
-                        WHERE registrant_name = '${fSafe}'
+                            COUNT(DISTINCT f.client_name) AS client_count,
+                            (SELECT issue_count FROM firm_issues) AS issue_count,
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM lobbying_filings f
+                        WHERE f.registrant_name = '${fSafe}' AND f.filing_type GLOB '[1234Q]*'
                     `),
                     query(`
-                        SELECT client_name,
-                            SUM(income_amount) AS total_income,
+                        SELECT f.client_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            MIN(filing_year) AS year_from,
-                            MAX(filing_year) AS year_to
-                        FROM lobbying_activities
-                        WHERE registrant_name = '${fSafe}'
-                        GROUP BY client_name
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM lobbying_filings f
+                        WHERE f.registrant_name = '${fSafe}' AND f.filing_type GLOB '[1234Q]*'
+                        GROUP BY f.client_name
                         ORDER BY total_income DESC
                         LIMIT 100
                     `),
                     query(`
-                        SELECT la.issue_code, ic.description,
-                            COUNT(*) AS filing_count,
-                            SUM(la.income_amount) AS total_income
-                        FROM lobbying_activities la
-                        LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code
-                        WHERE la.registrant_name = '${fSafe}'
-                        GROUP BY la.issue_code
+                        WITH per_issue_per_filing AS (
+                            SELECT DISTINCT la.issue_code, la.filing_uuid, f.income_amount
+                            FROM lobbying_activities la
+                            JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                            WHERE la.registrant_name = '${fSafe}' AND f.filing_type GLOB '[1234Q]*'
+                        )
+                        SELECT p.issue_code, ic.description,
+                            COUNT(DISTINCT p.filing_uuid) AS filing_count,
+                            CAST(SUM(p.income_amount) AS INTEGER) AS total_income
+                        FROM per_issue_per_filing p
+                        LEFT JOIN lobbying_issue_codes ic ON p.issue_code = ic.code
+                        GROUP BY p.issue_code
                         ORDER BY filing_count DESC
                         LIMIT 20
                     `)
@@ -1285,58 +1354,74 @@
             try {
                 const codeSafe = issueCode.replace(/'/g, "''");
 
+                // All issue-area aggregates: per-(issue, filing) dedup then SUM canonical
+                // income from lobbying_filings, LD-2 scope.
+                const issueFilingsCTE = `
+                    WITH issue_filings AS (
+                        SELECT DISTINCT la.filing_uuid
+                        FROM lobbying_activities la
+                        JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                        WHERE la.issue_code = '${codeSafe}' AND f.filing_type GLOB '[1234Q]*'
+                    )
+                `;
                 const [summary, topClients, topFirms, yearBreakdown, recentFilings] = await Promise.all([
                     query(`
-                        SELECT la.issue_code, ic.description,
+                        ${issueFilingsCTE}
+                        SELECT '${codeSafe}' AS issue_code,
+                            (SELECT description FROM lobbying_issue_codes WHERE code = '${codeSafe}') AS description,
                             COUNT(*) AS filing_count,
-                            COUNT(DISTINCT la.client_name) AS client_count,
-                            COUNT(DISTINCT la.registrant_name) AS firm_count,
-                            SUM(la.income_amount) AS total_income,
-                            MIN(la.filing_year) AS year_from,
-                            MAX(la.filing_year) AS year_to
-                        FROM lobbying_activities la
-                        LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code
-                        WHERE la.issue_code = '${codeSafe}'
+                            COUNT(DISTINCT f.client_name) AS client_count,
+                            COUNT(DISTINCT f.registrant_name) AS firm_count,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM issue_filings ifg
+                        JOIN lobbying_filings f ON f.filing_uuid = ifg.filing_uuid
                     `),
                     query(`
-                        SELECT client_name,
-                            SUM(income_amount) AS total_income,
+                        ${issueFilingsCTE}
+                        SELECT f.client_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            MIN(filing_year) AS year_from,
-                            MAX(filing_year) AS year_to
-                        FROM lobbying_activities
-                        WHERE issue_code = '${codeSafe}'
-                        GROUP BY client_name
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM issue_filings ifg
+                        JOIN lobbying_filings f ON f.filing_uuid = ifg.filing_uuid
+                        GROUP BY f.client_name
                         ORDER BY total_income DESC
                         LIMIT 100
                     `),
                     query(`
-                        SELECT registrant_name,
-                            SUM(income_amount) AS total_income,
+                        ${issueFilingsCTE}
+                        SELECT f.registrant_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            COUNT(DISTINCT client_name) AS client_count
-                        FROM lobbying_activities
-                        WHERE issue_code = '${codeSafe}'
-                        GROUP BY registrant_name
+                            COUNT(DISTINCT f.client_name) AS client_count
+                        FROM issue_filings ifg
+                        JOIN lobbying_filings f ON f.filing_uuid = ifg.filing_uuid
+                        GROUP BY f.registrant_name
                         ORDER BY total_income DESC
                         LIMIT 25
                     `),
                     query(`
-                        SELECT filing_year,
+                        ${issueFilingsCTE}
+                        SELECT f.filing_year,
                             COUNT(*) AS filing_count,
-                            SUM(income_amount) AS total_income,
-                            COUNT(DISTINCT client_name) AS client_count
-                        FROM lobbying_activities
-                        WHERE issue_code = '${codeSafe}'
-                        GROUP BY filing_year
-                        ORDER BY filing_year DESC
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                            COUNT(DISTINCT f.client_name) AS client_count
+                        FROM issue_filings ifg
+                        JOIN lobbying_filings f ON f.filing_uuid = ifg.filing_uuid
+                        GROUP BY f.filing_year
+                        ORDER BY f.filing_year DESC
                     `),
                     query(`
-                        SELECT filing_uuid, client_name, registrant_name, filing_year, filing_period,
-                               income_amount, specific_issues
-                        FROM lobbying_activities
-                        WHERE issue_code = '${codeSafe}'
-                        ORDER BY filing_year DESC, filing_period DESC
+                        SELECT la.filing_uuid, la.client_name, la.registrant_name, la.filing_year, la.filing_period,
+                               CAST(f.income_amount AS INTEGER) AS income_amount,
+                               la.specific_issues
+                        FROM lobbying_activities la
+                        JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+                        WHERE la.issue_code = '${codeSafe}' AND f.filing_type GLOB '[1234Q]*'
+                        ORDER BY la.filing_year DESC, la.filing_period DESC
                         LIMIT 25
                     `)
                 ]);
