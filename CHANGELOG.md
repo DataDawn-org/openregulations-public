@@ -73,20 +73,16 @@ WHERE la.client_name LIKE '%Boeing%' AND f.filing_type GLOB '[1234Q]*';
 
 The simpler patch would have been to NULL the activity-level columns on all but the first row per filing, leaving the table shape unchanged. We rejected that because the underlying bug is a **grain mismatch** — income is a filing-level fact, not an activity-level fact. Patching it in place would preserve the broken mental model and invite the same bug to recur. Dropping the misplaced columns and moving the amounts to the right table is the more disruptive fix today but the less drift-prone fix going forward.
 
-Full technical detail at `bestpractices/decisions_log.md` §68 (the schema move) and §69 (the LD-2 aggregator scope policy).
-
 ### Audit and detection
 
-The bug was found in the 2026-05-22 schema-fit + value-correctness audit (`bestpractices/audit_2026-05-22_schema_fit.md` finding S-C1), part of a broader Cat 2 audit pass over the OpenRegs pipeline. The audit identified 5 downstream consumer sites; the fix-session blast-radius enumeration found 38 sites across 8 surfaces, which prompted a methodology commitment to require audit reports to include grep-based blast-radius enumeration going forward (decisions_log §70).
+The bug was found in a 2026-05-22 schema-fit + value-correctness audit (finding S-C1). The audit's initial enumeration identified 5 downstream consumer sites; the fix-session re-grep found 38 sites across 8 surfaces (scripts, MCP, canned queries, explore HTML, docs). That gap prompted a methodology commitment: audit reports must include grep-based blast-radius enumeration, and fix sessions must independently re-enumerate against a canonical surface list. Process improvement applies to future schema-fit audits across the project.
 
-The bug was publicly present since at least 2026-03-06 (first commit of the public openregs repo); the broken schema predates that and may have been present in private precursor scripts.
+The bug was publicly present since at least the first commit of this public repository (2026-03-06); the broken schema predates that and may have been present in private precursor scripts.
 
 ### References
 
-- `bestpractices/incident_log.md` 2026-05-22 (full incident detail + user impact)
-- `bestpractices/decisions_log.md` §68 (schema move rationale), §69 (LD-2 scope), §70 (audit-charter commitment), §71 (review-process lessons)
-- `bestpractices/audit_2026-05-22_schema_fit.md` finding S-C1
 - `scripts/migrations/2026_05_22_lobbying_s_c1.py` (lobbying.db migration)
 - `scripts/migrations/2026_05_22_lobbying_s_c1_openregs.py` (openregs.db migration)
+- See PR #17 commit message + this file for the canonical narrative.
 
 ---
