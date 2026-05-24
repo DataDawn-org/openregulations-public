@@ -243,9 +243,17 @@ def s3_list_prefix(prefix: str):
 
 
 def s3_copy_object(src_key: str, dst_key: str):
+    """Server-side copy via boto3 managed transfer.
+
+    Uses client.copy() (managed) rather than client.copy_object() (raw S3
+    API). The managed wrapper transparently handles multipart upload for
+    objects > 5 GiB; copy_object would 403 with EntityTooLarge — hit by
+    the first run when promoting 990data_public.db.gz (5.44 GiB) on
+    2026-05-24.
+    """
     log(f"copy: {src_key} → {dst_key}")
     try:
-        get_s3_client().copy_object(
+        get_s3_client().copy(
             CopySource={"Bucket": R2_BUCKET, "Key": src_key},
             Bucket=R2_BUCKET,
             Key=dst_key,
