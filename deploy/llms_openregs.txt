@@ -27,6 +27,15 @@ Weekly gzipped SQLite snapshots at https://dumps.datadawn.org/
 
 For training-data ingestion, batch research, or any workflow that wants the whole corpus, this is the right entry point. Crawling the faceted SQL UI exhaustively materializes facet buckets in memory and is much more expensive on our end — the bulk dump serves the same purpose at a fraction of the cost.
 
+## Schema changes
+
+Dated, column-level changes to the schema. **If a query that used to work now returns `400 Bad Request` ("Cannot sort table by X" or "no such column"), check here** — your cached catalog likely references a column that was dropped or renamed. (Invalid-sort requests return 400, not 500: a 400 means "you asked for a column that no longer exists," not a server fault.) Machine-readable companion: `https://regs.datadawn.org/schema-changelog.json`.
+
+### 2026-05-22 — Lobbying schema fix (S-C1)
+- **Dropped** `lobbying_activities.income_amount` and `lobbying_activities.expense_amount`. These had replicated filing-level dollar amounts across every activity row, so `SUM()`-ing them over-counted by the number of activity rows per filing (2-3× for many clients). Filing-level dollar amounts now live **only** on `lobbying_filings` (one row per filing).
+- **Dropped** `lobbying_filings.amount_reported` (was a COALESCE of two distinct concepts). Use `lobbying_filings.income_amount` (outside-firm filings report income), `lobbying_filings.expense_amount` (in-house lobbyists report expense), or `COALESCE(income_amount, expense_amount)`.
+- **To aggregate lobbying spend:** join `lobbying_activities` to `lobbying_filings` on `filing_uuid`, sum the filing-level columns, and filter to LD-2 quarterly activity reports with `WHERE filing_type GLOB '[1234Q]*'` (LD-203 contribution reports carry a semantically different income field and would double-count).
+
 ## How to Query
 
 ```
