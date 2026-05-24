@@ -129,6 +129,77 @@ def die(msg):
     sys.exit(1)
 
 
+# ─── Allowlist coverage check (not a PII guard) ────────────────────────────
+#
+# The allowlist is a PII guard — entries here are explicit "publish this"
+# decisions. But a new DB added to Datasette that ISN'T added to the
+# allowlist would be silently absent from dumps. This check surfaces drift
+# at runtime: WARN-only (not a hard fail), so an operator sees coverage
+# gaps in the build log without blocking the dump.
+#
+# Reads the live systemd unit files (world-readable mode 644 on the VPS),
+# extracts *.db tokens from ExecStart lines, compares to the allowlist.
+
+SYSTEMD_UNITS_FOR_COVERAGE = (
+    "/etc/systemd/system/openregs.service",
+    "/etc/systemd/system/datasette.service",
+)
+
+
+def systemd_served_dbs():
+    """Return set of *.db filenames mentioned in ExecStart of known units.
+
+    Tolerates missing units (returns empty set + logs). The dumps script
+    can run on a non-VPS host (testing) without the units present; in that
+    case the coverage check is a no-op."""
+    served = set()
+    for unit_path in SYSTEMD_UNITS_FOR_COVERAGE:
+        p = Path(unit_path)
+        if not p.exists():
+            log(f"  coverage check: {unit_path} not found; skipping unit")
+            continue
+        try:
+            content = p.read_text()
+        except PermissionError as e:
+            log(f"  coverage check: cannot read {unit_path} ({e}); skipping")
+            continue
+        for line in content.splitlines():
+            if line.startswith("ExecStart="):
+                for token in line.split():
+                    if token.endswith(".db"):
+                        served.add(token.rsplit("/", 1)[-1])
+    return served
+
+
+def verify_allowlist_completeness():
+    """Surface drift between CANONICAL_DEPLOYED_DUMPS and the live Datasette
+    ExecStart args. WARN-only — does not fail the run."""
+    served = systemd_served_dbs()
+    if not served:
+        log("  coverage check: no systemd units inspected (running off-VPS?)")
+        return
+    served_but_not_allowlisted = served - CANONICAL_DEPLOYED_DUMPS
+    allowlisted_but_not_served = CANONICAL_DEPLOYED_DUMPS - served
+    if served_but_not_allowlisted:
+        log(
+            "WARN coverage drift — Datasette serves DBs missing from dumps "
+            f"allowlist: {sorted(served_but_not_allowlisted)}. Add to "
+            "CANONICAL_DEPLOYED_DUMPS in this script if they should be "
+            "published, or document the deliberate exclusion.",
+            level="WARN",
+        )
+    if allowlisted_but_not_served:
+        log(
+            "WARN coverage drift — dumps allowlist includes DBs no longer "
+            f"served by Datasette: {sorted(allowlisted_but_not_served)}. "
+            "ExecStart args may have changed; review the systemd unit.",
+            level="WARN",
+        )
+    if not (served_but_not_allowlisted or allowlisted_but_not_served):
+        log(f"  coverage check: allowlist matches Datasette ExecStart args "
+            f"({len(served)} DBs)")
+
+
 # ─── PII guards ────────────────────────────────────────────────────────────
 
 
@@ -327,6 +398,11 @@ def main():
     # Tool availability.
     if not shutil.which("pigz"):
         die("pigz not installed (apt-get install pigz)")
+
+    # Coverage check: warn (don't fail) if Datasette ExecStart args drift
+    # from CANONICAL_DEPLOYED_DUMPS. A new DB added to Datasette without
+    # being added here would be silently absent from dumps.
+    verify_allowlist_completeness()
 
     # Pre-flight: resolve + apply PII guards 1+2 for every allowlisted file.
     resolved = []
