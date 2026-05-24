@@ -6,6 +6,19 @@ This database unifies 30+ federal data sources into a single queryable database 
 
 The JSON API is at `https://regs.datadawn.org/openregs.json`. Append `?sql=QUERY&_shape=objects` to run arbitrary SQL.
 
+## Bulk dumps (preferred for training, research, batch analysis)
+
+Weekly gzipped SQLite snapshots at https://dumps.datadawn.org/
+
+- **manifest.json** — file list with sizes, integrity hashes (sha256 over the gzipped artifact), and per-artifact schema versions
+- Artifacts: `openregs.db.gz`, `990data_public.db.gz`, `lobbying.db.gz`, `aphis.db.gz`, `fara.db.gz`, `open_comments.db.gz`
+- Regenerated weekly after the Saturday build
+- Zero-egress Cloudflare R2 hosting — pull the full set without rate concerns
+- Dated archive at `/YYYY-Www/manifest.json` for reproducibility pinning (4-week rolling)
+- `schema_version` bumps signal breaking changes (column drops/renames, semantic shifts)
+
+For training-data ingestion, batch research, or any workflow that wants the whole corpus, this is the right entry point. Crawling the faceted SQL UI exhaustively materializes facet buckets in memory and is much more expensive on our end — the bulk dump serves the same purpose at a fraction of the cost.
+
 ## How to Query
 
 ```

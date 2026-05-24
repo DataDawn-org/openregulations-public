@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /manifest.json
+
+# dumps.datadawn.org hosts weekly gzipped SQLite snapshots of the 6
+# DataDawn-served databases for AI training, batch research, and reproducible
+# analysis. Crawling is welcome — fetching the manifest and dumps is the
+# whole point of this subdomain.
+#
+# Entry point: https://dumps.datadawn.org/manifest.json
+# Project:     https://datadawn.org
+# Schema docs: https://regs.datadawn.org/llms.txt
+#              https://data.datadawn.org/llms.txt
