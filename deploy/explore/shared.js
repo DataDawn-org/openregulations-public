@@ -26,6 +26,34 @@ function jsAttr(s) {
         .replace(/>/g, '&gt;');
 }
 
+// --- Rate-limit retry toast ---
+// Shown by query() while it waits out a 429 retry, so the user sees activity
+// instead of a frozen spinner. Ref-counted because explore pages fire many
+// queries in parallel (Promise.all) that can all be retrying at once.
+let _retryToastDepth = 0;
+function showRetryToast(secs) {
+    _retryToastDepth++;
+    let el = document.getElementById('dd-retry-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'dd-retry-toast';
+        el.style.cssText = 'position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);' +
+            'z-index:10000;background:#f59e0b;color:#0a0e1a;font-family:"IBM Plex Mono",monospace;' +
+            'font-size:0.8rem;padding:0.6rem 1.1rem;border-radius:8px;' +
+            'box-shadow:0 6px 24px rgba(0,0,0,0.35);transition:opacity 0.25s;';
+        document.body.appendChild(el);
+    }
+    el.textContent = 'Rate limit reached — retrying in ' + secs + 's…';
+    el.style.opacity = '1';
+}
+function hideRetryToast() {
+    _retryToastDepth = Math.max(0, _retryToastDepth - 1);
+    if (_retryToastDepth === 0) {
+        const el = document.getElementById('dd-retry-toast');
+        if (el) el.style.opacity = '0';
+    }
+}
+
 // --- Datasette query helper ---
 
 async function query(sql, retries = 2) {
@@ -36,10 +64,15 @@ async function query(sql, retries = 2) {
         const resp = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (resp.status === 429 && retries > 0) {
-            // Rate limited. Honor Retry-After (seconds) or fall back to 1.5s, then retry.
-            const retryAfter = parseFloat(resp.headers.get('Retry-After')) || 1.5;
+            // Rate limited. The limit is a 60s *sliding* window, so a token frees
+            // up within a few seconds — cap the wait at 5s instead of sleeping the
+            // server's pessimistic Retry-After (it pins 60), which would freeze an
+            // interactive page for a full minute. Show a toast, not a silent spinner.
+            const retryAfter = Math.min(parseFloat(resp.headers.get('Retry-After')) || 1.5, 5);
+            showRetryToast(Math.ceil(retryAfter));
             await new Promise(r => setTimeout(r, retryAfter * 1000));
-            return query(sql, retries - 1);
+            try { return await query(sql, retries - 1); }
+            finally { hideRetryToast(); }
         }
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
