@@ -403,7 +403,7 @@
                 `), 'nonprofits'),
 
                 safe(query990(`
-                    SELECT o.person_name, o.title, o.compensation, o.ein,
+                    SELECT o.person_name, o.title, o.reportable_comp_filing_org AS compensation, o.ein,
                         r.org_name, r.tax_year
                     FROM returns r
                     JOIN officers o ON o.object_id = r.object_id
@@ -411,7 +411,7 @@
                         SELECT rowid FROM fts_returns WHERE fts_returns MATCH '"${qFTS}"'
                     )
                     AND o.person_name IS NOT NULL AND o.person_name != ''
-                    ORDER BY o.compensation DESC
+                    ORDER BY o.reportable_comp_filing_org DESC
                     LIMIT 8
                 `), 'people990'),
 
