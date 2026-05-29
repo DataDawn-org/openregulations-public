@@ -1,0 +1,34 @@
+{
+  "schema_changelog_version": 1,
+  "database": "openregs",
+  "description": "Column-level schema changes to the DataDawn OpenRegs database, newest first. If a previously-working query now returns HTTP 400 (\"Cannot sort table by X\" or \"no such column\"), a column it references may have been dropped or renamed below. Invalid-sort requests return 400 (client error), not 500.",
+  "human_readable": "https://regs.datadawn.org/llms.txt (## Schema changes section)",
+  "changes": [
+    {
+      "date": "2026-05-22",
+      "id": "S-C1",
+      "title": "Lobbying schema fix",
+      "dropped_columns": [
+        {
+          "table": "lobbying_activities",
+          "column": "income_amount",
+          "reason": "Replicated filing-level amount across every activity row; SUM over-counted by activity-count (2-3x for many clients).",
+          "replacement": "lobbying_filings.income_amount (one row per filing)"
+        },
+        {
+          "table": "lobbying_activities",
+          "column": "expense_amount",
+          "reason": "Same row-replication issue as income_amount.",
+          "replacement": "lobbying_filings.expense_amount (one row per filing)"
+        },
+        {
+          "table": "lobbying_filings",
+          "column": "amount_reported",
+          "reason": "Was a COALESCE of two distinct concepts (firm income vs in-house expense).",
+          "replacement": "lobbying_filings.income_amount, lobbying_filings.expense_amount, or COALESCE(income_amount, expense_amount)"
+        }
+      ],
+      "aggregation_guidance": "To aggregate lobbying spend: JOIN lobbying_activities to lobbying_filings ON filing_uuid, SUM the filing-level columns, and filter to LD-2 quarterly activity reports with WHERE filing_type GLOB '[1234Q]*' (LD-203 contribution reports carry a semantically different income field and would double-count)."
+    }
+  ]
+}

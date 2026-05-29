@@ -490,6 +490,27 @@ if [[ -d "$EXPLORE_DIR" ]]; then
     fi
 fi
 
+# ── Upload bulk-dumps script + dumps subdomain robots.txt ────────────────
+# Added with bulk_dumps_phase1 (decisions_log §74, 2026-05-24).
+# Script runs on VPS via ssh from weekly_update.sh Phase 5 after smoke pass;
+# sources from /opt/openregs/*.db + /opt/datasette/990data_public.db per the
+# PII guard. robots.txt is uploaded to R2 by the script itself each run.
+DUMPS_SCRIPT="$PROJECT_DIR/scripts/50_generate_dumps.py"
+DUMPS_ROBOTS="$PROJECT_DIR/dumps/robots.txt"
+if [[ -f "$DUMPS_SCRIPT" ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "[DRY-RUN] Would upload bulk-dumps script + robots to $REMOTE_HOST:$REMOTE_DIR/{scripts,dumps}/"
+    else
+        log "Uploading bulk-dumps script + robots.txt..."
+        ssh $SSH_OPTS "$REMOTE_HOST" "mkdir -p $REMOTE_DIR/scripts $REMOTE_DIR/dumps"
+        scp $SSH_OPTS -q "$DUMPS_SCRIPT" "$REMOTE_HOST:$REMOTE_DIR/scripts/"
+        if [[ -f "$DUMPS_ROBOTS" ]]; then
+            scp $SSH_OPTS -q "$DUMPS_ROBOTS" "$REMOTE_HOST:$REMOTE_DIR/dumps/"
+        fi
+        log "Bulk-dumps assets uploaded"
+    fi
+fi
+
 # ── Update metadata ──────────────────────────────────────────────────────
 if [[ $DB_ONLY -eq 0 ]]; then
     log "=== Updating metadata ==="
