@@ -14,26 +14,26 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 <!-- COUNTS-START -->
 | Dataset | Records | Source |
 |---------|---------|--------|
-| Federal Register documents | 999,253 | Federal Register API |
-| Regulatory dockets | 254,917 | Regulations.gov API + derived from documents/comments |
-| Regulatory documents | 1,703,711 | Regulations.gov API |
+| Federal Register documents | 999,760 | Federal Register API |
+| Regulatory dockets | 256,336 | Regulations.gov API + derived from documents/comments |
+| Regulatory documents | 1,711,198 | Regulations.gov API |
 | Public comment headers | 9,940,592 | Regulations.gov API |
 | Comment full details | 433,838 | Regulations.gov API (4.4% of headers, in progress) |
-| Presidential documents | 5,936 | Federal Register API |
-| Congressional legislation | 377,789 | GovInfo BILLSTATUS + Congress.gov API |
-| Legislation actions | 2,318,806 | GovInfo BILLSTATUS |
+| Presidential documents | 5,939 | Federal Register API |
+| Congressional legislation | 378,088 | GovInfo BILLSTATUS + Congress.gov API |
+| Legislation actions | 2,319,665 | GovInfo BILLSTATUS |
 | Legislation subjects | 3,036,655 | GovInfo BILLSTATUS |
-| Legislation cosponsors | 4,078,084 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,358 | GovInfo eCFR bulk XML |
-| Congressional Record entries | 885,224 | GovInfo CREC packages |
-| CREC speakers (bioguide-linked) | 949,408 | Derived from MODS XML |
-| CREC bill references | 1,575,699 | Derived from MODS XML |
-| Roll call votes | 26,529 | Congress.gov API |
-| Member vote records | 8,362,696 | Congress.gov API |
+| Legislation cosponsors | 4,079,442 | GovInfo BILLSTATUS |
+| CFR regulatory sections | 123,310 | GovInfo eCFR bulk XML |
+| Congressional Record entries | 886,051 | GovInfo CREC packages |
+| CREC speakers (bioguide-linked) | 949,978 | Derived from MODS XML |
+| CREC bill references | 1,577,644 | Derived from MODS XML |
+| Roll call votes | 26,551 | Congress.gov API |
+| Member vote records | 8,370,176 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,766 | congress-legislators GitHub |
-| Stock trading disclosures | 62,248 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Stock trading disclosures | 62,351 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
 | Lobbying filings | 1,934,917 | Senate LDA API |
 | Lobbying lobbyists | 4,794,448 | Senate LDA API |
 | Lobbying activities | 3,860,624 | Senate LDA API |
@@ -57,20 +57,20 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
 | CRS reports | 13,814 | Congress.gov API |
 | CRS report–bill cross-references | 136,953 | Congress.gov API |
-| Executive nominations | 40,275 | Congress.gov API |
-| Nomination actions | 190,255 | Congress.gov API |
+| Executive nominations | 40,296 | Congress.gov API |
+| Nomination actions | 190,276 | Congress.gov API |
 | Treaties | 777 | Congress.gov API |
 | Treaty actions | 4,286 | Congress.gov API |
 | GAO reports | 73,725 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
-| OIRA regulatory reviews | 48,434 | Reginfo.gov |
+| OIRA regulatory reviews | 48,570 | Reginfo.gov |
 | OIRA review meetings | 8,663 | Reginfo.gov |
 | OIRA meeting attendees | 90,711 | Reginfo.gov |
-| IG reports | 34,880 | oversight.gov |
-| IG recommendations | 11,999 | oversight.gov |
+| IG reports | 35,088 | oversight.gov |
+| IG recommendations | 12,346 | oversight.gov |
 | Earmarks | 70,826 | House/Senate Appropriations |
 | Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
-| FR ↔ Regs.gov cross-references | 395,987 | Derived |
+| FR ↔ Regs.gov cross-references | 396,489 | Derived |
 <!-- COUNTS-END -->
 
 **Total**: ~120 million rows across 188 tables.
