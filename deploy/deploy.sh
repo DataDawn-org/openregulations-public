@@ -408,7 +408,11 @@ else
     log "Uploading $DB → $REMOTE_HOST:${REMOTE_DB}.new (${DB_SIZE_MB}MB) via rsync..."
     rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$DB" "$REMOTE_HOST:${REMOTE_DB}.new"
     log "Upload complete — atomically replacing live database..."
-    ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_DB}.new ${REMOTE_DB} && sudo chown datasette:datasette ${REMOTE_DB} && sudo chmod 664 ${REMOTE_DB}"
+    # rm -wal/-shm post-mv: orphan WAL companions from the pre-swap DB can replay against
+    # the new file on the next SQLite checkpoint, clobbering pages the new file thought it owned.
+    # See decisions_log §83 + incident_log 2026-05-28. Belt-and-suspenders for the live-DB-readonly
+    # doctrine; closes the class even if a future workaround violates the rule.
+    ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_DB}.new ${REMOTE_DB} && rm -f ${REMOTE_DB}-wal ${REMOTE_DB}-shm && sudo chown datasette:datasette ${REMOTE_DB} && sudo chmod 664 ${REMOTE_DB}"
     log "openregs.db swap complete"
 fi
 
@@ -421,7 +425,7 @@ if [[ -f "$APHIS_DB" ]]; then
     else
         log "Uploading $APHIS_DB → $REMOTE_HOST:${REMOTE_APHIS_DB}.new (${APHIS_SIZE_MB}MB)..."
         rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$APHIS_DB" "$REMOTE_HOST:${REMOTE_APHIS_DB}.new"
-        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_APHIS_DB}.new ${REMOTE_APHIS_DB} && sudo chown datasette:datasette ${REMOTE_APHIS_DB} && sudo chmod 664 ${REMOTE_APHIS_DB}"
+        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_APHIS_DB}.new ${REMOTE_APHIS_DB} && rm -f ${REMOTE_APHIS_DB}-wal ${REMOTE_APHIS_DB}-shm && sudo chown datasette:datasette ${REMOTE_APHIS_DB} && sudo chmod 664 ${REMOTE_APHIS_DB}"
         log "APHIS swap complete"
     fi
 else
@@ -437,7 +441,7 @@ if [[ -f "$LOBBYING_DB" ]]; then
     else
         log "Uploading $LOBBYING_DB → $REMOTE_HOST:${REMOTE_LOBBYING_DB}.new (${LOBBYING_SIZE_MB}MB) via rsync..."
         rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$LOBBYING_DB" "$REMOTE_HOST:${REMOTE_LOBBYING_DB}.new"
-        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_LOBBYING_DB}.new ${REMOTE_LOBBYING_DB} && sudo chown datasette:datasette ${REMOTE_LOBBYING_DB} && sudo chmod 664 ${REMOTE_LOBBYING_DB}"
+        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_LOBBYING_DB}.new ${REMOTE_LOBBYING_DB} && rm -f ${REMOTE_LOBBYING_DB}-wal ${REMOTE_LOBBYING_DB}-shm && sudo chown datasette:datasette ${REMOTE_LOBBYING_DB} && sudo chmod 664 ${REMOTE_LOBBYING_DB}"
         log "Lobbying swap complete"
     fi
 else
@@ -453,7 +457,7 @@ if [[ -f "$FARA_DB" ]]; then
     else
         log "Uploading $FARA_DB → $REMOTE_HOST:${REMOTE_FARA_DB}.new (${FARA_SIZE_MB}MB)..."
         rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$FARA_DB" "$REMOTE_HOST:${REMOTE_FARA_DB}.new"
-        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_FARA_DB}.new ${REMOTE_FARA_DB} && sudo chown datasette:datasette ${REMOTE_FARA_DB} && sudo chmod 664 ${REMOTE_FARA_DB}"
+        ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_FARA_DB}.new ${REMOTE_FARA_DB} && rm -f ${REMOTE_FARA_DB}-wal ${REMOTE_FARA_DB}-shm && sudo chown datasette:datasette ${REMOTE_FARA_DB} && sudo chmod 664 ${REMOTE_FARA_DB}"
         log "FARA swap complete"
     fi
 else
