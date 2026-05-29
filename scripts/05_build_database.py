@@ -6322,6 +6322,82 @@ def build_summary_tables(conn: sqlite3.Connection):
     log.info("  Summary tables built")
 
 
+def build_entity_prominence(conn: sqlite3.Connection):
+    """Build entity_prominence table from 990 peak revenue (followup_queue #36).
+
+    Drives the org-hub finder's prominence ranking — size_band ↓ → name-position
+    → peak_revenue ↓ — replacing a LENGTH-ASC tiebreaker that buried national
+    federated orgs (USGA, American Red Cross, Habitat International) behind
+    micro-orgs sharing a token. Standalone build in
+    openregs/scripts/build_entity_prominence.py mirrors this logic.
+
+    ATTACH 990data.db ?mode=ro for the WAL snapshot read (same pattern as the
+    staging attaches; see 2026-04-21 unqualified-DROP incident). Degrades
+    gracefully if 990data.db is missing — logs a warning, leaves the table
+    empty/absent so the LEFT JOIN in the finder collapses to NULL.
+
+    Bands (tunable, followup_queue #36):
+        5  $1B+
+        4  $100M-1B
+        3  $10M-100M
+        2  $1M-10M
+        1  $100K-1M
+        0  <$100K or no 990 ingested
+    """
+    log.info("Building entity_prominence...")
+    DATA990_DB = Path('/mnt/data/datadawn/990project/990data.db')
+
+    if not DATA990_DB.exists():
+        log.warning(f"  entity_prominence: SKIPPED — 990data.db not at {DATA990_DB}")
+        return
+
+    try:
+        conn.execute(f"ATTACH DATABASE 'file:{DATA990_DB}?mode=ro' AS data990")
+        conn.executescript("""
+            DROP TABLE IF EXISTS main.entity_prominence;
+            CREATE TABLE main.entity_prominence (
+                entity_id INTEGER PRIMARY KEY,
+                ein TEXT NOT NULL,
+                peak_revenue REAL,
+                size_band INTEGER NOT NULL
+            );
+        """)
+        conn.execute("""
+            INSERT INTO main.entity_prominence (entity_id, ein, peak_revenue, size_band)
+            WITH peak AS (
+                SELECT ein, MAX(total_revenue) AS peak_revenue
+                FROM data990.returns
+                WHERE return_type IN ('990','990EZ','990PF')
+                  AND total_revenue IS NOT NULL
+                GROUP BY ein
+            )
+            SELECT e.entity_id, e.ein, p.peak_revenue,
+                CASE
+                    WHEN p.peak_revenue >= 1e9 THEN 5
+                    WHEN p.peak_revenue >= 1e8 THEN 4
+                    WHEN p.peak_revenue >= 1e7 THEN 3
+                    WHEN p.peak_revenue >= 1e6 THEN 2
+                    WHEN p.peak_revenue >= 1e5 THEN 1
+                    ELSE 0
+                END AS size_band
+            FROM main.entities e
+            INNER JOIN peak p ON e.ein = p.ein
+            WHERE e.ein IS NOT NULL
+        """)
+        conn.commit()
+        conn.execute("CREATE INDEX main.idx_entity_prominence_band ON entity_prominence(size_band)")
+        conn.commit()
+        n = conn.execute("SELECT COUNT(*) FROM entity_prominence").fetchone()[0]
+        log.info(f"  entity_prominence: {n:,} rows")
+    except Exception as e:
+        log.warning(f"  entity_prominence: FAILED — {e}")
+    finally:
+        try:
+            conn.execute("DETACH DATABASE data990")
+        except sqlite3.OperationalError:
+            pass
+
+
 def build_fts(conn: sqlite3.Connection):
     """Build full-text search indexes."""
     log.info("Building FTS5 indexes...")
@@ -7930,6 +8006,7 @@ def main():
         enrich_stock_trades_cik(conn)
         build_lobbying_bill_refs(conn)
         build_summary_tables(conn)
+        build_entity_prominence(conn)
         build_fts(conn)
         print_stats(conn)
         validate_critical_tables(conn)  # fail-loud; aborts on missing/undersized
