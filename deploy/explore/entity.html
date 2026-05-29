@@ -355,16 +355,29 @@
                 // Fire all queries in parallel — using FTS indexes for speed
                 const [lobbyingRaw, spendingRaw, trades, dockets, legislation, revdoor, orgComments, fecData, faraData] = await Promise.all([
                     query(`
-                        SELECT client_name,
-                            SUM(income_amount) AS total_income,
+                        WITH matched_filings AS (
+                            SELECT DISTINCT la.filing_uuid
+                            FROM lobbying_activities la
+                            WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                        ),
+                        client_issues AS (
+                            SELECT la.client_name, COUNT(DISTINCT la.issue_code) AS issue_count
+                            FROM lobbying_activities la
+                            WHERE la.filing_uuid IN (SELECT filing_uuid FROM matched_filings)
+                            GROUP BY la.client_name
+                        )
+                        SELECT f.client_name,
+                            CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                             COUNT(*) AS filing_count,
-                            COUNT(DISTINCT registrant_name) AS firm_count,
-                            COUNT(DISTINCT issue_code) AS issue_count,
-                            MIN(filing_year) AS year_from,
-                            MAX(filing_year) AS year_to
-                        FROM lobbying_activities
-                        WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
-                        GROUP BY client_name
+                            COUNT(DISTINCT f.registrant_name) AS firm_count,
+                            COALESCE(ci.issue_count, 0) AS issue_count,
+                            MIN(f.filing_year) AS year_from,
+                            MAX(f.filing_year) AS year_to
+                        FROM matched_filings mf
+                        JOIN lobbying_filings f ON f.filing_uuid = mf.filing_uuid
+                        LEFT JOIN client_issues ci ON ci.client_name = f.client_name
+                        WHERE f.filing_type GLOB '[1234Q]*'
+                        GROUP BY f.client_name
                         ORDER BY total_income DESC
                         LIMIT 25
                     `),

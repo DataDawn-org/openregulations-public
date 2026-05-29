@@ -46,9 +46,9 @@
             {"name": "legislation_actions", "description": "Legislative action history", "rows": 983114, "foreignKeys": ["bill_id → legislation.bill_id"]},
             {"name": "committees", "description": "Congressional committees", "rows": 233, "key": "committee_id"},
             {"name": "committee_memberships", "description": "Committee member assignments", "rows": 3908, "foreignKeys": ["committee_id → committees.committee_id", "bioguide_id → congress_members.bioguide_id"]},
-            {"name": "lobbying_activities", "description": "Lobbying activity records with issue codes and spending", "rows": 115246, "foreignKeys": ["filing_uuid → lobbying_filings.filing_uuid"]},
+            {"name": "lobbying_activities", "description": "Lobbying activity records with issue codes; income/expense live on lobbying_filings (filing-level)", "rows": 115246, "foreignKeys": ["filing_uuid → lobbying_filings.filing_uuid"]},
             {"name": "lobbying_lobbyists", "description": "Individual lobbyists with covered government positions", "rows": 194151, "foreignKeys": ["filing_uuid → lobbying_activities.filing_uuid"]},
-            {"name": "lobbying_filings", "description": "Filing metadata and reported amounts", "rows": 71064, "key": "filing_uuid"},
+            {"name": "lobbying_filings", "description": "Filing metadata with income_amount + expense_amount (filing-level, XOR-populated). For lobbying spending, filter to LD-2 quarterly: filing_type GLOB '[1234Q]*'", "rows": 71064, "key": "filing_uuid"},
             {"name": "lobbying_issue_codes", "description": "32 lobbying issue area codes", "rows": 32, "key": "code"},
             {"name": "spending_awards", "description": "Federal grants and contracts from USASpending.gov", "rows": 175504},
             {"name": "presidential_documents", "description": "Executive Orders and Proclamations", "rows": 5904, "key": "document_number"},
@@ -498,10 +498,10 @@
                 <pre>curl "https://regs.datadawn.org/open_comments.json?sql=SELECT+id,agency_id,title,comment_end_date+FROM+documents+WHERE+comment_end_date>datetime('now')+AND+withdrawn=0+ORDER+BY+comment_end_date+LIMIT+10&_shape=objects"</pre>
             </div>
 
-            <h3>Example: Top lobbying clients</h3>
+            <h3>Example: Top lobbying clients (LD-2 scope)</h3>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                <pre>curl "https://regs.datadawn.org/openregs.json?sql=SELECT+client_name,SUM(income_amount)+AS+total+FROM+lobbying_activities+GROUP+BY+client_name+ORDER+BY+total+DESC+LIMIT+10&_shape=objects"</pre>
+                <pre>curl "https://regs.datadawn.org/openregs.json?sql=SELECT+client_name,SUM(income_amount)+AS+total+FROM+lobbying_filings+WHERE+filing_type+GLOB+'[1234Q]*'+AND+income_amount+%3E+0+GROUP+BY+client_name+ORDER+BY+total+DESC+LIMIT+10&_shape=objects"</pre>
             </div>
         </div>
 
@@ -574,9 +574,9 @@
             <table class="schema-table">
                 <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
                 <tbody>
-                    <tr><td>lobbying_activities</td><td>Lobbying activity records with spending</td><td class="count" id="schLobby">115,246</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, income_amount</td></tr>
+                    <tr><td>lobbying_activities</td><td>Lobbying activity records (one row per issue). Income/expense live on lobbying_filings — JOIN by filing_uuid</td><td class="count" id="schLobby">3,860,624</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, specific_issues</td></tr>
                     <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (with revolving door data)</td><td class="count">194,151</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
-                    <tr><td>lobbying_filings</td><td>Filing metadata and reported amounts</td><td class="count">71,064</td><td>filing_uuid, registrant_name, client_name, amount_reported, filing_year</td></tr>
+                    <tr><td>lobbying_filings</td><td>Filing metadata with canonical income_amount + expense_amount (XOR per filing)</td><td class="count">1,934,917</td><td>filing_uuid, registrant_name, client_name, income_amount, expense_amount, filing_year, filing_type</td></tr>
                     <tr><td>lobbying_issue_codes</td><td>Issue area code reference</td><td class="count">32</td><td>code, description</td></tr>
                     <tr><td>lobbying_contributions</td><td>Political contributions by lobbyists</td><td class="count">—</td><td>lobbyist_name, recipient_name, amount, contribution_date</td></tr>
                 </tbody>
@@ -1023,9 +1023,10 @@ ORDER BY trades DESC LIMIT 20</pre>
             <h3>Entity search: find any organization across all datasets</h3>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                <pre>-- Lobbying spending
+                <pre>-- Lobbying spending (LD-2 quarterly activity scope; include LD-203 by removing the filing_type filter)
 SELECT client_name, SUM(income_amount) AS total
-FROM lobbying_activities WHERE client_name LIKE '%Boeing%'
+FROM lobbying_filings WHERE client_name LIKE '%Boeing%'
+  AND filing_type GLOB '[1234Q]*' AND income_amount > 0
 GROUP BY client_name;
 
 -- Federal contracts
@@ -1109,6 +1110,8 @@ ORDER BY la.filing_year DESC</pre>
     <footer>
         <div class="footer-text">
             <a href="https://datadawn.org">DataDawn</a> &mdash; Pure information from public records &mdash; Free forever
+            <br>
+            <small>Schema changes are recorded in the <a href="https://github.com/DataDawn-org/openregulations-public/blob/main/CHANGELOG.md" target="_blank" rel="noopener">CHANGELOG</a>. Latest: lobbying spending semantics + schema migration (2026-05-22).</small>
         </div>
     </footer>
 

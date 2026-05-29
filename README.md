@@ -733,12 +733,12 @@ Full comment details from Regulations.gov (in progress — 423K of 9.7M download
 
 ### lobbying_filings
 
-Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present).
+Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present). Filing types: LD-1 (registration), LD-2 (quarterly activity, "lobbying spending"), LD-203 (semi-annual contribution reports).
 
 | Column | Description |
 |---|---|
 | `filing_uuid` (PK) | Unique filing identifier |
-| `filing_type` | Filing type code |
+| `filing_type` | Filing type code (`Q1`–`Q4`/amendments for LD-2; `MM`/`YY` for LD-203; `RR`/`RA` for LD-1) |
 | `registrant_id` | Registrant ID |
 | `registrant_name` | Lobbying firm or self-filing organization |
 | `client_id` | Client ID |
@@ -746,9 +746,14 @@ Lobbying disclosure filings from the Senate LDA (1.9M+ filings, 1999–present).
 | `filing_year` | Year of filing |
 | `filing_period` | Filing period (Q1, Q2, mid-year, etc.) |
 | `received_date` | Date received by Senate |
-| `amount_reported` | Dollar amount reported |
+| `income_amount` | Income from client (outside-firm filings, XOR with `expense_amount`) |
+| `expense_amount` | Lobbying expenses (in-house filings, XOR with `income_amount`) |
 | `is_no_activity` | 1 if no lobbying activity |
 | `is_termination` | 1 if terminating registration |
+
+**For "lobbying spending" aggregations**, filter to LD-2 quarterly activity reports: `WHERE filing_type GLOB '[1234Q]*'`. To include LD-203 contribution reports in a custom query, remove the filter.
+
+> **Schema change 2026-05-22 (S-C1 fix):** `amount_reported` was dropped; use `income_amount`, `expense_amount`, or `COALESCE(income_amount, expense_amount)`. `income_amount`/`expense_amount` on `lobbying_activities` were also dropped — those values lived at the wrong grain (replicated across activity rows, inflating SUMs 2-3×). All amounts are now filing-level on `lobbying_filings`. See `bestpractices/decisions_log.md` §64-65.
 
 ### lobbying_lobbyists
 
@@ -763,7 +768,7 @@ Individual lobbyists listed on filings (3.5M+ records).
 
 ### lobbying_activities
 
-Lobbying activities by issue area (2.8M+ records).
+Lobbying activities by issue area (3.86M+ records). Income/expense are filing-level — JOIN to `lobbying_filings` by `filing_uuid`.
 
 | Column | Description |
 |---|---|
@@ -771,7 +776,6 @@ Lobbying activities by issue area (2.8M+ records).
 | `issue_code` | General issue area code (links to lobbying_issue_codes) |
 | `specific_issues` | Detailed description of issues lobbied on |
 | `government_entities` | Government bodies contacted |
-| `income_amount` / `expense_amount` | Amounts reported |
 
 ### lobbying_contributions
 

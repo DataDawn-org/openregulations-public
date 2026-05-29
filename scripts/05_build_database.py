@@ -256,6 +256,13 @@ CREATE INDEX IF NOT EXISTS idx_spending_duns ON spending_awards(recipient_duns) 
 CREATE INDEX IF NOT EXISTS idx_spending_state ON spending_awards(state_code);
 
 -- Lobbying disclosure filings (from Senate LDA API)
+-- lobbying_filings: one row per filing (LD-1, LD-2, LD-203).
+-- income_amount / expense_amount are filing-level, XOR-populated:
+--   - LD-2 outside-firm filings: income_amount = client payment, expense_amount NULL
+--   - LD-2 in-house filings:    expense_amount = lobbying spend, income_amount NULL
+--   - LD-1 / many LD-203:       both NULL (registrations / contribution-only reports)
+-- For "lobbying spending" aggregates filter to LD-2: filing_type GLOB '[1234Q]*'.
+-- See decisions_log §64 (2026-05-22). amount_reported was DROPPED 2026-05-22.
 CREATE TABLE IF NOT EXISTS lobbying_filings (
     filing_uuid TEXT PRIMARY KEY,
     filing_type TEXT NOT NULL,
@@ -275,7 +282,8 @@ CREATE TABLE IF NOT EXISTS lobbying_filings (
     filing_year INTEGER,
     filing_period TEXT,
     received_date TEXT,
-    amount_reported REAL,
+    income_amount REAL,
+    expense_amount REAL,
     is_amendment INTEGER DEFAULT 0,
     is_no_activity INTEGER DEFAULT 0,
     is_termination INTEGER DEFAULT 0,
@@ -292,6 +300,9 @@ CREATE TABLE IF NOT EXISTS lobbying_affiliated_orgs (
 CREATE INDEX IF NOT EXISTS idx_lobby_aff_filing ON lobbying_affiliated_orgs(filing_uuid);
 CREATE INDEX IF NOT EXISTS idx_lobby_aff_name ON lobbying_affiliated_orgs(org_name);
 
+-- lobbying_activities: one row per (filing, issue_code). Filing-level income/expense
+-- live on lobbying_filings (replicating them here causes activity-count inflation
+-- when SUMed — the S-C1 bug). JOIN by filing_uuid to get amounts. See decisions_log §64.
 CREATE TABLE IF NOT EXISTS lobbying_activities (
     id INTEGER PRIMARY KEY,
     filing_uuid TEXT NOT NULL,
@@ -305,8 +316,6 @@ CREATE TABLE IF NOT EXISTS lobbying_activities (
     issue_code TEXT,
     specific_issues TEXT,
     government_entities TEXT,
-    income_amount INTEGER,
-    expense_amount INTEGER,
     is_no_activity INTEGER DEFAULT 0,
     is_termination INTEGER DEFAULT 0,
     received_date TEXT
@@ -1084,7 +1093,8 @@ CREATE TABLE IF NOT EXISTS fec_operating_expenditures (
     city TEXT,
     state TEXT,
     zip_code TEXT,
-    transaction_dt TEXT,
+    transaction_dt TEXT,                    -- MM/DD/YYYY from FEC source
+    transaction_dt_iso TEXT,                -- YYYY-MM-DD sidecar (audit H6, 2026-05-15) — used by validate_freshness
     transaction_amt REAL,
     purpose TEXT,
     category TEXT,
@@ -1218,7 +1228,8 @@ CREATE TABLE IF NOT EXISTS oira_meetings (
     title TEXT,
     agency_acronym TEXT,
     rule_stage TEXT,
-    meeting_date TEXT,
+    meeting_date TEXT,                      -- DD-MMM-YY from reginfo.gov source
+    meeting_date_iso TEXT,                  -- YYYY-MM-DD sidecar (audit H6, 2026-05-15) — used by validate_freshness
     requestor_org TEXT,
     requestor_name TEXT,
     meeting_type TEXT,
@@ -1360,9 +1371,15 @@ CREATE TABLE IF NOT EXISTS entities (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     notes TEXT,
-    -- Canonical DataDawn identifier (virtual — no storage). Format: DD-E-{entity_id}.
-    -- See entity_architecture.md §"Future: canonical DataDawn identifiers (DD-IDs)".
-    dd_id TEXT GENERATED ALWAYS AS ('DD-E-' || entity_id) VIRTUAL,
+    -- Canonical DataDawn identifier (D1, anchor-derived). Format: DD-E-EIN-* /
+    -- DD-E-CIK-* / DD-E-LEI-* / DD-E-UEI-* / DD-E-FEC-* / DD-E-X-*. Populated
+    -- by scripts/backfill_dd_ids.py via dd_id_generator.generate_dd_e_id.
+    -- Brief: bestpractices/dd_id_phase_c5_project_brief_2026-05-17.md.
+    -- NOTE: scratch entities_phase_a.db DDL is the actual source-of-truth for
+    -- this schema (build does DROP+recreate via _copy_table_with_schema at
+    -- import_staging_entities). This declaration is the fresh-DB fallback +
+    -- documentation-of-intent only.
+    dd_id TEXT,
     FOREIGN KEY (merged_into_entity_id) REFERENCES entities(entity_id),
     CHECK (merged_into_entity_id IS NULL OR merged_into_entity_id != entity_id)
 );
@@ -1392,6 +1409,52 @@ CREATE TABLE IF NOT EXISTS entity_aliases (
 );
 CREATE INDEX IF NOT EXISTS idx_alias_norm ON entity_aliases(alias_normalized);
 CREATE INDEX IF NOT EXISTS idx_alias_norm_src ON entity_aliases(alias_normalized, alias_source);
+
+-- dd_id_redirects: N3 — operational merge/soft-delete record for DD-IDs.
+-- old_dd_id → new_dd_id with chain-collapse semantics (denormalized to
+-- terminal target so lookups stay O(1) even after A→B→C chains). NEVER
+-- triggered by anchor additions (D5 lock-at-creation); only by explicit
+-- merge action.
+--
+-- Soft-delete: new_dd_id MAY be NULL when reason='soft_delete' with no live
+-- counterpart. Manual override audit: 'MANUAL_OVERRIDE: <reason>' prefix in
+-- resolution_note triggers quarterly-review query (see brief N3 footer).
+--
+-- FK to entities(dd_id) intentionally OMITTED — partial UNIQUE index isn't
+-- a valid FK target, and redirects may eventually span public_actors and
+-- government_units too. Operational integrity guarded by CHECK and by the
+-- merge action being explicit, not user-facing.
+--
+-- Consumer-side resolution (Datasette URL routing, MCP, REST API) DEFERRED;
+-- table ships empty. Re-engage when DD-IDs are externally published. Tracked
+-- in decisions_log + entity_architecture.md.
+CREATE TABLE IF NOT EXISTS dd_id_redirects (
+    old_dd_id        TEXT PRIMARY KEY,
+    new_dd_id        TEXT,                  -- NULL allowed when reason='soft_delete'
+    reason           TEXT NOT NULL,         -- 'merge' | 'soft_delete' | 'manual_correction'
+    merged_at        TEXT NOT NULL,
+    unmerged_at      TEXT,                  -- soft un-merge (reversibility)
+    resolution_note  TEXT,                  -- 'MANUAL_OVERRIDE: <reason>' for audit
+    CHECK (new_dd_id IS NULL OR old_dd_id != new_dd_id)
+);
+CREATE INDEX IF NOT EXISTS idx_redirects_new ON dd_id_redirects(new_dd_id)
+    WHERE new_dd_id IS NOT NULL;
+
+-- anchor_conflicts: N4 — surfaces when an entity's anchors resolve to
+-- different orgs in their source registries (e.g., entities.ein and
+-- entities.lei point at different Pfizer-ish entities). Cheap to add now,
+-- expensive to retrofit. No PRIMARY KEY — an entity may accumulate multiple
+-- conflict types over time, each with its own detection/resolution lifecycle.
+CREATE TABLE IF NOT EXISTS anchor_conflicts (
+    entity_id        INTEGER NOT NULL,
+    conflicting_pair TEXT NOT NULL,         -- e.g., 'EIN-vs-LEI'
+    detail           TEXT,                  -- registry lookup divergence detail
+    detected_at      TEXT NOT NULL,
+    resolved_at      TEXT,
+    resolution_note  TEXT,
+    FOREIGN KEY (entity_id) REFERENCES entities(entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_anchor_conflicts_entity ON anchor_conflicts(entity_id);
 
 -- public_actors: named individuals in public-role contexts, Model 2.
 -- One row per (person, role-context); never fuzzy-merged across sources.
@@ -1446,8 +1509,13 @@ CREATE TABLE IF NOT EXISTS public_actors (
     updated_at TEXT NOT NULL,
     notes TEXT,
 
-    -- Canonical DataDawn identifier (virtual). Format: DD-P-{public_actor_id}.
-    dd_id TEXT GENERATED ALWAYS AS ('DD-P-' || public_actor_id) VIRTUAL,
+    -- Canonical DataDawn identifier (D1+D3). Format: DD-P-BIO-* / DD-P-FEC-* /
+    -- DD-P-FARA-* / DD-P-CIK-* / DD-P-OGE-*. NULL for the composite-keyed cohort
+    -- (nonprofit_officer, lobbyist_lda, exec_branch_appointee) by deliberate
+    -- design — see D3 in brief. Populated by scripts/backfill_dd_ids.py.
+    -- NOTE: scratch entities_phase_a.db DDL is the actual source-of-truth here
+    -- (same _copy_table_with_schema override pattern as entities). Fallback only.
+    dd_id TEXT,
 
     UNIQUE(role_context, source_id),
     FOREIGN KEY (employer_entity_id) REFERENCES entities(entity_id),
@@ -1906,7 +1974,7 @@ def import_federal_register(conn: sqlite3.Connection):
                             (doc_num, aid),
                         )
             except sqlite3.Error as e:
-                log.debug(f"  FR insert error for {doc_num}: {e}")
+                log.warning(f"  FR insert error for {doc_num}: {e}")
 
         if count % 50000 == 0 and count > 0:
             conn.commit()
@@ -2010,7 +2078,14 @@ def enrich_regulation_id_numbers(conn: sqlite3.Connection):
 
 
 def import_dockets(conn: sqlite3.Connection):
-    """Import regulations.gov dockets."""
+    """Import regulations.gov dockets.
+
+    UPSERT (rather than INSERT OR IGNORE) so the refresh-recent pass in
+    02_regs_gov_dockets_docs.py::refresh_recent_dockets can update
+    last_modified on existing rows — otherwise re-fetched dockets would
+    silently retain their stale timestamps and dockets.last_modified
+    would never advance (incident_log.md 2026-05-16).
+    """
     log.info("Importing dockets...")
     count = 0
 
@@ -2020,9 +2095,17 @@ def import_dockets(conn: sqlite3.Connection):
             attrs = rec.get("attributes", {})
             try:
                 conn.execute("""
-                    INSERT OR IGNORE INTO dockets
+                    INSERT INTO dockets
                     (id, agency_id, title, docket_type, last_modified, object_id)
                     VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        agency_id = excluded.agency_id,
+                        title = excluded.title,
+                        docket_type = excluded.docket_type,
+                        last_modified = excluded.last_modified,
+                        object_id = excluded.object_id
+                    WHERE excluded.last_modified > dockets.last_modified
+                       OR dockets.last_modified IS NULL
                 """, (
                     rec.get("id"),
                     attrs.get("agencyId"),
@@ -2033,7 +2116,7 @@ def import_dockets(conn: sqlite3.Connection):
                 ))
                 count += 1
             except sqlite3.Error as e:
-                log.debug(f"  Docket insert error: {e}")
+                log.warning(f"  Docket insert error: {e}")
 
     conn.commit()
     log.info(f"  Done: {count:,} dockets")
@@ -2062,7 +2145,14 @@ def backfill_orphan_dockets(conn: sqlite3.Connection):
 
 
 def import_documents(conn: sqlite3.Connection):
-    """Import regulations.gov documents."""
+    """Import regulations.gov documents.
+
+    UPSERT (rather than INSERT OR IGNORE) so the refresh-recent pass in
+    02_regs_gov_dockets_docs.py::refresh_recent_documents can update
+    last_modified/open_for_comment/withdrawn on existing rows when documents
+    are amended upstream. WHERE guard prevents older re-fetches from
+    clobbering newer in-place data.
+    """
     log.info("Importing documents...")
     count = 0
 
@@ -2074,12 +2164,30 @@ def import_documents(conn: sqlite3.Connection):
             posted_year, posted_month = extract_year_month(posted_date)
             try:
                 conn.execute("""
-                    INSERT OR IGNORE INTO documents
+                    INSERT INTO documents
                     (id, agency_id, docket_id, title, document_type, subtype,
                      posted_date, posted_year, posted_month,
                      comment_start_date, comment_end_date,
                      last_modified, fr_doc_num, open_for_comment, withdrawn, object_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        agency_id = excluded.agency_id,
+                        docket_id = excluded.docket_id,
+                        title = excluded.title,
+                        document_type = excluded.document_type,
+                        subtype = excluded.subtype,
+                        posted_date = excluded.posted_date,
+                        posted_year = excluded.posted_year,
+                        posted_month = excluded.posted_month,
+                        comment_start_date = excluded.comment_start_date,
+                        comment_end_date = excluded.comment_end_date,
+                        last_modified = excluded.last_modified,
+                        fr_doc_num = excluded.fr_doc_num,
+                        open_for_comment = excluded.open_for_comment,
+                        withdrawn = excluded.withdrawn,
+                        object_id = excluded.object_id
+                    WHERE excluded.last_modified > documents.last_modified
+                       OR documents.last_modified IS NULL
                 """, (
                     rec.get("id"),
                     attrs.get("agencyId"),
@@ -2100,7 +2208,7 @@ def import_documents(conn: sqlite3.Connection):
                 ))
                 count += 1
             except sqlite3.Error as e:
-                log.debug(f"  Document insert error: {e}")
+                log.warning(f"  Document insert error: {e}")
 
         if count % 50000 == 0 and count > 0:
             conn.commit()
@@ -2173,7 +2281,7 @@ def import_comments(conn: sqlite3.Connection):
                     ))
                     count += 1
                 except sqlite3.Error as e:
-                    log.debug(f"  Comment insert error: {e}")
+                    log.warning(f"  Comment insert error: {e}")
 
             if count % 100000 == 0 and count > 0:
                 conn.commit()
@@ -2263,7 +2371,7 @@ def import_comment_details(conn: sqlite3.Connection):
                 ))
                 count += 1
             except sqlite3.Error as e:
-                log.debug(f"  Detail insert error: {e}")
+                log.warning(f"  Detail insert error: {e}")
 
         if count % 10000 == 0 and count > 0:
             conn.commit()
@@ -2335,8 +2443,8 @@ def import_presidential_documents(conn: sqlite3.Connection):
                         rec.get("abstract"),
                     ))
                     count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
             total_pages = data.get("total_pages", 1)
             if page >= total_pages:
@@ -2416,7 +2524,7 @@ def import_spending(conn: sqlite3.Connection):
                 ))
                 count += 1
             except sqlite3.Error as e:
-                log.debug(f"  Spending insert error: {e}")
+                log.warning(f"  Spending insert error: {e}")
 
         if count % 10000 == 0 and count > 0:
             conn.commit()
@@ -2437,9 +2545,11 @@ def import_lobbying(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing lobbying disclosure data...")
-    conn.execute(f"ATTACH DATABASE '{LOBBYING_DB}' AS ldb")
+    _attach_ro(conn, LOBBYING_DB, "ldb")
 
-    # Copy filings (skip raw_json column to save space)
+    # Copy filings (skip raw_json column to save space).
+    # income_amount and expense_amount are separately populated (XOR per filing).
+    # amount_reported was dropped 2026-05-22; see decisions_log §64.
     count = conn.execute("""
         INSERT OR IGNORE INTO lobbying_filings
         (filing_uuid, filing_type, registrant_id, registrant_name,
@@ -2448,7 +2558,8 @@ def import_lobbying(conn: sqlite3.Connection):
          client_state, client_ppb_state, client_country, client_ppb_country,
          client_general_description, client_government_entity,
          filing_year, filing_period,
-         received_date, amount_reported, is_amendment, is_no_activity, is_termination,
+         received_date, income_amount, expense_amount,
+         is_amendment, is_no_activity, is_termination,
          affiliated_org_count)
         SELECT filing_uuid, filing_type, registrant_id, registrant_name,
                registrant_state, registrant_country, registrant_house_id,
@@ -2456,7 +2567,8 @@ def import_lobbying(conn: sqlite3.Connection):
                client_state, client_ppb_state, client_country, client_ppb_country,
                client_general_description, client_government_entity,
                filing_year, filing_period,
-               received_date, amount_reported, is_amendment, is_no_activity, is_termination,
+               received_date, income_amount, expense_amount,
+               is_amendment, is_no_activity, is_termination,
                affiliated_org_count
         FROM ldb.lobbying_filings_raw
     """).rowcount
@@ -2469,15 +2581,17 @@ def import_lobbying(conn: sqlite3.Connection):
     """).rowcount
     log.info(f"  Affiliated orgs: {count:,}")
 
+    # lobbying_activities no longer carries income_amount/expense_amount —
+    # those are filing-level facts on lobbying_filings. See decisions_log §64.
     count = conn.execute("""
         INSERT OR IGNORE INTO lobbying_activities
         (id, filing_uuid, filing_type, registrant_name, registrant_id, client_name,
          filing_year, filing_period, issue_code, specific_issues,
-         government_entities, income_amount, expense_amount,
+         government_entities,
          is_no_activity, is_termination, received_date)
         SELECT id, filing_uuid, filing_type, registrant_name, registrant_id, client_name,
                filing_year, filing_period, issue_code, specific_issues,
-               government_entities, income_amount, expense_amount,
+               government_entities,
                is_no_activity, is_termination, received_date
         FROM ldb.lobbying_activities
     """).rowcount
@@ -2538,7 +2652,7 @@ def import_earmarks(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing earmarks...")
-    conn.execute(f"ATTACH DATABASE '{EARMARKS_DB}' AS edb")
+    _attach_ro(conn, EARMARKS_DB, "edb")
 
     count = conn.execute("""
         INSERT OR REPLACE INTO earmarks
@@ -2565,7 +2679,7 @@ def import_fara(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing FARA data...")
-    conn.execute(f"ATTACH DATABASE '{FARA_DB}' AS faradb")
+    _attach_ro(conn, FARA_DB, "faradb")
 
     # fara_registrants — list columns explicitly (destination has extra name_normalized)
     conn.execute("""INSERT OR IGNORE INTO fara_registrants
@@ -2603,7 +2717,7 @@ def import_fec(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing FEC campaign finance data...")
-    conn.execute(f"ATTACH DATABASE '{FEC_DB}' AS fecdb")
+    _attach_ro(conn, FEC_DB, "fecdb")
 
     # Check which tables exist in fec.db (disbursement tables may not be present in older builds)
     fec_tables = {r[0] for r in conn.execute(
@@ -2640,20 +2754,24 @@ def import_fec(conn: sqlite3.Connection):
     log.info(f"  Committees: {count:,}")
     total += count
 
-    # Contributions to candidates — join with committee names for readability
+    # Contributions to candidates — join with committee + candidate names for
+    # readability. Was correlated subqueries against the 53 GB attached fec.db
+    # until 2026-05-15 (audit M4); SQLite can't hash-join correlated subqueries,
+    # so this was O(N×M) on ~104M contribution rows. LEFT JOIN here is safe
+    # because (cmte_id, cycle) and (cand_id, cycle) are primary keys on
+    # fec_committees / fec_candidates respectively — no row explosion.
     count = conn.execute("""
         INSERT INTO fec_contributions
         (cmte_id, cmte_name, cand_id, cand_name, transaction_dt,
          transaction_amt, entity_tp, state, employer, occupation, cycle)
-        SELECT c.cmte_id,
-               (SELECT cm.cmte_nm FROM fecdb.fec_committees cm
-                WHERE cm.cmte_id = c.cmte_id AND cm.cycle = c.cycle LIMIT 1),
-               c.cand_id,
-               (SELECT cn.cand_name FROM fecdb.fec_candidates cn
-                WHERE cn.cand_id = c.cand_id AND cn.cycle = c.cycle LIMIT 1),
+        SELECT c.cmte_id, cm.cmte_nm, c.cand_id, cn.cand_name,
                c.transaction_dt, c.transaction_amt, c.entity_tp,
                c.state, c.employer, c.occupation, c.cycle
         FROM fecdb.fec_contributions_to_candidates c
+        LEFT JOIN fecdb.fec_committees cm
+               ON cm.cmte_id = c.cmte_id AND cm.cycle = c.cycle
+        LEFT JOIN fecdb.fec_candidates cn
+               ON cn.cand_id = c.cand_id AND cn.cycle = c.cycle
     """).rowcount
     log.info(f"  Contributions to candidates: {count:,}")
     total += count
@@ -2670,21 +2788,37 @@ def import_fec(conn: sqlite3.Connection):
 
     # --- Disbursement tables (may not exist in older fec.db builds) ---
 
-    # Operating expenditures — select key columns, join with committee name
+    # Operating expenditures — select key columns, join with committee name.
+    # Was a correlated subquery against fec.db until 2026-05-15 (audit M4);
+    # LEFT JOIN is safe because (cmte_id, cycle) is the PK of fec_committees.
     if "fec_operating_expenditures" in fec_tables:
+        # transaction_dt_iso: ISO sidecar of the MM/DD/YYYY transaction_dt so
+        # validate_freshness can compute age via julianday (audit H6, 2026-05-15).
+        # NULL on malformed/missing dates; validate_freshness filters those out.
         count = conn.execute("""
             INSERT INTO fec_operating_expenditures
             (cmte_id, cmte_name, form_tp_cd, name, city, state, zip_code,
-             transaction_dt, transaction_amt, purpose, category, category_desc,
-             entity_tp, memo_cd, memo_text, cycle)
-            SELECT o.cmte_id,
-                   (SELECT cm.cmte_nm FROM fecdb.fec_committees cm
-                    WHERE cm.cmte_id = o.cmte_id AND cm.cycle = o.cycle LIMIT 1),
+             transaction_dt, transaction_dt_iso, transaction_amt, purpose,
+             category, category_desc, entity_tp, memo_cd, memo_text, cycle)
+            SELECT o.cmte_id, cm.cmte_nm,
                    o.form_tp_cd, o.name, o.city, o.state, o.zip_code,
-                   o.transaction_dt, o.transaction_amt, o.purpose,
+                   o.transaction_dt,
+                   CASE
+                     WHEN length(o.transaction_dt) = 10
+                          AND substr(o.transaction_dt, 3, 1) = '/'
+                          AND substr(o.transaction_dt, 6, 1) = '/'
+                          AND substr(o.transaction_dt, 7, 4) BETWEEN '1990' AND '2050'
+                     THEN substr(o.transaction_dt, 7, 4) || '-'
+                          || substr(o.transaction_dt, 1, 2) || '-'
+                          || substr(o.transaction_dt, 4, 2)
+                     ELSE NULL
+                   END,
+                   o.transaction_amt, o.purpose,
                    o.category, o.category_desc, o.entity_tp,
                    o.memo_cd, o.memo_text, o.cycle
             FROM fecdb.fec_operating_expenditures o
+            LEFT JOIN fecdb.fec_committees cm
+                   ON cm.cmte_id = o.cmte_id AND cm.cycle = o.cycle
         """).rowcount
         log.info(f"  Operating expenditures: {count:,}")
         total += count
@@ -2765,7 +2899,7 @@ def import_fec(conn: sqlite3.Connection):
     # --- Employer aggregates (separate DB) ---
     if FEC_EMPLOYERS_DB.exists():
         log.info("  Importing FEC employer aggregates...")
-        conn.execute(f"ATTACH DATABASE '{FEC_EMPLOYERS_DB}' AS empdb")
+        _attach_ro(conn, FEC_EMPLOYERS_DB, "empdb")
 
         for table in ['fec_employer_totals', 'fec_employer_to_candidate',
                        'fec_employer_to_party', 'fec_top_occupations']:
@@ -2823,9 +2957,11 @@ def import_government_units(conn: sqlite3.Connection):
     conn.executescript("""
         DROP TABLE IF EXISTS main.government_units;
         CREATE TABLE main.government_units AS SELECT * FROM gudb.government_units;
-        -- Canonical DataDawn identifier (virtual). Format: DD-G-{gov_unit_id}.
-        ALTER TABLE main.government_units ADD COLUMN dd_id TEXT
-            GENERATED ALWAYS AS ('DD-G-' || gov_unit_id) VIRTUAL;
+        -- DD-G-* identifier (D1, anchor-derived). Real TEXT column populated
+        -- below from dd_id_generator.generate_dd_g_id. Source government_units.db
+        -- has no dd_id column, so this build-script ALTER is the source-of-truth
+        -- here (unlike entities/public_actors where scratch DDL wins).
+        ALTER TABLE main.government_units ADD COLUMN dd_id TEXT;
         CREATE INDEX IF NOT EXISTS idx_gu_name_norm ON government_units(name_normalized);
         CREATE INDEX IF NOT EXISTS idx_gu_name_state ON government_units(name_normalized, state);
         CREATE INDEX IF NOT EXISTS idx_gu_state ON government_units(state);
@@ -2833,8 +2969,42 @@ def import_government_units(conn: sqlite3.Connection):
         CREATE INDEX IF NOT EXISTS idx_gu_pid6 ON government_units(census_pid6) WHERE census_pid6 IS NOT NULL;
     """)
     conn.execute("DETACH DATABASE gudb")
+
+    # Populate dd_id from anchors (gidid > pid6 > manual_slug).
+    # The 56 state/territory rows lack both gidid and pid6 (verified 2026-05-21);
+    # they resolve via GOV_UNITS_MANUAL_SLUGS to DD-G-X-* identifiers.
+    from dd_id_generator import generate_dd_g_id
+    from dd_id_manual_slugs import GOV_UNITS_MANUAL_SLUGS
+    rows = conn.execute(
+        'SELECT gov_unit_id, census_gidid, census_pid6 FROM government_units'
+    ).fetchall()
+    updates = []
+    skipped = 0
+    for gov_unit_id, gidid, pid6 in rows:
+        row_dict = {'census_gidid': gidid, 'census_pid6': pid6}
+        if not gidid and not pid6:
+            row_dict['manual_slug'] = GOV_UNITS_MANUAL_SLUGS.get(gov_unit_id)
+            if row_dict['manual_slug'] is None:
+                log.warning(
+                    f"  government_unit_id={gov_unit_id} unanchored + no manual_slug; SKIP"
+                )
+                skipped += 1
+                continue
+        try:
+            updates.append((generate_dd_g_id(row_dict), gov_unit_id))
+        except ValueError as e:
+            log.error(f"  government_unit_id={gov_unit_id}: {e}")
+            skipped += 1
+    conn.executemany(
+        'UPDATE government_units SET dd_id = ? WHERE gov_unit_id = ?', updates
+    )
+    conn.execute(
+        'CREATE UNIQUE INDEX IF NOT EXISTS uq_gu_dd_id ON government_units(dd_id) '
+        'WHERE dd_id IS NOT NULL'
+    )
     n = conn.execute("SELECT COUNT(*) FROM government_units").fetchone()[0]
-    log.info(f"  Government units: {n:,}")
+    n_dd = conn.execute("SELECT COUNT(*) FROM government_units WHERE dd_id IS NOT NULL").fetchone()[0]
+    log.info(f"  Government units: {n:,} ({n_dd:,} with dd_id, {skipped:,} skipped)")
     return n
 
 
@@ -2845,7 +3015,7 @@ def import_oira(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing OIRA data...")
-    conn.execute(f"ATTACH DATABASE '{OIRA_DB}' AS oiradb")
+    _attach_ro(conn, OIRA_DB, "oiradb")
 
     # Check which tables exist
     oira_tables = {r[0] for r in conn.execute(
@@ -2867,14 +3037,43 @@ def import_oira(conn: sqlite3.Connection):
         total += count
 
     if "oira_meetings" in oira_tables:
+        # meeting_date_iso: ISO sidecar of meeting_date (audit H6, 2026-05-15).
+        # Handles two formats reginfo.gov produces:
+        #   - 'DD-MMM-YY' from bulk XML, e.g. '20-DEC-24'
+        #   - 'MM/DD/YYYY HH:MM AM/PM' from search-scrape, e.g. '05/29/2025 01:00 PM'
+        # The MM/DD/YYYY branch was added 2026-05-16: search-scrape data had been
+        # landing in oira_meetings with meeting_date intact but the CASE returned
+        # NULL for those rows, freezing meeting_date_iso at 2024-12-20.
         count = conn.execute("""
             INSERT OR IGNORE INTO oira_meetings
             (meeting_id, rin, title, agency_acronym, rule_stage,
-             meeting_date, requestor_org, requestor_name, meeting_type,
-             type_cd, source)
+             meeting_date, meeting_date_iso, requestor_org, requestor_name,
+             meeting_type, type_cd, source)
             SELECT meeting_id, rin, title, agency_acronym, rule_stage,
-                   meeting_date, requestor_org, requestor_name, meeting_type,
-                   type_cd, source
+                   meeting_date,
+                   CASE
+                     WHEN length(meeting_date) = 9
+                          AND substr(meeting_date, 3, 1) = '-'
+                          AND substr(meeting_date, 7, 1) = '-'
+                     THEN '20' || substr(meeting_date, 8, 2) || '-' ||
+                          CASE upper(substr(meeting_date, 4, 3))
+                            WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02'
+                            WHEN 'MAR' THEN '03' WHEN 'APR' THEN '04'
+                            WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
+                            WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08'
+                            WHEN 'SEP' THEN '09' WHEN 'OCT' THEN '10'
+                            WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
+                            ELSE NULL
+                          END || '-' || substr(meeting_date, 1, 2)
+                     WHEN length(meeting_date) >= 10
+                          AND substr(meeting_date, 3, 1) = '/'
+                          AND substr(meeting_date, 6, 1) = '/'
+                     THEN substr(meeting_date, 7, 4) || '-' ||
+                          substr(meeting_date, 1, 2) || '-' ||
+                          substr(meeting_date, 4, 2)
+                     ELSE NULL
+                   END,
+                   requestor_org, requestor_name, meeting_type, type_cd, source
             FROM oiradb.oira_meetings
         """).rowcount
         log.info(f"  OIRA meetings: {count:,}")
@@ -2903,7 +3102,7 @@ def import_votes(conn: sqlite3.Connection):
         return 0
 
     log.info("Importing roll call votes...")
-    conn.execute(f"ATTACH DATABASE '{VOTES_DB}' AS vdb")
+    _attach_ro(conn, VOTES_DB, "vdb")
 
     # Roll call votes
     count = conn.execute("""
@@ -3076,7 +3275,7 @@ def import_legislation(conn: sqlite3.Connection):
                 ))
                 bill_count += 1
             except sqlite3.Error as e:
-                log.debug(f"  Bill insert error for {bill_id}: {e}")
+                log.warning(f"  Bill insert error for {bill_id}: {e}")
                 continue
 
             # Import actions
@@ -3096,8 +3295,8 @@ def import_legislation(conn: sqlite3.Connection):
                         action.get("source"),
                     ))
                     action_count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
             # Import subjects (BILLSTATUS: list of strings; API: nested dict)
             subjects_data = bill.get("subjects", detail.get("subjects", []))
@@ -3117,8 +3316,8 @@ def import_legislation(conn: sqlite3.Connection):
                             (bill_id, subj_name),
                         )
                         subject_count += 1
-                    except sqlite3.Error:
-                        pass
+                    except sqlite3.Error as e:
+                        log.warning(f"  insert error: {e}")
 
             # Import CBO cost estimates
             cbo_estimates = bill.get("cboCostEstimates", [])
@@ -3130,8 +3329,8 @@ def import_legislation(conn: sqlite3.Connection):
                             (bill_id, est.get("pubDate", "")[:10], est.get("title"), est.get("description"), est.get("url")),
                         )
                         cbo_count += 1
-                    except sqlite3.Error:
-                        pass
+                    except sqlite3.Error as e:
+                        log.warning(f"  insert error: {e}")
 
         conn.commit()
 
@@ -3185,7 +3384,7 @@ def import_ecfr(conn: sqlite3.Connection):
                 ))
                 section_count += 1
             except sqlite3.Error as e:
-                log.debug(f"  CFR insert error: {e}")
+                log.warning(f"  CFR insert error: {e}")
 
         conn.commit()
         log.info(f"  {parsed_file.name}: {len(sections):,} sections")
@@ -3252,8 +3451,8 @@ def import_congressional_record(conn: sqlite3.Connection):
                     ))
                     granule_count += 1
                     year_count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
         if year_count:
             conn.commit()
@@ -3329,8 +3528,8 @@ def import_congress_members(conn: sqlite3.Connection):
                 served_until,
             ))
             count += 1
-        except sqlite3.Error:
-            pass
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
 
     conn.commit()
     current = sum(1 for m in members if m.get("is_current"))
@@ -3559,8 +3758,8 @@ def import_stock_trades(conn: sqlite3.Connection):
                     amount, owner, comment, source_url, "P",
                 ))
                 total += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
         conn.commit()
         log.info(f"  Senate trades ({source_label}): {len(trades):,}")
 
@@ -3606,8 +3805,8 @@ def import_stock_trades(conn: sqlite3.Connection):
                     doc_id,
                 ))
                 house_tx_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
         conn.commit()
         total += house_tx_count
         log.info(f"  House PTR transactions (parsed): {house_tx_count:,}")
@@ -3658,8 +3857,8 @@ def import_stock_trades(conn: sqlite3.Connection):
                         filing.get("pdf_url", ""),
                     ))
                     house_count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
             conn.commit()
         total += house_count
         log.info(f"  House filings (index only): {house_count:,}")
@@ -3748,8 +3947,8 @@ def import_committees(conn: sqlite3.Connection):
                 (cid, c.get("name", ""), chamber, c.get("url", ""))
             )
             committee_count += 1
-        except sqlite3.Error:
-            pass
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
 
         # Subcommittees
         for sub in c.get("subcommittees", []):
@@ -3762,8 +3961,8 @@ def import_committees(conn: sqlite3.Connection):
                     (sub_id, sub.get("name", ""), chamber, sub.get("url", ""), cid)
                 )
                 committee_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
 
     conn.commit()
     log.info(f"  Committees: {committee_count}")
@@ -3788,8 +3987,8 @@ def import_committees(conn: sqlite3.Connection):
                      m.get("rank"))
                 )
                 member_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
     conn.commit()
 
     unique_members = conn.execute(
@@ -3852,7 +4051,8 @@ def import_hearings(conn: sqlite3.Connection):
                 h.get("pdf_url"),
             ))
             hearing_count += 1
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
             continue
 
         # Witnesses
@@ -3872,8 +4072,8 @@ def import_hearings(conn: sqlite3.Connection):
                         (pid, name, title, org, loc),
                     )
                     witness_count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
         # Members
         for m in h.get("members", []):
@@ -3886,8 +4086,8 @@ def import_hearings(conn: sqlite3.Connection):
                         (pid, mname, mrole),
                     )
                     member_count += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
         if hearing_count % 5000 == 0 and hearing_count > 0:
             conn.commit()
@@ -3940,7 +4140,8 @@ def import_crs_reports(conn: sqlite3.Connection):
                 r.get("html_url"),
             ))
             report_count += 1
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
             continue
 
         # Related bills
@@ -3955,8 +4156,8 @@ def import_crs_reports(conn: sqlite3.Connection):
                     (rid, bill.get("title"), congress, btype, bnumber, bill_id),
                 )
                 bill_ref_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
 
     conn.commit()
     log.info(f"  Done: {report_count:,} CRS reports, {bill_ref_count:,} bill references")
@@ -4038,7 +4239,8 @@ def import_nominations(conn: sqlite3.Connection):
                 n.get("vote_nay"),
             ))
             nom_count += 1
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
             continue
 
         # Actions
@@ -4049,8 +4251,8 @@ def import_nominations(conn: sqlite3.Connection):
                     (nom_id, act.get("actionDate"), act.get("text"), act.get("type")),
                 )
                 action_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
 
         if nom_count % 5000 == 0 and nom_count > 0:
             conn.commit()
@@ -4104,7 +4306,8 @@ def import_treaties(conn: sqlite3.Connection):
                 t.get("resolutionText"),
             ))
             treaty_count += 1
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
             continue
 
         # Actions
@@ -4115,8 +4318,8 @@ def import_treaties(conn: sqlite3.Connection):
                     (treaty_id, act.get("actionDate"), act.get("text"), act.get("type")),
                 )
                 action_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
 
     conn.commit()
     log.info(f"  Done: {treaty_count:,} treaties, {action_count:,} actions")
@@ -4171,7 +4374,8 @@ def import_gao_reports(conn: sqlite3.Connection):
                 g.get("sudocs"),
             ))
             count += 1
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            log.warning(f"  insert error: {e}")
             continue
 
         if count % 5000 == 0 and count > 0:
@@ -4213,7 +4417,8 @@ def import_gao_reports(conn: sqlite3.Connection):
                     url,
                 ))
                 direct_count += 1
-            except sqlite3.Error:
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
                 continue
 
         conn.commit()
@@ -4294,7 +4499,7 @@ def import_ig_reports(conn: sqlite3.Connection):
                 rec_count += 1
 
         except sqlite3.Error as e:
-            log.debug(f"  IG insert error for {report_id}: {e}")
+            log.warning(f"  IG insert error for {report_id}: {e}")
 
         if count % 5000 == 0 and count > 0:
             conn.commit()
@@ -4322,6 +4527,8 @@ STAGING_ENTITIES_DB = Path('/mnt/data/datadawn/staging/entities_phase_a.db')
 STAGING_DISBURSEMENTS_DB = Path('/mnt/data/datadawn/staging/disbursements/disbursements.db')
 STAGING_OGE_PAS_DB = Path('/mnt/data/datadawn/staging/oge_pas.db')
 STAGING_WH_VISITS_DB = Path('/mnt/data/datadawn/staging/wh_visits.db')
+PLUM_BOOK_DB = Path('/mnt/data/datadawn/openregs/plum_book/plum_book.db')
+WH_PERSONNEL_DB = Path('/mnt/data/datadawn/openregs/wh_personnel/wh_personnel.db')
 
 
 def _attach_ro(conn: sqlite3.Connection, db_path: Path, alias: str):
@@ -4468,8 +4675,70 @@ def import_staging_oge_pas(conn: sqlite3.Connection):
     return total
 
 
+def import_plum_book(conn: sqlite3.Connection):
+    """Copy Plum Book appointees (~38K rows × 6 editions) into main.
+
+    Plum Book = US Government Policy and Supporting Positions, published every
+    4 years post-election by the Senate HSGAC / House Oversight committees.
+    Lists ~9K political appointees per edition (PAS, PA, NA, SC, TA, XS).
+    Used as a primary-source roster for the executive-branch sub-cabinet layer
+    that DataDawn's other person tables don't cover. Feeds WH visitor matching
+    via `import_staging_wh_visits` (next step).
+    """
+    if not PLUM_BOOK_DB.exists():
+        log.info("Skipping Plum Book (plum_book.db not found — run scripts/32_plum_book.py)")
+        return 0
+    log.info("Importing Plum Book appointees...")
+    _attach_ro(conn, PLUM_BOOK_DB, 'plum')
+    n = _copy_table_with_schema(conn, 'plum', 'plum_book_appointees')
+    conn.commit()
+    conn.execute("DETACH DATABASE plum")
+    log.info(f"  plum_book_appointees: {n:,} rows")
+    return n
+
+
+def import_wh_personnel(conn: sqlite3.Connection):
+    """Copy WH personnel appointees (~5K rows × 11 annual reports) into main.
+
+    Source: annual reports to Congress under 5 USC § 5318 (each July 1, the
+    White House transmits name + status + salary + pay-basis + title of every
+    White House Office employee). Coverage on initial ship (2026-05-16):
+    2013, 2014, 2017–2025. Obama 2009-2012, 2015-2016 deferred (sourcing
+    follow-up — direct S3 returns 403, not on web.archive.org at canonical
+    paths). Run scripts/33_wh_personnel_reports.py to refresh.
+
+    This is a roster table — populated for future use by the unified
+    Plum-Book-+-WH-Personnel promotion into public_actors as
+    role_context='exec_branch_appointee' (pii_standard.md follow-up #5).
+    Not yet wired into wh_visits matching as a flag.
+    """
+    if not WH_PERSONNEL_DB.exists():
+        log.info("Skipping WH personnel (wh_personnel.db not found — run scripts/33_wh_personnel_reports.py)")
+        return 0
+    log.info("Importing WH personnel appointees...")
+    _attach_ro(conn, WH_PERSONNEL_DB, 'whp')
+    n = _copy_table_with_schema(conn, 'whp', 'wh_personnel_appointees')
+    conn.commit()
+    conn.execute("DETACH DATABASE whp")
+    log.info(f"  wh_personnel_appointees: {n:,} rows")
+    return n
+
+
 def import_staging_wh_visits(conn: sqlite3.Connection):
-    """Copy WH visitor logs (tour PII-redacted + policy visits with name)."""
+    """Copy WH visitor logs (tour PII-redacted + policy visits with name).
+
+    After copy, enforce the PII standard's enrich-then-redact rule
+    (bestpractices/pii_standard.md):
+      1. Tighten `visitor_is_lda_lobbyist` to unambiguous LDA names — drop the flag
+         when the name maps to >3 distinct registrants in `lobbying_filings`
+         (filters common-name surface matches like "John Thomas").
+      2. NULL `visitor_name_full` for any non-tour visitor that doesn't match a
+         `public_actors` row AND isn't a tightened LDA lobbyist.
+         `visitor_name_hash` is preserved so aggregate queries still work.
+
+    Reruns every build, so names un-redact automatically as `public_actors`
+    coverage grows (e.g., when SES/Plum Book staff are added).
+    """
     if not STAGING_WH_VISITS_DB.exists():
         log.info("Skipping WH visits staging")
         return 0
@@ -4482,6 +4751,153 @@ def import_staging_wh_visits(conn: sqlite3.Connection):
         total += n
     conn.commit()
     conn.execute("DETACH DATABASE wh_stg")
+
+    log.info("  Applying WH visitor PII redaction (per pii_standard.md)...")
+
+    # Add visitor_is_plum_book flag column if not already present
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(wh_visits)")}
+    if 'visitor_is_plum_book' not in cols:
+        conn.execute("ALTER TABLE wh_visits ADD COLUMN visitor_is_plum_book INTEGER DEFAULT 0")
+
+    # Pass 0: context-based redaction (overrides any name match).
+    # The visit context — TOUR/RECEPTION/HOLIDAY/VOLUNTEER/CEREMONY/PARTY in
+    # `description`, or `visitee_full = 'VISITORS OFFICE'` — indicates a social,
+    # ceremonial, or tour setting. Even named public actors at these events are
+    # attending in personal/social capacity, not their public role (PII rule (B)
+    # role-relevance check fails). The current `is_tour` heuristic in script 42
+    # only checks meeting_room + total_people, missing ~195K visits where
+    # description carries the only signal.
+    n_ctx = conn.execute("""
+        UPDATE main.wh_visits SET visitor_name_full = NULL
+        WHERE visitor_is_tour = 0
+          AND visitor_name_full IS NOT NULL
+          AND (
+              UPPER(COALESCE(description,'')) LIKE '%TOUR%'
+              OR UPPER(COALESCE(description,'')) LIKE '%RECEPTION%'
+              OR UPPER(COALESCE(description,'')) LIKE '%HOLIDAY%'
+              OR UPPER(COALESCE(description,'')) LIKE '%VOLUNTEER%'
+              OR UPPER(COALESCE(description,'')) LIKE '%CEREMONY%'
+              OR UPPER(COALESCE(description,'')) LIKE '%PARTY%'
+              OR UPPER(COALESCE(visitee_full,'')) = 'VISITORS OFFICE'
+          )
+    """).rowcount
+    log.info(f"    Pass 0 (context-based) redacted: {n_ctx:,}")
+
+    # Build temp lookup of unambiguous LDA names: ≤3 distinct registrant_ids.
+    # Filters out collision names ("John Thomas" appears across 6 distinct
+    # registrants → 6 different people, not one lobbyist).
+    conn.execute("DROP TABLE IF EXISTS temp.unambiguous_lda")
+    conn.execute("""
+        CREATE TEMP TABLE unambiguous_lda AS
+        SELECT UPPER(ll.lobbyist_name) AS upname
+        FROM lobbying_lobbyists ll
+        JOIN lobbying_filings lf ON lf.filing_uuid = ll.filing_uuid
+        WHERE ll.lobbyist_name IS NOT NULL
+        GROUP BY UPPER(ll.lobbyist_name)
+        HAVING COUNT(DISTINCT lf.registrant_id) <= 3
+    """)
+    conn.execute("CREATE INDEX temp.idx_ula ON unambiguous_lda(upname)")
+    n_lda_clean = conn.execute("SELECT COUNT(*) FROM unambiguous_lda").fetchone()[0]
+    log.info(f"    Unambiguous LDA names (≤3 registrants): {n_lda_clean:,}")
+
+    n_tightened = conn.execute("""
+        UPDATE wh_visits SET visitor_is_lda_lobbyist = 0
+        WHERE visitor_is_lda_lobbyist = 1
+          AND UPPER(visitor_name_full) NOT IN (SELECT upname FROM unambiguous_lda)
+    """).rowcount
+    log.info(f"    Ambiguous-name LDA flags cleared: {n_tightened:,}")
+
+    # Build temp lookup of unambiguous Plum Book names. Match on (UPPER(last),
+    # UPPER(first)). Require the (last,first) pair to map to a single canonical
+    # full name in plum_book_appointees — same person across editions is fine,
+    # but two distinct people sharing "John Smith" is filtered out.
+    has_plum = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='plum_book_appointees'"
+    ).fetchone() is not None
+    if has_plum:
+        conn.execute("DROP TABLE IF EXISTS temp.unambiguous_plum")
+        conn.execute("""
+            CREATE TEMP TABLE unambiguous_plum AS
+            SELECT UPPER(name_last) AS ln, UPPER(name_first) AS fn,
+                   COUNT(DISTINCT name_normalized) AS n_canonical
+            FROM plum_book_appointees
+            WHERE name_last IS NOT NULL AND name_first IS NOT NULL
+              AND LENGTH(name_last)>1 AND LENGTH(name_first)>1
+              AND is_vacant=0 AND is_career=0
+            GROUP BY UPPER(name_last), UPPER(name_first)
+            HAVING n_canonical = 1
+        """)
+        conn.execute("CREATE INDEX temp.idx_upm ON unambiguous_plum(ln, fn)")
+        n_plum_clean = conn.execute("SELECT COUNT(*) FROM unambiguous_plum").fetchone()[0]
+        log.info(f"    Unambiguous Plum Book (last,first) keys: {n_plum_clean:,}")
+
+        # Need to derive last/first from visitor_name_full = "First Middle Last"
+        # Take first whitespace token as first, last whitespace token as last
+        n_plum_match = conn.execute("""
+            UPDATE wh_visits SET visitor_is_plum_book = 1
+            WHERE visitor_is_tour = 0
+              AND visitor_name_full IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM unambiguous_plum up
+                  WHERE up.ln = UPPER(
+                      CASE WHEN INSTR(visitor_name_full, ' ') > 0
+                           THEN substr(visitor_name_full,
+                                       LENGTH(visitor_name_full)
+                                       - LENGTH(rtrim(visitor_name_full,
+                                           replace(visitor_name_full, ' ', ''))) + 1)
+                           ELSE visitor_name_full END)
+                    AND up.fn = UPPER(
+                      CASE WHEN INSTR(visitor_name_full, ' ') > 0
+                           THEN substr(visitor_name_full, 1,
+                                       INSTR(visitor_name_full, ' ') - 1)
+                           ELSE visitor_name_full END)
+              )
+        """).rowcount
+        log.info(f"    Plum Book matches flagged: {n_plum_match:,}")
+    else:
+        log.info("    Plum Book table not present — skipping Plum Book matching")
+
+    # Delta-logging: compare what the new exec_branch_appointee matcher path
+    # (visitor_public_actor_id IS NOT NULL set by 45_wh_visitor_to_actor.py)
+    # picks up vs the old Pass-2 Plum-Book flag (visitor_is_plum_book=1).
+    # This is the Phase A → Phase B handoff signal: when the matcher path
+    # subsumes Pass 2 with no regression, Phase B can drop the Plum Book
+    # column + Pass 2 entirely. (pii_standard.md follow-up #5)
+    log.info("    Delta-log: matcher path vs Plum Book flag (non-tour, named):")
+    delta_row = conn.execute("""
+        SELECT
+            SUM(CASE WHEN visitor_public_actor_id IS NOT NULL AND visitor_is_plum_book=1 THEN 1 ELSE 0 END) AS both,
+            SUM(CASE WHEN visitor_public_actor_id IS NOT NULL AND COALESCE(visitor_is_plum_book,0)=0 THEN 1 ELSE 0 END) AS matcher_only,
+            SUM(CASE WHEN visitor_public_actor_id IS NULL AND visitor_is_plum_book=1 THEN 1 ELSE 0 END) AS plum_only,
+            SUM(CASE WHEN visitor_public_actor_id IS NULL AND COALESCE(visitor_is_plum_book,0)=0 AND COALESCE(visitor_is_lda_lobbyist,0)=0 THEN 1 ELSE 0 END) AS neither
+        FROM wh_visits
+        WHERE visitor_is_tour = 0 AND visitor_name_full IS NOT NULL
+    """).fetchone()
+    log.info(f"      both flagged (matcher AND plum):   {delta_row[0] or 0:,}")
+    log.info(f"      matcher-only (new path):           {delta_row[1] or 0:,}")
+    log.info(f"      plum-only (Pass 2 covers a gap):   {delta_row[2] or 0:,}")
+    log.info(f"      neither (will be redacted unless LDA): {delta_row[3] or 0:,}")
+
+    n_redacted = conn.execute("""
+        UPDATE wh_visits SET visitor_name_full = NULL
+        WHERE visitor_is_tour = 0
+          AND visitor_public_actor_id IS NULL
+          AND COALESCE(visitor_is_lda_lobbyist, 0) = 0
+          AND COALESCE(visitor_is_plum_book, 0) = 0
+          AND visitor_name_full IS NOT NULL
+    """).rowcount
+    log.info(f"    Non-tour visitor names redacted: {n_redacted:,}")
+
+    n_kept = conn.execute("""
+        SELECT COUNT(*) FROM wh_visits
+        WHERE visitor_is_tour = 0 AND visitor_name_full IS NOT NULL
+    """).fetchone()[0]
+    log.info(f"    Non-tour visits with name retained: {n_kept:,}")
+
+    conn.execute("DROP TABLE temp.unambiguous_lda")
+    if has_plum:
+        conn.execute("DROP TABLE temp.unambiguous_plum")
+    conn.commit()
     log.info(f"  WH visits import complete: {total:,} rows")
     return total
 
@@ -4539,8 +4955,8 @@ def import_cosponsors(conn: sqlite3.Connection):
                          cs.get("sponsorshipDate", ""), is_original)
                     )
                     total += 1
-                except sqlite3.Error:
-                    pass
+                except sqlite3.Error as e:
+                    log.warning(f"  insert error: {e}")
 
         conn.commit()
 
@@ -4583,8 +4999,8 @@ def build_crec_junction_tables(conn: sqlite3.Connection):
                     (granule_id, name, s.get("role", ""))
                 )
                 speaker_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
     conn.commit()
     log.info(f"  Speakers: {speaker_count:,} entries")
 
@@ -4629,8 +5045,8 @@ def build_crec_junction_tables(conn: sqlite3.Connection):
                                 if result.rowcount > 0:
                                     bioguide_updates += result.rowcount
                                     break
-                            except sqlite3.Error:
-                                pass
+                            except sqlite3.Error as e:
+                                log.warning(f"  insert error: {e}")
         conn.commit()
     log.info(f"  Bioguide enrichment: {bioguide_updates:,} speakers linked")
 
@@ -4665,8 +5081,8 @@ def build_crec_junction_tables(conn: sqlite3.Connection):
                     (granule_id, congress_int, bill_type, number_int, bill_id)
                 )
                 bill_count += 1
-            except sqlite3.Error:
-                pass
+            except sqlite3.Error as e:
+                log.warning(f"  insert error: {e}")
     conn.commit()
     log.info(f"  Bill references: {bill_count:,} entries")
 
@@ -5062,34 +5478,13 @@ def materialize_slow_views(conn: sqlite3.Connection):
             "CREATE INDEX idx_bft_mentions ON bills_floor_time(floor_mentions DESC)",
             "CREATE INDEX idx_bft_bill ON bills_floor_time(bill_id)",
         ]),
-        ("lobbying_by_year", """
-            SELECT
-                filing_year,
-                COUNT(DISTINCT filing_uuid) AS filing_count,
-                COUNT(DISTINCT client_name) AS unique_clients,
-                COUNT(DISTINCT registrant_name) AS unique_registrants,
-                SUM(income_amount) AS total_income_reported,
-                SUM(expense_amount) AS total_expense_reported
-            FROM lobbying_activities
-            WHERE filing_year IS NOT NULL
-            GROUP BY filing_year
-        """, []),
-        ("top_lobbying_clients", """
-            SELECT
-                client_name,
-                COUNT(DISTINCT filing_uuid) AS filing_count,
-                COUNT(DISTINCT registrant_name) AS firms_hired,
-                COUNT(DISTINCT issue_code) AS issue_areas,
-                SUM(income_amount) AS total_reported_income,
-                MIN(filing_year) AS first_year,
-                MAX(filing_year) AS last_year,
-                GROUP_CONCAT(DISTINCT issue_code) AS issue_codes
-            FROM lobbying_activities
-            WHERE income_amount > 0
-            GROUP BY client_name
-        """, [
-            "CREATE INDEX idx_tlc_income ON top_lobbying_clients(total_reported_income DESC)",
-        ]),
+        # lobbying_by_year + top_lobbying_clients removed 2026-05-22 (S-C1 fix).
+        # Both were precomputed from lobbying_activities.income_amount which carried
+        # the filing-level value replicated across activity rows (~2-3× inflation).
+        # Neither had any downstream consumer — verified by full-codebase grep and
+        # 13-day Caddy access-log review. lobbying.db's lobbying_year_summary and
+        # lobbying_client_summary serve the canned-query surface from the canonical
+        # column. See decisions_log §64 and incident_log 2026-05-22.
         ("spending_by_agency", """
             SELECT
                 agency, sub_agency, award_category,
@@ -5387,17 +5782,29 @@ def build_summary_tables(conn: sqlite3.Connection):
     """Build pre-computed summary tables for explore page browse tabs."""
     log.info("Building pre-computed summary tables...")
 
-    # Lobbying issue summary (replaces ~29s GROUP BY on lobbying_activities)
+    # Lobbying issue summary — LD-2 quarterly activity scope only (S-C1 fix
+    # 2026-05-22). Per-issue dedup on filing_uuid joined to filings; sums
+    # filing-level income_amount once per (issue, filing) pair.
     conn.execute("DROP TABLE IF EXISTS lobbying_issue_summary")
     conn.execute("""
         CREATE TABLE lobbying_issue_summary AS
-        SELECT la.issue_code, ic.description,
-            COUNT(*) AS filing_count,
-            COUNT(DISTINCT la.client_name) AS client_count,
-            CAST(SUM(la.income_amount) AS INTEGER) AS total_income
-        FROM lobbying_activities la
-        LEFT JOIN lobbying_issue_codes ic ON la.issue_code = ic.code
-        GROUP BY la.issue_code
+        WITH per_issue_per_filing AS (
+            SELECT DISTINCT
+                la.issue_code,
+                la.filing_uuid,
+                la.client_name,
+                f.income_amount
+            FROM lobbying_activities la
+            JOIN lobbying_filings f ON f.filing_uuid = la.filing_uuid
+            WHERE f.filing_type GLOB '[1234Q]*'
+        )
+        SELECT p.issue_code, ic.description,
+            COUNT(DISTINCT p.filing_uuid) AS filing_count,
+            COUNT(DISTINCT p.client_name) AS client_count,
+            CAST(SUM(p.income_amount) AS INTEGER) AS total_income
+        FROM per_issue_per_filing p
+        LEFT JOIN lobbying_issue_codes ic ON p.issue_code = ic.code
+        GROUP BY p.issue_code
         ORDER BY filing_count DESC
     """)
     conn.execute("CREATE UNIQUE INDEX idx_lis_code ON lobbying_issue_summary(issue_code)")
@@ -5521,19 +5928,32 @@ def build_summary_tables(conn: sqlite3.Connection):
     conn.commit()
     log.info(f"  earmark_spending_crossref: {conn.execute('SELECT COUNT(*) FROM earmark_spending_crossref').fetchone()[0]:,} rows")
 
-    # Pre-compute normalized lobby client aggregates for fast joins
-    # Uses pre-computed client_name_normalized column
+    # Pre-compute normalized lobby client aggregates for fast joins.
+    # Income comes from lobbying_filings (filing-level canonical), filtered to
+    # LD-2 quarterly activity reports. See decisions_log §64 (2026-05-22 S-C1 fix).
     log.info("  Pre-computing normalized lobby client names...")
     conn.execute("DROP TABLE IF EXISTS _tmp_lobby_clients")
     conn.execute("""
         CREATE TEMP TABLE _tmp_lobby_clients AS
-        SELECT client_name_normalized AS norm_name,
-            COUNT(DISTINCT filing_uuid) AS lobby_filings,
-            SUM(income_amount) AS total_lobby_income,
-            GROUP_CONCAT(DISTINCT issue_code) AS lobby_issues
-        FROM lobbying_activities
-        WHERE client_name_normalized IS NOT NULL AND client_name_normalized != ''
-        GROUP BY client_name_normalized
+        WITH client_income AS (
+            SELECT UPPER(TRIM(client_name)) AS norm_name,
+                COUNT(*) AS lobby_filings,
+                CAST(SUM(income_amount) AS INTEGER) AS total_lobby_income
+            FROM lobbying_filings
+            WHERE filing_type GLOB '[1234Q]*' AND income_amount > 0
+            GROUP BY UPPER(TRIM(client_name))
+        ),
+        client_issues AS (
+            SELECT client_name_normalized AS norm_name,
+                GROUP_CONCAT(DISTINCT issue_code) AS lobby_issues
+            FROM lobbying_activities
+            WHERE client_name_normalized IS NOT NULL AND client_name_normalized != ''
+            GROUP BY client_name_normalized
+        )
+        SELECT ci.norm_name, ci.lobby_filings, ci.total_lobby_income, cis.lobby_issues
+        FROM client_income ci
+        LEFT JOIN client_issues cis ON cis.norm_name = ci.norm_name
+        WHERE ci.norm_name IS NOT NULL AND ci.norm_name != ''
     """)
     conn.execute("CREATE INDEX _tmp_lc_idx ON _tmp_lobby_clients(norm_name)")
     log.info(f"  Lobby client lookup: {conn.execute('SELECT COUNT(*) FROM _tmp_lobby_clients').fetchone()[0]:,} unique names")
@@ -5745,23 +6165,28 @@ def build_summary_tables(conn: sqlite3.Connection):
                     ) AS rn
                 FROM congress_members
             )
+            -- Income comes from lobbying_filings.income_amount (canonical,
+            -- filing-level) filtered to LD-2 quarterly activity reports.
+            -- Pre-2026-05-22 this summed lobbying_activities.income_amount which
+            -- inflated 2-3x via activity-row replication. See decisions_log §64.
             SELECT
                 bm.bioguide_id,
                 bm.full_name,
                 bm.party,
                 bm.state,
                 bm.chamber AS congress_chamber,
-                COUNT(DISTINCT la.filing_uuid) AS lobbying_filing_count,
-                COUNT(DISTINCT la.client_name) AS client_count,
-                COUNT(DISTINCT la.registrant_name) AS firm_count,
-                MIN(la.filing_year) AS first_lobbying_year,
-                MAX(la.filing_year) AS last_lobbying_year,
-                SUM(COALESCE(la.income_amount, 0)) AS total_reported_income,
-                GROUP_CONCAT(DISTINCT la.registrant_name) AS lobbying_firms,
+                COUNT(DISTINCT f.filing_uuid) AS lobbying_filing_count,
+                COUNT(DISTINCT f.client_name) AS client_count,
+                COUNT(DISTINCT f.registrant_name) AS firm_count,
+                MIN(f.filing_year) AS first_lobbying_year,
+                MAX(f.filing_year) AS last_lobbying_year,
+                CAST(SUM(COALESCE(f.income_amount, 0)) AS INTEGER) AS total_reported_income,
+                GROUP_CONCAT(DISTINCT f.registrant_name) AS lobbying_firms,
                 MIN(pf.covered_position) AS covered_position_sample
             FROM position_filter pf
             JOIN best_member bm ON UPPER(bm.full_name) = pf.lobbyist_name AND bm.rn = 1
-            JOIN lobbying_activities la ON pf.filing_uuid = la.filing_uuid
+            JOIN lobbying_filings f ON pf.filing_uuid = f.filing_uuid
+            WHERE f.filing_type GLOB '[1234Q]*'
             GROUP BY bm.bioguide_id
             ORDER BY lobbying_filing_count DESC
         """)
@@ -6135,8 +6560,8 @@ def validate_dates(conn: sqlite3.Connection):
                         f'CAST({extract} AS INTEGER) < 1900 OR CAST({extract} AS INTEGER) > 2050) LIMIT 3'
                     ).fetchall()
                     outlier_findings.append((t, col, n_outlier, [e[0] for e in examples]))
-            except Exception:
-                pass
+            except (sqlite3.OperationalError, ValueError) as e:
+                log.warning(f"  validate_dates skipped {t}.{col}: {e}")
 
     if outlier_findings:
         log.warning(f"\n  ⚠  {len(outlier_findings)} (table, column) pairs have date outliers:")
@@ -6144,6 +6569,55 @@ def validate_dates(conn: sqlite3.Connection):
             log.warning(f"    {t}.{col}: {n:,} rows outside [1900, 2050]. e.g. {samples}")
     else:
         log.info("  ✓ No date outliers outside [1900, 2050] across any table.")
+
+    # 1b. Future-dated rows in headline columns — likely upstream typos.
+    # We don't filter them (primary-source faithfulness per data_sourcing_policy.md)
+    # but surface them as a warning. validate_freshness already clamps with
+    # WHERE col <= date('now') so it isn't fooled by these. Threshold +30d
+    # leaves headroom for FR's small publish-ahead window. spending_awards
+    # is intentionally excluded — federal contract start_dates are legitimately
+    # future-dated for fiscal-year-out awards (415 rows in May 2026 build).
+    # Pattern surfaced 2026-05-16 after finding the F-35 IG report (2026-12-19)
+    # and an AA regs.gov doc (2026-12-13). See incident_log.md.
+    future_date_columns = [
+        ('federal_register', 'publication_date'),
+        ('comments', 'posted_date'),
+        ('documents', 'posted_date'),
+        ('dockets', 'last_modified'),
+        ('legislation', 'introduced_date'),
+        ('legislation_actions', 'action_date'),
+        ('congressional_record', 'date'),
+        ('ig_reports', 'date_issued'),
+        ('oira_reviews', 'date_received'),
+        ('oira_meetings', 'meeting_date_iso'),
+        ('stock_trades', 'transaction_date'),
+        ('presidential_documents', 'publication_date'),
+        ('fec_operating_expenditures', 'transaction_dt_iso'),
+    ]
+    future_findings = []
+    for t, col in future_date_columns:
+        try:
+            n_future = conn.execute(
+                f'SELECT COUNT(*) FROM "{t}" WHERE "{col}" > date("now", "+30 days") '
+                f'AND "{col}" IS NOT NULL AND "{col}" != ""'
+            ).fetchone()[0]
+            if n_future > 0:
+                examples = conn.execute(
+                    f'SELECT DISTINCT "{col}" FROM "{t}" WHERE "{col}" > date("now", "+30 days") '
+                    f'ORDER BY "{col}" DESC LIMIT 3'
+                ).fetchall()
+                future_findings.append((t, col, n_future, [e[0] for e in examples]))
+        except sqlite3.OperationalError as e:
+            log.warning(f"  validate_dates future-check skipped {t}.{col}: {e}")
+
+    if future_findings:
+        total_future = sum(n for _, _, n, _ in future_findings)
+        log.warning(f"\n  ⚠  FUTURE_DATE_WARNING: {total_future:,} rows across {len(future_findings)} (table, column) pairs are dated >30d in the future (likely upstream typos):")
+        for t, col, n, samples in future_findings:
+            log.warning(f"    {t}.{col}: {n:,} rows. Latest: {samples}")
+        log.info("    (data preserved per primary-source policy; queries that need real freshness use WHERE col <= date('now'))")
+    else:
+        log.info("  ✓ No future-dated rows >30d in headline date columns.")
 
     # 2. policy_area coverage for current-year bills (catches Congress.gov pipeline breaks)
     from datetime import datetime
@@ -6208,10 +6682,14 @@ def validate_freshness(conn: sqlite3.Connection):
          "actions during session; 14d covers brief recess + 1 missed Sat"),
         ("spending_awards", "start_date", 90,
          "USAspending: lagging indicator, 90d typical lag from action to publish"),
-        # fec_operating_expenditures excluded: transaction_dt is MM/DD/YYYY
-        # not ISO, so SQLite's julianday() can't parse it for the age math.
-        # Source also contains clearly-bad dates (1416, 2114). Re-add when
-        # we either normalize to ISO at ingest or add MDY-aware comparison.
+        # fec_operating_expenditures.transaction_dt is MM/DD/YYYY from FEC.
+        # Audit H6 (2026-05-15) added a transaction_dt_iso sidecar column
+        # populated at build time (see import_fec), so this column IS now
+        # julianday-parseable. Threshold 120d: FEC is a lagging indicator —
+        # quarterly reports cover the prior cycle and FEC publishes them
+        # within ~30d after deadline, so 90d cadence + 30d safety.
+        ("fec_operating_expenditures", "transaction_dt_iso", 120,
+         "FEC opex: quarterly + 30d publish lag; 120d covers the cadence"),
         ("stock_trades", "transaction_date", 60,
          "STOCK Act 45-day disclosure window + 15d safety"),
         ("legislation", "introduced_date", 14,
@@ -6228,17 +6706,24 @@ def validate_freshness(conn: sqlite3.Connection):
          "monthly pipeline (15th); 45d covers monthly cadence + 1 missed run"),
         ("dockets", "last_modified", 45,
          "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
-         "Vulnerable to script 02 state-tracker bug — see incident_log 2026-05-02"),
+         "Script 02 state-tracker bug fixed 2026-05-16 via refresh_recent_dockets + UPSERT"),
+        ("documents", "posted_date", 45,
+         "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
+         "Added 2026-05-16 alongside the dockets fix — same completion-cache class"),
         ("oira_reviews", "date_received", 45,
          "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
-         "Vulnerable to script 22 state-tracker bug"),
+         "Script 22 YTD/UNDER_REVIEW skip-if-exists fixed 2026-05-16"),
         ("ig_reports", "date_issued", 45,
          "monthly pipeline; 45d covers monthly cadence + 1 missed run. "
-         "Vulnerable to script 21 listing-complete bug"),
-        # oira_meetings.meeting_date deliberately omitted: date format is
-        # 'DD-MMM-YY' (e.g. '20-NOV-24'), not julianday-parseable. The freshness
-        # check would silently skip and emit a log line. Re-add once we either
-        # normalize meeting_date to ISO-8601 at ingest or add MDY-aware comparison.
+         "Script 21 listing-complete one-shot fixed 2026-05-16"),
+        # oira_meetings.meeting_date is 'DD-MMM-YY' from reginfo.gov. Audit H6
+        # (2026-05-15) added a meeting_date_iso sidecar column populated at
+        # build time (see import_oira), so this column IS now julianday-parseable.
+        # Threshold 45d matches the other monthly-pipeline tables — OIRA meetings
+        # are published within days of occurring, and the monthly cron + 1 missed
+        # run buffer is what we care about catching.
+        ("oira_meetings", "meeting_date_iso", 45,
+         "monthly pipeline; 45d covers monthly cadence + 1 missed run"),
     ]
 
     findings = []
@@ -6266,7 +6751,7 @@ def validate_freshness(conn: sqlite3.Connection):
             if age_days is None:
                 # Date string unparseable by julianday (e.g. MM/DD/YYYY).
                 # validate_dates handles outliers; here we log so future-maintainers
-                # knows the freshness check silently skipped this table.
+                # know the freshness check silently skipped this table.
                 log.info(
                     f"  - {table}.{date_col} skipped (date format not "
                     f"julianday-parseable; latest raw value was {latest!r})"
@@ -6295,6 +6780,112 @@ def validate_freshness(conn: sqlite3.Connection):
         )
     else:
         log.info(f"\n  ✓ All {len(expectations)} freshness expectations met.")
+
+
+def validate_schema_fingerprint(conn: sqlite3.Connection):
+    """Post-build schema-drift detector (audit M5, 2026-05-15).
+
+    Computes a SHA-256 fingerprint of the current schema and compares it
+    against the most recent local backup's manifest sidecar. On drift,
+    logs a SCHEMA_DRIFT_WARNING with the table-level diff (added/dropped/
+    altered) so the operator can confirm whether the change was intended.
+
+    Algorithm must match deploy.sh's manifest writer (deploy.sh:163-168).
+    Manifest sidecars are written by propagate_backup_to_local_and_b2;
+    `schema_objects` was added to that manifest 2026-05-15 as part of M5
+    to make table-level diff possible (the fingerprint alone tells you
+    *that* something changed, not *what*).
+
+    Warn-only — schema drift is usually intentional (new column, new
+    table). Aborting the build on drift would cause every legitimate
+    schema change to require a code-side override. The operator reviews
+    the warning; if expected, no action; if not, investigate.
+    """
+    log.info("\n" + "=" * 60)
+    log.info("SCHEMA FINGERPRINT VALIDATION")
+    log.info("=" * 60)
+
+    import hashlib, json
+    from pathlib import Path
+
+    # Compute current fingerprint — keep in lockstep with deploy.sh.
+    schema_rows = conn.execute(
+        "SELECT type, name, sql FROM sqlite_schema "
+        "WHERE sql IS NOT NULL ORDER BY type, name"
+    ).fetchall()
+    schema_text = "\n".join(f"{t}\t{n}\t{s}" for t, n, s in schema_rows)
+    current_fp = hashlib.sha256(schema_text.encode()).hexdigest()
+    current_objects = {f"{t}:{n}": s for t, n, s in schema_rows}
+    log.info(f"  Current fingerprint: {current_fp[:16]}... ({len(current_objects)} objects)")
+
+    backup_dir = Path(__file__).resolve().parent.parent / "backups"
+    if not backup_dir.exists():
+        log.info(f"  (no local backups dir at {backup_dir}; skipping drift check)")
+        return
+
+    manifests = sorted(
+        backup_dir.glob("openregs-predeploy-*.db.manifest.json"),
+        key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    if not manifests:
+        log.info("  (no manifest sidecars in local backups yet — manifest writing")
+        log.info("   started 2026-05-15; baseline established after next deploy.)")
+        return
+
+    prior = manifests[0]
+    try:
+        prior_manifest = json.load(open(prior))
+        prior_fp = prior_manifest.get("schema_fingerprint_sha256")
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning(f"  Could not read prior manifest {prior.name}: {e}")
+        return
+
+    if not prior_fp:
+        log.warning(f"  Prior manifest {prior.name} has no schema_fingerprint_sha256 field; skipping.")
+        return
+
+    log.info(f"  Prior fingerprint:   {prior_fp[:16]}... (from {prior.name})")
+
+    if current_fp == prior_fp:
+        log.info("  ✓ No schema drift since last build.")
+        return
+
+    # Drift! Try to enumerate what changed using prior schema_objects.
+    log.warning("  ⚠  SCHEMA_DRIFT_WARNING: schema fingerprint changed since last build.")
+    log.warning(f"     Prior: {prior.name}")
+    log.warning(f"     Prior timestamp: {prior_manifest.get('manifest_timestamp_utc', 'unknown')}")
+
+    prior_objects = prior_manifest.get("schema_objects", {})
+    if not prior_objects:
+        log.warning("     (prior manifest predates schema_objects field — cannot show object diff)")
+        log.warning("     Inspect schema manually if change was unexpected.")
+        return
+
+    added = sorted(current_objects.keys() - prior_objects.keys())
+    dropped = sorted(prior_objects.keys() - current_objects.keys())
+    altered = sorted(
+        k for k in current_objects.keys() & prior_objects.keys()
+        if current_objects[k] != prior_objects[k]
+    )
+
+    if added:
+        log.warning(f"     Added ({len(added)}):")
+        for k in added[:20]:
+            log.warning(f"       + {k}")
+        if len(added) > 20:
+            log.warning(f"       ... and {len(added) - 20} more")
+    if dropped:
+        log.warning(f"     Dropped ({len(dropped)}) — investigate if unexpected:")
+        for k in dropped[:20]:
+            log.warning(f"       - {k}")
+        if len(dropped) > 20:
+            log.warning(f"       ... and {len(dropped) - 20} more")
+    if altered:
+        log.warning(f"     Altered DDL ({len(altered)}):")
+        for k in altered[:20]:
+            log.warning(f"       ~ {k}")
+        if len(altered) > 20:
+            log.warning(f"       ... and {len(altered) - 20} more")
 
 
 def print_stats(conn: sqlite3.Connection):
@@ -7166,9 +7757,13 @@ def create_performance_indexes(conn: sqlite3.Connection):
     These give 100-1000x speedups on member profile and cross-reference queries.
     """
     log.info("Creating performance indexes...")
+    # Note: removed `idx_member_votes_vote ON member_votes(vote_id)` 2026-05-12 —
+    # member_votes has no vote_id column (uses compound key
+    # `(congress, chamber, session, roll_call_number)` covered by idx_mv_vote
+    # at schema-creation time, plus idx_mv_bioguide for the member-side lookup).
+    # The orphan was logging "Index skipped: no such column: vote_id" on every
+    # build; the intended access patterns are already covered.
     indexes = [
-        # Member profile queries (votes) — idx_mv_bioguide covers bioguide_id
-        "CREATE INDEX IF NOT EXISTS idx_member_votes_vote ON member_votes(vote_id)",
         # Hearing queries — idx_hw_package and idx_hm_bioguide cover witnesses/members
         "CREATE INDEX IF NOT EXISTS idx_hearing_members_package ON hearing_members(package_id)",
         # Lobbying contributions
@@ -7226,8 +7821,14 @@ def validate_pipeline():
         "30_industry_classifier",
         "31_trade_association_tagging",
         "32_data_cleanup_pass",
+        "32_plum_book",
         "33_uei_entity_creation",
+        "33_wh_personnel_reports",
+        "34_promote_exec_appointees",
+        "35_sec_form4_parser",
         "36_form4_to_public_actors",
+        "37_bmf_parent_ein_backfill",
+        "38_gleif_international_match",
         "39_naics_from_usaspending_detail",
         "40_congressional_disbursements_download",
         "41_parse_house_disbursements",
@@ -7245,6 +7846,14 @@ def validate_pipeline():
             warnings.append(f"ORPHAN SCRIPT: {py_file.name} is not in the known scripts list — update validate_pipeline() and PIPELINE.md")
 
     # -- Check 2: Source path existence --
+    # Scripts 25 + 26 (government_units, bmf_groups) added 2026-05-15 (audit M2).
+    # Their outputs are real source DBs that get ATTACHed in build via
+    # import_government_units / import_bmf_groups. Without these entries, a
+    # quarterly-refresh miss only surfaced as a floor failure on government_units
+    # (and bmf_group_* had no floor coverage at all). Scripts 27-29 are
+    # one-shot curation runs (tribes/state-agencies/acronyms), not
+    # quarterly refreshes — they mutate the entity scratch DB which is
+    # tracked separately under entity-resolution pipeline freshness.
     expected_sources = {
         "Federal Register": FR_DIR,
         "Dockets": DOCKETS_DIR,
@@ -7270,18 +7879,26 @@ def validate_pipeline():
         "GAO Direct": GAO_DIRECT_DIR,
         "IG Reports": IG_DIR,
         "Earmarks": EARMARKS_DB,
+        "Government Units": GOVERNMENT_UNITS_DB,
+        "BMF Group Exemptions": BMF_GROUPS_DB,
     }
     for name, path in expected_sources.items():
         if not path.exists():
             warnings.append(f"MISSING SOURCE: {name} — expected at {path}")
 
     # -- Check 3: Stale data detection --
+    # Stale thresholds reflect each source's natural refresh cadence.
+    # GUS = Census Government Units Survey, refreshed every ~5 yr, so 400d
+    # gives ~13mo headroom before warning. BMF groups = IRS quarterly refresh,
+    # 100d warns if a quarterly refresh slipped (90d cycle + 10d grace).
     stale_thresholds = {
         FR_DIR: ("Federal Register", 7),
         COMMENTS_DIR: ("Comments", 7),
         CONGRESS_DIR: ("Legislation", 30),
         LOBBYING_DB: ("Lobbying", 90),
         FEC_DB: ("FEC", 90),
+        GOVERNMENT_UNITS_DB: ("Government Units", 400),
+        BMF_GROUPS_DB: ("BMF Group Exemptions", 100),
     }
     for path, (name, max_days) in stale_thresholds.items():
         if path.exists():
@@ -7363,7 +7980,8 @@ def main():
         # distinctly from the overall build status.
         staging_failures = []
         for fn in (import_staging_entities, import_staging_disbursements,
-                   import_staging_oge_pas, import_staging_wh_visits):
+                   import_staging_oge_pas, import_plum_book,
+                   import_wh_personnel, import_staging_wh_visits):
             try:
                 fn(conn)
             except Exception as e:
@@ -7394,6 +8012,7 @@ def main():
         validate_critical_tables(conn)  # fail-loud; aborts on missing/undersized
         validate_dates(conn)
         validate_freshness(conn)  # warn-only; emits FRESHNESS_WARNING markers for hc.io
+        validate_schema_fingerprint(conn)  # warn-only; emits SCHEMA_DRIFT_WARNING (M5, 2026-05-15)
         elapsed = time.time() - start
         save_build_report(conn, elapsed)
         generate_audit_report(conn)

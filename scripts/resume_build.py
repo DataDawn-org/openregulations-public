@@ -29,18 +29,32 @@ log = logging.getLogger(__name__)
 def build_remaining_summary_tables(conn):
     """Build the 7 summary tables that were not completed."""
 
-    # Pre-compute normalized names for fast joins
+    # Pre-compute normalized names for fast joins.
+    # Income from lobbying_filings (canonical filing-level), filtered to LD-2.
+    # See decisions_log §64 (2026-05-22 S-C1 fix); mirrors 05_build_database.py.
     log.info("Pre-computing normalized lobby client names...")
     conn.execute("DROP TABLE IF EXISTS _tmp_lobby_clients")
     conn.execute("""
         CREATE TEMP TABLE _tmp_lobby_clients AS
-        SELECT UPPER(TRIM(client_name)) AS norm_name,
-            COUNT(DISTINCT filing_uuid) AS lobby_filings,
-            SUM(income_amount) AS total_lobby_income,
-            GROUP_CONCAT(DISTINCT issue_code) AS lobby_issues
-        FROM lobbying_activities
-        WHERE client_name IS NOT NULL AND TRIM(client_name) != ''
-        GROUP BY UPPER(TRIM(client_name))
+        WITH client_income AS (
+            SELECT UPPER(TRIM(client_name)) AS norm_name,
+                COUNT(*) AS lobby_filings,
+                CAST(SUM(income_amount) AS INTEGER) AS total_lobby_income
+            FROM lobbying_filings
+            WHERE filing_type GLOB '[1234Q]*' AND income_amount > 0
+              AND client_name IS NOT NULL AND TRIM(client_name) != ''
+            GROUP BY UPPER(TRIM(client_name))
+        ),
+        client_issues AS (
+            SELECT UPPER(TRIM(client_name)) AS norm_name,
+                GROUP_CONCAT(DISTINCT issue_code) AS lobby_issues
+            FROM lobbying_activities
+            WHERE client_name IS NOT NULL AND TRIM(client_name) != ''
+            GROUP BY UPPER(TRIM(client_name))
+        )
+        SELECT ci.norm_name, ci.lobby_filings, ci.total_lobby_income, cis.lobby_issues
+        FROM client_income ci
+        LEFT JOIN client_issues cis ON cis.norm_name = ci.norm_name
     """)
     conn.execute("CREATE INDEX _tmp_lc_idx ON _tmp_lobby_clients(norm_name)")
     log.info(f"  Lobby client lookup: {conn.execute('SELECT COUNT(*) FROM _tmp_lobby_clients').fetchone()[0]:,} unique names")
@@ -252,23 +266,26 @@ def build_remaining_summary_tables(conn):
                     ) AS rn
                 FROM congress_members
             )
+            -- Income from lobbying_filings (canonical, LD-2 scope). Mirrors
+            -- 05_build_database.py post-S-C1-fix. See decisions_log §64.
             SELECT
                 bm.bioguide_id,
                 bm.full_name,
                 bm.party,
                 bm.state,
                 bm.chamber AS congress_chamber,
-                COUNT(DISTINCT la.filing_uuid) AS lobbying_filing_count,
-                COUNT(DISTINCT la.client_name) AS client_count,
-                COUNT(DISTINCT la.registrant_name) AS firm_count,
-                MIN(la.filing_year) AS first_lobbying_year,
-                MAX(la.filing_year) AS last_lobbying_year,
-                SUM(COALESCE(la.income_amount, 0)) AS total_reported_income,
-                GROUP_CONCAT(DISTINCT la.registrant_name) AS lobbying_firms,
+                COUNT(DISTINCT f.filing_uuid) AS lobbying_filing_count,
+                COUNT(DISTINCT f.client_name) AS client_count,
+                COUNT(DISTINCT f.registrant_name) AS firm_count,
+                MIN(f.filing_year) AS first_lobbying_year,
+                MAX(f.filing_year) AS last_lobbying_year,
+                CAST(SUM(COALESCE(f.income_amount, 0)) AS INTEGER) AS total_reported_income,
+                GROUP_CONCAT(DISTINCT f.registrant_name) AS lobbying_firms,
                 MIN(pf.covered_position) AS covered_position_sample
             FROM position_filter pf
             JOIN best_member bm ON UPPER(bm.full_name) = pf.lobbyist_name AND bm.rn = 1
-            JOIN lobbying_activities la ON pf.filing_uuid = la.filing_uuid
+            JOIN lobbying_filings f ON pf.filing_uuid = f.filing_uuid
+            WHERE f.filing_type GLOB '[1234Q]*'
             GROUP BY bm.bioguide_id
             ORDER BY lobbying_filing_count DESC
         """)

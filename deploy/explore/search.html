@@ -449,14 +449,20 @@
                 `), 'legislation'),
 
                 safe(queryRegs(`
-                    SELECT client_name, registrant_name,
-                        SUM(income_amount) AS total_income,
+                    WITH matched_filings AS (
+                        SELECT DISTINCT la.filing_uuid
+                        FROM lobbying_activities la
+                        WHERE la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
+                    )
+                    SELECT f.client_name, f.registrant_name,
+                        CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
                         COUNT(*) AS filing_count,
-                        MIN(filing_year) AS year_from,
-                        MAX(filing_year) AS year_to
-                    FROM lobbying_activities
-                    WHERE rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
-                    GROUP BY client_name, registrant_name
+                        MIN(f.filing_year) AS year_from,
+                        MAX(f.filing_year) AS year_to
+                    FROM matched_filings mf
+                    JOIN lobbying_filings f ON f.filing_uuid = mf.filing_uuid
+                    WHERE f.filing_type GLOB '[1234Q]*'
+                    GROUP BY f.client_name, f.registrant_name
                     ORDER BY total_income DESC
                     LIMIT 8
                 `), 'lobbying'),
