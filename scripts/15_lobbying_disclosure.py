@@ -162,22 +162,46 @@ def create_database():
             description TEXT
         );
 
-        -- Raw filing metadata (both LD-1 and LD-2, one row per filing)
+        -- Raw filing metadata (both LD-1 and LD-2, one row per filing).
+        -- income_amount / expense_amount: filing-level, XOR-populated (outside firms
+        -- report income from clients; in-house lobbyists report expenses). Both are
+        -- nullable; LD-1 registrations and many LD-203 contribution reports have neither.
+        -- For "lobbying spending" aggregates filter to LD-2 quarterly activity reports:
+        -- filing_type GLOB '[1234Q]*'. See decisions_log §64 (2026-05-22).
         CREATE TABLE IF NOT EXISTS lobbying_filings_raw (
             filing_uuid TEXT PRIMARY KEY,
             filing_type TEXT NOT NULL,
             registrant_id INTEGER,
             registrant_name TEXT,
+            registrant_state TEXT,
+            registrant_country TEXT,
+            registrant_house_id INTEGER,
             client_id INTEGER,
             client_name TEXT,
+            client_state TEXT,
+            client_ppb_state TEXT,
+            client_country TEXT,
+            client_ppb_country TEXT,
+            client_general_description TEXT,
+            client_government_entity INTEGER,
             filing_year INTEGER,
             filing_period TEXT,
             received_date TEXT,
-            amount_reported REAL,
+            income_amount REAL,
+            expense_amount REAL,
             is_amendment INTEGER DEFAULT 0,
             is_no_activity INTEGER DEFAULT 0,
             is_termination INTEGER DEFAULT 0,
+            affiliated_org_count INTEGER,
             raw_json TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS lobbying_affiliated_orgs (
+            id INTEGER PRIMARY KEY,
+            filing_uuid TEXT NOT NULL,
+            org_name TEXT,
+            country TEXT,
+            country_code TEXT
         );
 
         -- LD-1 registrations
@@ -203,7 +227,11 @@ def create_database():
             termination_date TEXT
         );
 
-        -- LD-2 activity reports
+        -- LD-2 activity reports.
+        -- income_amount / expense_amount are NOT on this table: they are filing-level
+        -- facts (one value per filing) and live on lobbying_filings_raw. Putting them
+        -- here would replicate the same value across N activity rows for a filing with
+        -- N activities, inflating any SUM by activity-count. See decisions_log §64.
         CREATE TABLE IF NOT EXISTS lobbying_activities (
             id INTEGER PRIMARY KEY,
             filing_uuid TEXT NOT NULL,
@@ -216,8 +244,6 @@ def create_database():
             issue_code TEXT,
             specific_issues TEXT,
             government_entities TEXT,
-            income_amount INTEGER,
-            expense_amount INTEGER,
             is_no_activity INTEGER DEFAULT 0,
             is_termination INTEGER DEFAULT 0,
             received_date TEXT,
@@ -412,8 +438,10 @@ def parse_filing(filing, conn):
     registrant_name = safe_str(registrant.get("name")) or safe_str(registrant.get("registrant_name")) or ""
     registrant_desc = safe_str(registrant.get("description"))
     registrant_address = safe_str(registrant.get("address"))
+    registrant_state = safe_str(registrant.get("state"))
     registrant_country = safe_str(registrant.get("country"))
     registrant_ppb_country = safe_str(registrant.get("ppb_country"))
+    registrant_house_id = safe_int(registrant.get("house_registrant_id"))
 
     # Client info
     client = filing.get("client", {}) or {}
@@ -423,6 +451,13 @@ def parse_filing(filing, conn):
     client_country = safe_str(client.get("country"))
     client_ppb_country = safe_str(client.get("ppb_country"))
     client_state = safe_str(client.get("state"))
+    client_ppb_state = safe_str(client.get("ppb_state"))
+    client_govt_entity_raw = client.get("client_government_entity")
+    client_government_entity = 1 if client_govt_entity_raw else (0 if client_govt_entity_raw is False else None)
+
+    # Affiliated organizations (list)
+    affiliated = filing.get("affiliated_organizations") or []
+    affiliated_count = len(affiliated) if isinstance(affiliated, list) else None
 
     # Filing metadata
     filing_year = safe_int(filing.get("filing_year"))
@@ -431,8 +466,10 @@ def parse_filing(filing, conn):
     effective_date = safe_str(filing.get("effective_date"))
     termination_date = safe_str(filing.get("termination_date"))
 
-    # Amount
-    amount_reported = safe_float(filing.get("income")) or safe_float(filing.get("expenses"))
+    # Amounts: filing-level, XOR-populated (outside firms report income; in-house
+    # lobbyists report expenses). Both nullable. See decisions_log §64.
+    income_amount = safe_float(filing.get("income"))
+    expense_amount = safe_float(filing.get("expenses"))
 
     # Flags
     is_amendment = 1 if filing_type and "A" in filing_type.upper() and filing_type.upper() != "LD-2" else 0
@@ -446,15 +483,37 @@ def parse_filing(filing, conn):
     raw_json = json.dumps(filing)
     conn.execute("""
         INSERT OR REPLACE INTO lobbying_filings_raw
-        (filing_uuid, filing_type, registrant_id, registrant_name, client_id,
-         client_name, filing_year, filing_period, received_date, amount_reported,
-         is_amendment, is_no_activity, is_termination, raw_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (filing_uuid, filing_type, registrant_id, registrant_name,
+         registrant_state, registrant_country, registrant_house_id,
+         client_id, client_name,
+         client_state, client_ppb_state, client_country, client_ppb_country,
+         client_general_description, client_government_entity,
+         filing_year, filing_period, received_date,
+         income_amount, expense_amount,
+         is_amendment, is_no_activity, is_termination,
+         affiliated_org_count, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        filing_uuid, filing_type, registrant_id, registrant_name, client_id,
-        client_name, filing_year, filing_period, received_date, amount_reported,
-        is_amendment, is_no_activity, is_termination, raw_json,
+        filing_uuid, filing_type, registrant_id, registrant_name,
+        registrant_state, registrant_country, registrant_house_id,
+        client_id, client_name,
+        client_state, client_ppb_state, client_country, client_ppb_country,
+        client_desc, client_government_entity,
+        filing_year, filing_period, received_date,
+        income_amount, expense_amount,
+        is_amendment, is_no_activity, is_termination,
+        affiliated_count, raw_json,
     ))
+
+    # Affiliated organizations (one row per)
+    conn.execute("DELETE FROM lobbying_affiliated_orgs WHERE filing_uuid=?", (filing_uuid,))
+    if isinstance(affiliated, list):
+        for a in affiliated:
+            if isinstance(a, dict):
+                conn.execute("""
+                    INSERT INTO lobbying_affiliated_orgs (filing_uuid, org_name, country, country_code)
+                    VALUES (?, ?, ?, ?)
+                """, (filing_uuid, safe_str(a.get("name")), safe_str(a.get("country")), safe_str(a.get("country_display"))))
 
     # Determine if this is an LD-1 (registration) or LD-2 (activity report)
     ft_upper = filing_type.upper() if filing_type else ""
@@ -499,20 +558,19 @@ def parse_filing(filing, conn):
         lobbying_activities = filing.get("lobbying_activities", []) or []
 
         if not lobbying_activities:
-            # Filing with no specific activities (e.g., no-activity report)
+            # Filing with no specific activities (e.g., no-activity report).
+            # Filing-level income/expense lives on lobbying_filings_raw, not here.
             conn.execute("""
                 INSERT INTO lobbying_activities
                 (filing_uuid, filing_type, registrant_name, registrant_id,
                  client_name, filing_year, filing_period, issue_code,
-                 specific_issues, government_entities, income_amount,
-                 expense_amount, is_no_activity, is_termination, received_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 specific_issues, government_entities,
+                 is_no_activity, is_termination, received_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 filing_uuid, filing_type, registrant_name, registrant_id,
                 client_name, filing_year, filing_period or "", None,
-                None, None, safe_int(filing.get("income")),
-                safe_int(filing.get("expenses")), is_no_activity,
-                is_termination, received_date,
+                None, None, is_no_activity, is_termination, received_date,
             ))
         else:
             for act in lobbying_activities:
@@ -544,15 +602,13 @@ def parse_filing(filing, conn):
                     INSERT INTO lobbying_activities
                     (filing_uuid, filing_type, registrant_name, registrant_id,
                      client_name, filing_year, filing_period, issue_code,
-                     specific_issues, government_entities, income_amount,
-                     expense_amount, is_no_activity, is_termination, received_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     specific_issues, government_entities,
+                     is_no_activity, is_termination, received_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     filing_uuid, filing_type, registrant_name, registrant_id,
                     client_name, filing_year, filing_period or "", issue_code,
                     specific_issues, government_entities,
-                    safe_int(filing.get("income")),
-                    safe_int(filing.get("expenses")),
                     is_no_activity, is_termination, received_date,
                 ))
 
@@ -633,10 +689,27 @@ def pull_filings(session):
     current_year = datetime.date.today().year
     years = list(range(1999, current_year + 1))
 
+    # LDA filings continue to be back-published into the current year (Q4
+    # filings of the prior calendar year typically land in Jan-Feb of the
+    # next year). Skip at year-level only for immutable older years; for
+    # current/recent years always re-fetch — the per-page raw JSON dump
+    # idempotently overwrites and parse_filing() upserts on filing_uuid,
+    # so re-running is safe and deduplicating.
+    #
+    # Bug history: prior to 2026-05-02 the year-level skip fired for the
+    # current year as soon as the first run marked it complete. Same root
+    # cause as the FR / CREC / Congress.gov staleness incidents — see
+    # bestpractices/incident_log.md "2026-05-02 deploy hang" entry +
+    # 2026-04-25 FR staleness entry.
+    today = datetime.date.today()
     for year in years:
         if _shutdown:
             break
-        if str(year) in completed:
+        is_current_or_recent = (
+            year == today.year
+            or (year == today.year - 1 and today.month <= 3)
+        )
+        if str(year) in completed and not is_current_or_recent:
             log.info(f"  Year {year}: already complete, skipping")
             continue
 
@@ -830,10 +903,18 @@ def pull_contributions(session):
     # LD-203 contribution filings started in 2008
     years = list(range(2008, current_year + 1))
 
+    # LD-203 contributions also back-publish into the current year (semi-annual
+    # filings, plus amendments). Same fix as pull_filings above — re-pull
+    # current/recent year unconditionally; per-filing upsert handles dedup.
+    today = datetime.date.today()
     for year in years:
         if _shutdown:
             break
-        if str(year) in completed:
+        is_current_or_recent = (
+            year == today.year
+            or (year == today.year - 1 and today.month <= 3)
+        )
+        if str(year) in completed and not is_current_or_recent:
             log.info(f"  Contributions year {year}: already complete, skipping")
             continue
 
@@ -910,88 +991,154 @@ def pull_contributions(session):
 
 
 # === Summary tables ===
+#
+# All summary aggregators source filing-level income/expense from
+# lobbying_filings_raw, NOT from lobbying_activities. The activity table doesn't
+# carry these columns (see schema comment above). Issue-area and firm-level
+# aggregates that need activity attributes JOIN through filing_uuid.
+#
+# All aggregators filter to LD-2 quarterly activity reports
+# (filing_type GLOB '[1234Q]*'). This is the public "lobbying spending"
+# concept. LD-1 registrations carry no income; LD-203 contribution reports
+# carry contextual income that semantically isn't client→firm lobbying
+# payments and would double-count if summed alongside LD-2. To include
+# LD-203 in a custom query, remove the filing_type filter.
+#
+# See decisions_log §64-66 (2026-05-22) and incident_log 2026-05-22.
+
+LD2_FILTER = "filing_type GLOB '[1234Q]*'"
+
+
 def build_summary_tables():
     """Precompute small aggregate tables so canned queries stay under
     Datasette's sql_time_limit_ms. As of 2026-05-17 lobbying_activities is
     3.86M rows and the full-table COUNT(DISTINCT client_name) + COUNT(DISTINCT
     registrant_name) crossed the 10s limit between weekly cron runs."""
     log.info("=" * 60)
-    log.info("Building summary tables for canned queries")
+    log.info("Building summary tables for canned queries (LD-2 scope)")
     conn = sqlite3.connect(str(DB_PATH))
     try:
+        # ── lobbying_issue_summary ──────────────────────────────────────────
+        # Aggregates by issue_code across all LD-2 filings. Filing-level income
+        # is joined in from lobbying_filings_raw, then a per-(issue_code,
+        # filing_uuid) dedup ensures we count each filing's income once per
+        # issue it touched (not once per activity row).
         t0 = time.time()
         conn.execute("DROP TABLE IF EXISTS lobbying_issue_summary")
-        conn.execute("""
+        conn.execute(f"""
             CREATE TABLE lobbying_issue_summary AS
+            WITH per_issue_per_filing AS (
+                SELECT DISTINCT
+                    la.issue_code,
+                    la.filing_uuid,
+                    la.client_name,
+                    la.registrant_name,
+                    f.income_amount
+                FROM lobbying_activities la
+                JOIN lobbying_filings_raw f ON f.filing_uuid = la.filing_uuid
+                WHERE f.{LD2_FILTER}
+            )
             SELECT
-                la.issue_code,
-                COALESCE(lic.description, la.issue_code) AS issue_description,
-                COUNT(*) AS filing_count,
-                COUNT(DISTINCT la.client_name) AS unique_clients,
-                COUNT(DISTINCT la.registrant_name) AS unique_registrants,
-                CAST(SUM(la.income_amount) AS INTEGER) AS total_income
-            FROM lobbying_activities la
-            LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code
-            GROUP BY la.issue_code
+                p.issue_code,
+                COALESCE(lic.description, p.issue_code) AS issue_description,
+                COUNT(DISTINCT p.filing_uuid) AS filing_count,
+                COUNT(DISTINCT p.client_name) AS unique_clients,
+                COUNT(DISTINCT p.registrant_name) AS unique_registrants,
+                CAST(SUM(p.income_amount) AS INTEGER) AS total_income
+            FROM per_issue_per_filing p
+            LEFT JOIN lobbying_issue_codes lic ON p.issue_code = lic.code
+            GROUP BY p.issue_code
         """)
         conn.execute("CREATE INDEX idx_lis_filing_count ON lobbying_issue_summary(filing_count DESC)")
         n_issue = conn.execute("SELECT COUNT(*) FROM lobbying_issue_summary").fetchone()[0]
         log.info(f"  lobbying_issue_summary: {n_issue:,} rows ({time.time()-t0:.1f}s)")
 
+        # ── lobbying_client_summary ─────────────────────────────────────────
+        # One row per client. filing_count replaces the old "activity_count"
+        # (semantically correct: how many filings, not how many activity rows).
+        # total_reported is income only (the client→firm payment concept).
         t0 = time.time()
         conn.execute("DROP TABLE IF EXISTS lobbying_client_summary")
-        conn.execute("""
+        conn.execute(f"""
             CREATE TABLE lobbying_client_summary AS
+            WITH client_activity AS (
+                SELECT
+                    f.client_name,
+                    COUNT(DISTINCT la.registrant_name) AS firms_hired,
+                    COUNT(DISTINCT la.issue_code) AS issue_areas
+                FROM lobbying_filings_raw f
+                JOIN lobbying_activities la ON la.filing_uuid = f.filing_uuid
+                WHERE f.{LD2_FILTER}
+                GROUP BY f.client_name
+            )
             SELECT
-                client_name,
-                COUNT(*) AS activity_count,
-                COUNT(DISTINCT registrant_name) AS firms_hired,
-                COUNT(DISTINCT issue_code) AS issue_areas,
-                CAST(SUM(income_amount) AS INTEGER) AS total_reported,
-                MIN(filing_year) AS first_year,
-                MAX(filing_year) AS last_year
-            FROM lobbying_activities
-            WHERE income_amount > 0
-            GROUP BY client_name
+                f.client_name,
+                COUNT(*) AS filing_count,
+                COALESCE(ca.firms_hired, 0) AS firms_hired,
+                COALESCE(ca.issue_areas, 0) AS issue_areas,
+                CAST(SUM(f.income_amount) AS INTEGER) AS total_reported,
+                MIN(f.filing_year) AS first_year,
+                MAX(f.filing_year) AS last_year
+            FROM lobbying_filings_raw f
+            LEFT JOIN client_activity ca ON ca.client_name = f.client_name
+            WHERE f.{LD2_FILTER} AND f.income_amount > 0
+            GROUP BY f.client_name
         """)
         conn.execute("CREATE INDEX idx_lcs_total ON lobbying_client_summary(total_reported DESC)")
         n_client = conn.execute("SELECT COUNT(*) FROM lobbying_client_summary").fetchone()[0]
         log.info(f"  lobbying_client_summary: {n_client:,} rows ({time.time()-t0:.1f}s)")
 
+        # ── lobbying_registrant_summary ─────────────────────────────────────
+        # One row per registrant (lobbying firm). total_income from filings.
         t0 = time.time()
         conn.execute("DROP TABLE IF EXISTS lobbying_registrant_summary")
-        conn.execute("""
+        conn.execute(f"""
             CREATE TABLE lobbying_registrant_summary AS
+            WITH registrant_activity AS (
+                SELECT
+                    f.registrant_name,
+                    COUNT(DISTINCT la.client_name) AS unique_clients,
+                    COUNT(DISTINCT la.issue_code) AS issue_areas
+                FROM lobbying_filings_raw f
+                JOIN lobbying_activities la ON la.filing_uuid = f.filing_uuid
+                WHERE f.{LD2_FILTER}
+                GROUP BY f.registrant_name
+            )
             SELECT
-                registrant_name,
-                COUNT(*) AS activity_count,
-                COUNT(DISTINCT client_name) AS unique_clients,
-                COUNT(DISTINCT issue_code) AS issue_areas,
-                CAST(SUM(income_amount) AS INTEGER) AS total_income,
-                MIN(filing_year) AS first_year,
-                MAX(filing_year) AS last_year
-            FROM lobbying_activities
-            WHERE income_amount > 0
-            GROUP BY registrant_name
+                f.registrant_name,
+                COUNT(*) AS filing_count,
+                COALESCE(ra.unique_clients, 0) AS unique_clients,
+                COALESCE(ra.issue_areas, 0) AS issue_areas,
+                CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                MIN(f.filing_year) AS first_year,
+                MAX(f.filing_year) AS last_year
+            FROM lobbying_filings_raw f
+            LEFT JOIN registrant_activity ra ON ra.registrant_name = f.registrant_name
+            WHERE f.{LD2_FILTER} AND f.income_amount > 0
+            GROUP BY f.registrant_name
         """)
         conn.execute("CREATE INDEX idx_lrs_total ON lobbying_registrant_summary(total_income DESC)")
         n_reg = conn.execute("SELECT COUNT(*) FROM lobbying_registrant_summary").fetchone()[0]
         log.info(f"  lobbying_registrant_summary: {n_reg:,} rows ({time.time()-t0:.1f}s)")
 
+        # ── lobbying_year_summary ───────────────────────────────────────────
+        # Per-year totals. total_income and total_expenses are separately
+        # populated (XOR per filing, but both may aggregate to non-zero across
+        # all filers in a year).
         t0 = time.time()
         conn.execute("DROP TABLE IF EXISTS lobbying_year_summary")
-        conn.execute("""
+        conn.execute(f"""
             CREATE TABLE lobbying_year_summary AS
             SELECT
-                filing_year,
-                COUNT(*) AS activity_count,
-                COUNT(DISTINCT client_name) AS unique_clients,
-                COUNT(DISTINCT registrant_name) AS unique_registrants,
-                CAST(SUM(income_amount) AS INTEGER) AS total_income,
-                CAST(SUM(expense_amount) AS INTEGER) AS total_expenses
-            FROM lobbying_activities
-            WHERE filing_year IS NOT NULL
-            GROUP BY filing_year
+                f.filing_year,
+                COUNT(*) AS filing_count,
+                COUNT(DISTINCT f.client_name) AS unique_clients,
+                COUNT(DISTINCT f.registrant_name) AS unique_registrants,
+                CAST(SUM(f.income_amount) AS INTEGER) AS total_income,
+                CAST(SUM(f.expense_amount) AS INTEGER) AS total_expenses
+            FROM lobbying_filings_raw f
+            WHERE f.{LD2_FILTER} AND f.filing_year IS NOT NULL
+            GROUP BY f.filing_year
         """)
         n_year = conn.execute("SELECT COUNT(*) FROM lobbying_year_summary").fetchone()[0]
         log.info(f"  lobbying_year_summary: {n_year:,} rows ({time.time()-t0:.1f}s)")
