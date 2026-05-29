@@ -1049,7 +1049,7 @@
                 "top_lobbying_firms": {
                     "title": "Top Lobbying Firms (Registrants)",
                     "description": "Lobbying firms (registrants) ranked by total reported income across all clients and filings.",
-                    "sql": "SELECT registrant_name, COUNT(*) AS activity_count, COUNT(DISTINCT client_name) AS unique_clients, COUNT(DISTINCT issue_code) AS issue_areas, CAST(SUM(income_amount) AS INTEGER) AS total_income, MIN(filing_year) AS first_year, MAX(filing_year) AS last_year FROM lobbying_activities WHERE income_amount > 0 GROUP BY registrant_name ORDER BY total_income DESC LIMIT 100"
+                    "sql": "SELECT registrant_name, activity_count, unique_clients, issue_areas, total_income, first_year, last_year FROM lobbying_registrant_summary ORDER BY total_income DESC LIMIT 100"
                 },
                 "lobbying_activity_for_client": {
                     "title": "Lobbying Activity for a Client",
@@ -1066,7 +1066,7 @@
                 "lobbying_spending_over_time": {
                     "title": "Lobbying Spending Over Time",
                     "description": "Total reported lobbying income by year, showing spending trends across the lobbying industry.",
-                    "sql": "SELECT filing_year, COUNT(*) AS activity_count, COUNT(DISTINCT client_name) AS unique_clients, COUNT(DISTINCT registrant_name) AS unique_registrants, CAST(SUM(income_amount) AS INTEGER) AS total_income, CAST(SUM(expense_amount) AS INTEGER) AS total_expenses FROM lobbying_activities WHERE filing_year IS NOT NULL GROUP BY filing_year ORDER BY filing_year DESC"
+                    "sql": "SELECT filing_year, activity_count, unique_clients, unique_registrants, total_income, total_expenses FROM lobbying_year_summary ORDER BY filing_year DESC"
                 },
                 "search_specific_issues": {
                     "title": "Search Specific Issues",

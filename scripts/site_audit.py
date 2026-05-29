@@ -132,9 +132,14 @@ CANNED_QUERIES = [
     ("aphis", "recent_inspections", {}),
     ("aphis", "critical_violations", {}),
     ("aphis", "worst_violators", {}),
-    # Lobbying -- 2 no-param queries
+    # Lobbying -- 4 no-param queries, all reading from precomputed summary
+    # tables (build_summary_tables() in 15_lobbying_disclosure.py) since the
+    # underlying lobbying_activities crossed 3.86M rows and full-table
+    # COUNT(DISTINCT ...) starts crossing sql_time_limit_ms.
     ("lobbying", "lobbying_by_issue_area", {}),
     ("lobbying", "top_lobbying_clients_by_spending", {}),
+    ("lobbying", "top_lobbying_firms", {}),
+    ("lobbying", "lobbying_spending_over_time", {}),
     # Open comments (daily VPS-built DB) -- the only canned query
     ("open_comments", "explore_open_comments", {}),
 ]
@@ -516,6 +521,17 @@ class Audit:
 
     # ---- Category 9: form viewer (990 filings on R2) ----
     def check_form_viewer(self):
+        """Two-pass probe:
+          1. Random sample across all batch years (WARNING). Catches sporadic
+             render failures or R2 inconsistencies in the historical corpus.
+          2. Targeted sample from the newest IRS batch year (CRITICAL).
+             Catches systematic gaps — e.g. a backfill where the newest IRS
+             batch is missing from R2 because the renderer fell behind. A
+             random 5-pick has ~1.8% chance of catching such a gap per audit;
+             a deterministic newest-batch probe catches it on the first run
+             after the renderer goes silent.
+        Object IDs are prefixed with the IRS batch year (first 4 chars).
+        """
         log.info("== Form viewer ==")
         try:
             nc = sqlite3.connect(f"file:{NINETY_DB}?mode=ro", uri=True)
@@ -524,6 +540,7 @@ class Audit:
                         f"cannot open {NINETY_DB}: {e}")
             return
         try:
+            # Pass 1: random sample (WARNING)
             rows = nc.execute(
                 "SELECT object_id FROM returns WHERE object_id IS NOT NULL "
                 "ORDER BY random() LIMIT ?", (self.sample_size,),
@@ -535,6 +552,31 @@ class Audit:
                 passed = 200 <= code < 400 and size > 5000
                 self.record("forms", f"{oid}.html", passed, Severity.WARNING,
                             f"HTTP {code}, {size:,} bytes" if code else err, ms)
+
+            # Pass 2: newest IRS batch year (CRITICAL)
+            newest = nc.execute(
+                "SELECT MAX(SUBSTR(object_id, 1, 4)) FROM returns "
+                "WHERE object_id IS NOT NULL"
+            ).fetchone()[0]
+            if newest and newest.isdigit() and len(newest) == 4:
+                rows = nc.execute(
+                    "SELECT object_id FROM returns "
+                    "WHERE object_id LIKE ? || '%' "
+                    "ORDER BY random() LIMIT ?",
+                    (newest, self.sample_size),
+                ).fetchall()
+                for (oid,) in rows:
+                    url = f"{FORMS_BASE}/{oid}.html"
+                    code, err, ms, body = self.client.get(url)
+                    size = len(body) if body else 0
+                    passed = 200 <= code < 400 and size > 5000
+                    self.record("forms", f"newest-{newest}/{oid}.html", passed,
+                                Severity.CRITICAL,
+                                f"HTTP {code}, {size:,} bytes" if code else err, ms)
+            else:
+                self.record("forms", "newest-batch-probe", False,
+                            Severity.WARNING,
+                            f"could not derive newest batch year (got {newest!r})")
         finally:
             nc.close()
 

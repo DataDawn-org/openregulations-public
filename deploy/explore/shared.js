@@ -13,6 +13,19 @@ function esc(str) {
 
 function sqlEsc(s) { return s ? s.replace(/'/g, "''") : ''; }
 
+// Escape a value for embedding inside a single-quoted JS string inside a
+// double-quoted HTML attribute, e.g.: `<div onclick="openClient('${jsAttr(name)}')">`.
+// Handles both the JS-string escape (\ and ') and the HTML-attribute escape (&, ", <, >).
+function jsAttr(s) {
+    return String(s == null ? '' : s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // --- Datasette query helper ---
 
 async function query(sql, retries = 2) {

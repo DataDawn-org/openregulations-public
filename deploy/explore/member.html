@@ -1311,7 +1311,7 @@
                 if (subs.length > 0) {
                     html += `<div class="section-title">Subcommittees (${subs.length})</div>`;
                     html += '<ul class="committee-list">';
-                    html += subs.map(s => `<li onclick="openCommittee('${esc(s.committee_id)}', '${esc(s.name).replace(/'/g, "\\'")}')" style="cursor:pointer;">${esc(s.name)}</li>`).join('');
+                    html += subs.map(s => `<li onclick="openCommittee('${jsAttr(s.committee_id)}', '${jsAttr(s.name)}')" style="cursor:pointer;">${esc(s.name)}</li>`).join('');
                     html += '</ul>';
                 }
 
@@ -1520,7 +1520,7 @@
                 html += '<div class="section-title">Committee Assignments</div>';
                 html += '<ul class="committee-list">';
                 html += committees.map(c =>
-                    `<li onclick="openCommittee('${esc(c.committee_id)}', '${esc(c.name).replace(/'/g, "\\'")}')" style="cursor:pointer;">${esc(c.name)}${c.title ? '<span class="title-badge">' + esc(c.title) + '</span>' : ''}</li>`
+                    `<li onclick="openCommittee('${jsAttr(c.committee_id)}', '${jsAttr(c.name)}')" style="cursor:pointer;">${esc(c.name)}${c.title ? '<span class="title-badge">' + esc(c.title) + '</span>' : ''}</li>`
                 ).join('');
                 html += '</ul>';
             }
@@ -1833,7 +1833,7 @@
 
         function renderBillCard(b) {
             const detailUrl = b.bill_id ? '/explore/legislation.html?detail=' + encodeURIComponent(b.bill_id) : '';
-            const billSafe = (b.bill_id || '').replace(/'/g, "\\'");
+            const billSafe = jsAttr(b.bill_id);
             return `<div class="bill-card">
                 <div class="bill-number">${esc(b.bill_type || '')}${b.bill_number || ''} &mdash; ${esc(b.congress)}th Congress</div>
                 <div class="bill-title">${detailUrl ? '<a class="doc-link" href="' + esc(detailUrl) + '">' + esc(truncate(b.title, 200)) + '</a>' : esc(truncate(b.title, 200))}</div>
