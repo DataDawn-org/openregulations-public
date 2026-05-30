@@ -5,6 +5,36 @@
   "human_readable": "https://regs.datadawn.org/llms.txt (## Schema changes section)",
   "changes": [
     {
+      "date": "2026-05-25",
+      "id": "FEC-RECV",
+      "title": "FEC contributions vs independent-expenditure fix",
+      "added_columns": [
+        {
+          "table": "fec_contributions",
+          "column": "transaction_tp",
+          "note": "FEC itpas2 transaction type, restored after an earlier build dropped it. 24K/24Z = contributions received by the candidate; 24A = independent expenditure AGAINST; 24E = IE FOR; 24C/24F/24N = coordinated/communication. RULE: never SUM(transaction_amt) over fec_contributions without filtering transaction_tp."
+        },
+        {
+          "table": "congress_members",
+          "column": "fec_ie_for",
+          "note": "Independent expenditures FOR the member (transaction_tp 24E). Outside spending, NOT money received."
+        },
+        {
+          "table": "congress_members",
+          "column": "fec_ie_against",
+          "note": "Independent expenditures AGAINST the member (transaction_tp 24A). Opposition outside spending, NOT money received."
+        }
+      ],
+      "changed_semantics": [
+        {
+          "table": "congress_members",
+          "column": "fec_total_received",
+          "change": "Recomputed to sum ONLY transaction_tp 24K+24Z (PAC/party contributions actually received). Previously summed ALL transaction types, ~79% of which are independent expenditures (51% spent AGAINST the member) — e.g. Mark Kelly showed $117.3M vs $2.5M actually received. Values are now much lower for battleground members and correct."
+        }
+      ],
+      "aggregation_guidance": "Money a candidate RECEIVED from committees: SUM(fec_contributions.transaction_amt) WHERE transaction_tp IN ('24K','24Z'). Independent expenditures FOR use 24E, AGAINST use 24A. Never sum across all transaction types under a 'received' label."
+    },
+    {
       "date": "2026-05-22",
       "id": "S-C1",
       "title": "Lobbying schema fix",

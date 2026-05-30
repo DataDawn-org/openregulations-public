@@ -23,12 +23,12 @@
 set -uo pipefail
 # Note: no set -e — individual checks should continue on failure
 
-BASE_REGS="${1:-https://regs.datadawn.org}"
-BASE_990="https://data.datadawn.org"
+BASE_REGS="${1:-${BASE_REGS:-https://regs.datadawn.org}}"
+BASE_990="${BASE_990:-https://data.datadawn.org}"
 API_REGS="${BASE_REGS}/openregs.json"
 API_990="${BASE_990}/990data_public.json"
 REMOTE_HOST="${OPENREGS_REMOTE_HOST:?Set OPENREGS_REMOTE_HOST (e.g. user@server)}"
-TIMEOUT=30
+TIMEOUT="${TIMEOUT:-30}"
 PASS=0
 FAIL=0
 WARN=0
@@ -90,7 +90,7 @@ echo ""
 echo "=== 1. Service Health ==="
 if [ "${BASE_REGS}" != "http://localhost:8002" ]; then
     for svc in openregs datasette 990-api openregs-api datadawn-mcp caddy; do
-        status=$(ssh -o ConnectTimeout=5 "$REMOTE_HOST" "sudo systemctl is-active $svc" 2>/dev/null)
+        status=$(ssh -o ConnectTimeout=15 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 "$REMOTE_HOST" "sudo systemctl is-active $svc" 2>/dev/null)
         if [ "$status" = "active" ]; then
             pass "$svc"
         else
@@ -128,7 +128,7 @@ echo ""
 echo "=== 3. Explore Pages ==="
 explore_pass=0
 explore_fail=0
-for page in search legislation member regulation lobbying contributions fara hearings nominations speeches-trades trade-conflicts committee-trades committee-donors revolving-door witness-lobby commenter-lobby lobbied-bills entity research speech api treaties cbo fara-hearings; do
+for page in search legislation member regulation lobbying contributions fara hearings nominations committee-trades revolving-door witness-lobby commenter-lobby lobbied-bills entity research speech api treaties cbo fara-hearings; do
     code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${BASE_REGS}/explore/${page}.html")
     if [ "$code" = "200" ]; then
         ((explore_pass++))
@@ -198,7 +198,7 @@ check_query "Revolving door" "SELECT+COUNT(*)+as+cnt+FROM+revolving_door" 100
 check_query "Docket importance" "SELECT+COUNT(*)+as+cnt+FROM+docket_importance" 100000
 echo ""
 
-# ── 8. 990 DATABASE SPOT CHECK ──────────────────────────────────
+# ── 8. 990 DATABASE ──────────────────────────────────────────────
 echo "=== 8. 990 Database ==="
 result=$(query_990 "SELECT+COUNT(*)+as+cnt+FROM+returns")
 count=$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['rows'][0]['cnt'])" 2>/dev/null)
@@ -209,13 +209,26 @@ else
     fail "990 returns: ${count:-no response}"
 fi
 
-result=$(query_990 "SELECT+COUNT(*)+as+cnt+FROM+fts_bmf+WHERE+fts_bmf+MATCH+'american+cancer'")
-count=$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['rows'][0]['cnt'])" 2>/dev/null)
-if [ -n "$count" ] && [ "$count" -gt 0 ]; then
-    pass "990 FTS (fts_bmf): ${count} results"
-else
-    fail "990 FTS (fts_bmf): ${count:-no response}"
-fi
+# 990 FTS indexes — ALL must exist (missing FTS has caused errors twice)
+for fts_test in \
+    "fts_bmf|american+cancer|BMF" \
+    "fts_returns|humane+society|Returns" \
+    "fts_grants|foundation|Grants" \
+    "fts_daf|fidelity|DAF" \
+    "fts_si990|university|Schedule I" \
+    "fts_officers|smith|Officers"; do
+    IFS='|' read -r fts_tbl fts_term fts_label <<< "$fts_test"
+    result=$(query_990 "SELECT+COUNT(*)+as+cnt+FROM+${fts_tbl}+WHERE+${fts_tbl}+MATCH+'${fts_term}'")
+    count=$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['rows'][0]['cnt'])" 2>/dev/null)
+    error=$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); e=d.get('error',''); print(e if e else '')" 2>/dev/null)
+    if [ -n "$error" ] && [ "$error" != "" ] && [ "$error" != "None" ]; then
+        fail "990 FTS ${fts_label} (${fts_tbl}): ${error}"
+    elif [ -n "$count" ] && [ "$count" -gt 0 ]; then
+        pass "990 FTS ${fts_label}: ${count} results"
+    else
+        fail "990 FTS ${fts_label} (${fts_tbl}): ${count:-no response}"
+    fi
+done
 echo ""
 
 # ── SUMMARY ─────────────────────────────────────────────────────

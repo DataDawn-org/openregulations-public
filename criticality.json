@@ -3,7 +3,9 @@
   "_comment_fields": {
     "floor": "Minimum row count below which the build aborts before deploy (validate_critical_tables raises SystemExit(5)). null = no absolute floor; tracked in delta/snapshot only.",
     "growth": "'incremental' = monotonically grows over time; any drop > 0.1% beyond noise is fatal in the delta guard. 'rebuild' = wiped+repopulated each run (e.g., full eCFR pull, staging-DB import); 5% drop tolerated in delta guard.",
-    "snapshot": "true = include in pre/post-build snapshot for delta reporting + delta guard. Tables outside snapshot still get floor coverage if floor is non-null."
+    "snapshot": "true = include in pre/post-build snapshot for delta reporting + delta guard. Tables outside snapshot still get floor coverage if floor is non-null.",
+    "smoke": "true = include in post-deploy smoke test (prod row count vs local) in deploy.sh. Keep this small (~5 tables) since each = one HTTPS round-trip to prod. Mirror of 990project/criticality.json field.",
+    "db": "Which Datasette database the table lives in. Defaults to 'openregs' if omitted. Set to 'lobbying' for tables in lobbying.db. Only consulted by the post-deploy smoke test to route the curl URL + local file path."
   },
   "tables": {
     "federal_register": {
@@ -144,6 +146,11 @@
       "snapshot": true,
       "smoke": true
     },
+    "lobbying_filings_raw": {
+      "smoke": true,
+      "db": "lobbying",
+      "_note": "Smoke-only entry \u2014 table lives in lobbying.db (not openregs.db). lobbying_filings (above) is the imported view in openregs.db that floor + delta + snapshot guards track."
+    },
     "lobbying_activities": {
       "floor": 2600000,
       "growth": "incremental",
@@ -273,6 +280,12 @@
     "ig_reports": {
       "floor": null,
       "growth": "incremental",
+      "snapshot": true,
+      "smoke": true
+    },
+    "wh_personnel_appointees": {
+      "floor": 4000,
+      "growth": "rebuild",
       "snapshot": true,
       "smoke": true
     }
