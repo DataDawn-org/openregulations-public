@@ -2510,9 +2510,15 @@ def _carry_forward_presidential_documents(conn: sqlite3.Connection, err: Excepti
     if prev_path.exists():
         prev = sqlite3.connect(f"file:{prev_path}?mode=ro", uri=True)
         try:
-            prev_rows = prev.execute(
-                "SELECT COUNT(*) FROM presidential_documents"
-            ).fetchone()[0]
+            try:
+                prev_rows = prev.execute(
+                    "SELECT COUNT(*) FROM presidential_documents"
+                ).fetchone()[0]
+            except sqlite3.Error:
+                # prev.db lacks the table or is unreadable → treat as no prior
+                # data so the cold-start guard below aborts CLEANLY rather than
+                # crashing the build with an uncaught OperationalError.
+                prev_rows = 0
             try:
                 row = prev.execute(
                     "SELECT value FROM build_metadata "
