@@ -3798,7 +3798,6 @@ def import_stock_trades(conn: sqlite3.Connection):
                 member_name = tx.get("filer_name", "").strip()
             bioguide = resolve_bioguide(member_name)
             doc_id = tx.get("doc_id", "")
-            parsed_doc_ids.add(doc_id)
             # Skip continuation-line parse artifacts: a row with neither a
             # transaction type nor an amount is not a transaction (real House
             # PTR rows always carry both) — it's a wrapped description line
@@ -3807,9 +3806,17 @@ def import_stock_trades(conn: sqlite3.Connection):
             # cached as of 2026-06-05, dates like 2165/2079/2026-12-19).
             # Same policy as the unparsed-PTR skip below: no trade data, no
             # row. Parser-side fix tracked in followup_queue #91. (#72)
+            #
+            # parsed_doc_ids.add comes AFTER this skip (review catch,
+            # 2026-06-05): a doc whose rows are ALL artifacts must degrade to
+            # the visible "unparsed (no trade data)" bucket below, not be
+            # classified parsed-with-zero-trades and vanish silently. Today 0
+            # such docs exist (all 14 artifact-carrying docs also carry real
+            # trades — any real row still registers the doc as parsed).
             if not tx.get("transaction_type") and not tx.get("amount"):
                 house_artifact_count += 1
                 continue
+            parsed_doc_ids.add(doc_id)
             try:
                 conn.execute("""
                     INSERT INTO stock_trades

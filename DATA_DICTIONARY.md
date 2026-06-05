@@ -387,6 +387,8 @@ Crosswalk for Senate vote linkage (LIS IDs to bioguide IDs).
 
 Congressional financial disclosures. Senate from efdsearch.senate.gov (15K+), House from clerk PTR PDFs (80K+).
 
+Dates are as filed. A small number of older House PTR rows (scanned-PDF era, ~2014–2016) carry logically inconsistent dates — e.g., a disclosure date earlier than the transaction date — likely from filer error or scan-text artifacts; these are preserved as filed pending review. Transaction dates that are impossibly far in the future are blanked rather than guessed. Rows that parse with neither an amount nor a transaction type are excluded as PDF-parse artifacts (wrapped description fragments, not trades).
+
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | INTEGER PK | Auto-increment |
