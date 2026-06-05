@@ -21,7 +21,7 @@ only).
 |---|---|---|---|
 | 1. VPS (hot) | ≤ 5 days | `user@your-vps:/opt/openregs/backups/` | ~3 min |
 | 2. Workstation (warm) | last 3 deploys (~21 days) | `/mnt/data/datadawn/openregs/backups/` | ~15 min |
-| 3. B2 offsite (cold) | last 3 deploys (~21 days) | `b2:someones-backup/openregs-weekly/` | ~25 min |
+| 3. B2 offsite (cold) | last 3 deploys (~21 days) | `b2:your-b2-bucket/openregs-weekly/` | ~25 min |
 
 File naming: `openregs-predeploy-YYYYMMDD_HHMM.db`. Each is a pre-deploy
 snapshot of what was live at that timestamp.
@@ -130,11 +130,11 @@ configured.
 
 ```bash
 # 1. List available B2 backups (newest first via sort -r)
-rclone lsf b2:someones-backup/openregs-weekly/ | sort -r
+rclone lsf b2:your-b2-bucket/openregs-weekly/ | sort -r
 
 # 2. Download the pre-regression backup
 mkdir -p /tmp/b2-restore
-rclone copy -P b2:someones-backup/openregs-weekly/openregs-predeploy-YYYYMMDD_HHMM.db \
+rclone copy -P b2:your-b2-bucket/openregs-weekly/openregs-predeploy-YYYYMMDD_HHMM.db \
     /tmp/b2-restore/
 # ~36 GB from B2: typically 20-25 min
 
