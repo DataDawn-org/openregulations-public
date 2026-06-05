@@ -103,7 +103,7 @@ remote_matches_local() {
 #      detect "wrong backup" or "schema drift since last run" cheaply).
 #   2. Rsyncs both files down to $PROJECT_DIR/backups/
 #   3. Rotates local to last 3 (via deploy/rotate_local_backups.py)
-#   4. rclone copies both files to b2:someones-backup/openregs-weekly/
+#   4. rclone copies both files to b2:your-b2-bucket/openregs-weekly/
 #   5. Rotates B2 to last 3 (inline)
 #
 # We use PRAGMA quick_check (not integrity_check) here. quick_check verifies
@@ -128,7 +128,7 @@ propagate_backup_to_local_and_b2() {
     fi
     local remote_backup="$BACKUP_DIR/$backup_file"
     local local_backup_dir="$PROJECT_DIR/backups"
-    local b2_remote="b2:someones-backup/openregs-weekly"
+    local b2_remote="b2:your-b2-bucket/openregs-weekly"
     local helper="$PROJECT_DIR/deploy/rotate_local_backups.py"
     local crit_path="$PROJECT_DIR/criticality.json"
 
