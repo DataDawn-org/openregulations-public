@@ -56,7 +56,24 @@ def main() -> int:
             print(f"  ERROR removing {f}: {e}", file=sys.stderr)
             return 1
 
-    print(f"rotate: kept {len(to_keep)}, deleted {len(to_delete)}")
+    # Sweep orphan SQLite sidecars (-shm/-wal/-journal) whose base .db is gone —
+    # both the ones we just deleted and any pre-existing orphans. The online-backup
+    # API can leave a 0-byte -wal / 32 KB -shm next to a snapshot; rotation never
+    # tracked them, so they accumulated (a handful were cleaned manually 2026-05-30).
+    # Sidecars of KEPT backups are left alone (they belong to a live snapshot).
+    swept = 0
+    for sfx in ('-shm', '-wal', '-journal'):
+        for side in glob.glob(os.path.join(args.dir, args.glob + sfx)):
+            base = side[: -len(sfx)]
+            if not os.path.exists(base):
+                try:
+                    os.remove(side)
+                    print(f"  SIDECAR {os.path.basename(side)} (orphan)")
+                    swept += 1
+                except OSError as e:
+                    print(f"  WARN could not remove sidecar {side}: {e}", file=sys.stderr)
+
+    print(f"rotate: kept {len(to_keep)}, deleted {len(to_delete)}, sidecars swept {swept}")
     return 0
 
 

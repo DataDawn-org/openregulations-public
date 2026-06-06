@@ -1014,6 +1014,16 @@ CREATE TABLE IF NOT EXISTS fec_contributions (
     state TEXT,
     employer TEXT,
     occupation TEXT,
+    -- ⚠️ RULE — NEVER SUM(transaction_amt) over fec_contributions without filtering transaction_tp.
+    -- (findings_register Pattern 4 / audit_charter §I.4 — summed-money flow-label verification.)
+    -- FEC itpas2 type code: 24K/24Z = contributions RECEIVED by the candidate (~21% of $, the real
+    -- "received" money); 24A = independent expenditure spent AGAINST (~51%); 24E = IE spent FOR (~25%);
+    -- 24C/24F/24N = coordinated/communication cost. Summing all types is the 2026-05-25
+    -- fec_total_received bug: ~79% outside spending mislabeled "received," most of it attack ads.
+    -- Filter to ('24K','24Z') for received; surface 24A/24E separately + clearly labeled
+    -- (fec_ie_against / fec_ie_for). The org/company/docket hubs aggregate this table the same way —
+    -- apply the filter there too. See bestpractices/member_hub_data_audit_2026-05-25.md.
+    transaction_tp TEXT,
     cycle INTEGER NOT NULL
 );
 
@@ -1021,6 +1031,7 @@ CREATE INDEX IF NOT EXISTS idx_fec_contrib_cand ON fec_contributions(cand_id);
 CREATE INDEX IF NOT EXISTS idx_fec_contrib_cmte ON fec_contributions(cmte_id);
 CREATE INDEX IF NOT EXISTS idx_fec_contrib_cycle ON fec_contributions(cycle);
 CREATE INDEX IF NOT EXISTS idx_fec_contrib_amt ON fec_contributions(transaction_amt);
+CREATE INDEX IF NOT EXISTS idx_fec_contrib_cand_tp ON fec_contributions(cand_id, transaction_tp);
 
 -- FEC: candidate to bioguide crosswalk
 CREATE TABLE IF NOT EXISTS fec_candidate_crosswalk (
@@ -2384,7 +2395,19 @@ def import_comment_details(conn: sqlite3.Connection):
 
 
 def import_presidential_documents(conn: sqlite3.Connection):
-    """Import presidential documents from Federal Register API data."""
+    """Import presidential documents from the Federal Register API.
+
+    Resilience (2026-05-30): this is the ONLY live network fetch inside the
+    build. A transient federalregister.gov outage used to abort the entire
+    weekly rebuild + deploy (hit 2026-05-30 — a 503 storm). presidential_documents
+    is a small, slow-changing reference table (~6k rows), so on API failure we
+    now CARRY FORWARD the prior build's rows from openregs_prev.db and keep
+    building, pinning a 'presidential_documents_last_refresh' stamp in
+    build_metadata. A *sustained* outage still fails LOUD: if the last successful
+    live refresh is older than MAX_STALE_DAYS we re-abort, so the silent-failure
+    mode is not relocated from the deploy onto stale EO data. Proper fix is to
+    move this fetch into Phase 1 (01_federal_register.py); see decisions_log.
+    """
     import requests
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
@@ -2395,72 +2418,172 @@ def import_presidential_documents(conn: sqlite3.Connection):
     retry = Retry(total=3, backoff_factor=5, status_forcelist=[500, 502, 503])
     session.mount("https://", HTTPAdapter(max_retries=retry))
 
-    count = 0
-    for doc_type in ["executive_order", "proclamation"]:
-        page = 1
-        while True:
-            url = "https://www.federalregister.gov/api/v1/documents.json"
-            params = {
-                "conditions[presidential_document_type]": doc_type,
-                "conditions[type]": "PRESDOCU",
-                "fields[]": [
-                    "document_number", "title", "signing_date",
-                    "publication_date", "html_url", "abstract",
-                    "executive_order_number",
-                ],
-                "per_page": 1000,
-                "page": page,
-            }
-            try:
+    try:
+        count = 0
+        for doc_type in ["executive_order", "proclamation"]:
+            page = 1
+            while True:
+                url = "https://www.federalregister.gov/api/v1/documents.json"
+                params = {
+                    "conditions[presidential_document_type]": doc_type,
+                    "conditions[type]": "PRESDOCU",
+                    "fields[]": [
+                        "document_number", "title", "signing_date",
+                        "publication_date", "html_url", "abstract",
+                        "executive_order_number",
+                    ],
+                    "per_page": 1000,
+                    "page": page,
+                }
+                # Let requests.RequestException propagate to the carry-forward
+                # handler below rather than aborting the whole build.
                 resp = session.get(url, params=params, timeout=60)
                 resp.raise_for_status()
                 data = resp.json()
-            except requests.RequestException as e:
-                raise RuntimeError(
-                    f"Federal Register API fetch failed for {doc_type} page {page}: {e}. "
-                    f"Aborting build rather than silently producing partial data."
-                ) from e
 
-            results = data.get("results", [])
-            if not results:
-                break
+                results = data.get("results", [])
+                if not results:
+                    break
 
-            for rec in results:
-                try:
-                    conn.execute("""
-                        INSERT OR IGNORE INTO presidential_documents
-                        (document_number, title, document_type, executive_order_number,
-                         signing_date, publication_date, html_url, abstract)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        rec.get("document_number"),
-                        rec.get("title"),
-                        doc_type,
-                        rec.get("executive_order_number"),
-                        rec.get("signing_date"),
-                        rec.get("publication_date"),
-                        rec.get("html_url"),
-                        rec.get("abstract"),
-                    ))
-                    count += 1
-                except sqlite3.Error as e:
-                    log.warning(f"  insert error: {e}")
+                for rec in results:
+                    try:
+                        conn.execute("""
+                            INSERT OR IGNORE INTO presidential_documents
+                            (document_number, title, document_type, executive_order_number,
+                             signing_date, publication_date, html_url, abstract)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            rec.get("document_number"),
+                            rec.get("title"),
+                            doc_type,
+                            rec.get("executive_order_number"),
+                            rec.get("signing_date"),
+                            rec.get("publication_date"),
+                            rec.get("html_url"),
+                            rec.get("abstract"),
+                        ))
+                        count += 1
+                    except sqlite3.Error as e:
+                        log.warning(f"  insert error: {e}")
 
-            total_pages = data.get("total_pages", 1)
-            if page >= total_pages:
-                break
-            page += 1
-            time.sleep(0.5)
+                total_pages = data.get("total_pages", 1)
+                if page >= total_pages:
+                    break
+                page += 1
+                time.sleep(0.5)
 
-        conn.commit()
-        type_count = conn.execute(
-            "SELECT COUNT(*) FROM presidential_documents WHERE document_type = ?",
-            (doc_type,)
-        ).fetchone()[0]
-        log.info(f"  {doc_type}: {type_count:,}")
+            conn.commit()
+            type_count = conn.execute(
+                "SELECT COUNT(*) FROM presidential_documents WHERE document_type = ?",
+                (doc_type,)
+            ).fetchone()[0]
+            log.info(f"  {doc_type}: {type_count:,}")
 
-    log.info(f"  Done: {count:,} presidential documents")
+    except requests.RequestException as e:
+        return _carry_forward_presidential_documents(conn, e)
+
+    # Live refresh succeeded — stamp it so carry-forward can measure staleness.
+    conn.execute("CREATE TABLE IF NOT EXISTS build_metadata (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute(
+        "INSERT OR REPLACE INTO build_metadata "
+        "VALUES ('presidential_documents_last_refresh', date('now'))"
+    )
+    conn.commit()
+    log.info(f"  Done: {count:,} presidential documents (live refresh OK)")
     return count
+
+
+def _carry_forward_presidential_documents(conn: sqlite3.Connection, err: Exception):
+    """FR API unreachable: reuse the prior build's presidential_documents instead
+    of aborting — UNLESS there's nothing to carry forward, or the last live
+    refresh is too old (then re-abort LOUD). See import_presidential_documents."""
+    import datetime
+
+    MAX_STALE_DAYS = 14
+    prev_path = DB_PATH.with_name("openregs_prev.db")
+    log.warning(
+        f"  Federal Register API unreachable ({err}); "
+        f"attempting carry-forward from {prev_path.name}."
+    )
+
+    prev_rows, last_refresh = 0, None
+    if prev_path.exists():
+        prev = sqlite3.connect(f"file:{prev_path}?mode=ro", uri=True)
+        try:
+            try:
+                prev_rows = prev.execute(
+                    "SELECT COUNT(*) FROM presidential_documents"
+                ).fetchone()[0]
+            except sqlite3.Error:
+                # prev.db lacks the table or is unreadable → treat as no prior
+                # data so the cold-start guard below aborts CLEANLY rather than
+                # crashing the build with an uncaught OperationalError.
+                prev_rows = 0
+            try:
+                row = prev.execute(
+                    "SELECT value FROM build_metadata "
+                    "WHERE key='presidential_documents_last_refresh'"
+                ).fetchone()
+                last_refresh = row[0] if row else None
+            except sqlite3.Error:
+                last_refresh = None  # stamp predates this feature
+        finally:
+            prev.close()
+
+    if prev_rows == 0:
+        raise RuntimeError(
+            f"Federal Register API failed and no prior presidential_documents "
+            f"exist to carry forward — aborting build: {err}"
+        ) from err
+
+    # No stamp yet (first build after this change) → use the prior build file's
+    # mtime as a proxy for when its EO data was last truly refreshed.
+    if last_refresh is None:
+        last_refresh = datetime.date.fromtimestamp(
+            prev_path.stat().st_mtime
+        ).isoformat()
+    age_days = (datetime.date.today() - datetime.date.fromisoformat(last_refresh)).days
+
+    if age_days > MAX_STALE_DAYS:
+        raise RuntimeError(
+            f"Federal Register API failed and presidential_documents last "
+            f"refreshed {age_days}d ago (> {MAX_STALE_DAYS}d) — aborting rather "
+            f"than ship long-stale EO data: {err}"
+        ) from err
+
+    # Replace any partial-fetch rows with the prior build's table. ATTACH wants a
+    # clean state and DETACH needs the txn committed first, else SQLite reports
+    # "database prevdb is locked".
+    conn.rollback()  # discard any partial-fetch transaction so ATTACH runs clean
+    conn.execute(f"ATTACH DATABASE 'file:{prev_path}?mode=ro' AS prevdb")
+    conn.execute("DELETE FROM presidential_documents")
+    conn.execute("""
+        INSERT INTO presidential_documents
+        (document_number, title, document_type, executive_order_number,
+         signing_date, publication_date, html_url, abstract)
+        SELECT document_number, title, document_type, executive_order_number,
+               signing_date, publication_date, html_url, abstract
+        FROM prevdb.presidential_documents
+    """)
+    conn.commit()
+    conn.execute("DETACH DATABASE prevdb")
+    conn.execute("CREATE TABLE IF NOT EXISTS build_metadata (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute(
+        "INSERT OR REPLACE INTO build_metadata "
+        "VALUES ('presidential_documents_last_refresh', ?)",
+        (last_refresh,),
+    )
+    conn.commit()
+    carried = conn.execute(
+        "SELECT COUNT(*) FROM presidential_documents"
+    ).fetchone()[0]
+    log.warning(
+        f"  CARRIED FORWARD {carried:,} presidential documents from prior build "
+        f"(last live refresh {last_refresh}, {age_days}d ago). FR API was "
+        f"unreachable; EO/proclamation data may be up to {age_days}d stale — "
+        f"build continues."
+    )
+    return carried
 
 
 SPENDING_DIR = BASE_DIR / "usaspending" / "awards"
@@ -2763,10 +2886,10 @@ def import_fec(conn: sqlite3.Connection):
     count = conn.execute("""
         INSERT INTO fec_contributions
         (cmte_id, cmte_name, cand_id, cand_name, transaction_dt,
-         transaction_amt, entity_tp, state, employer, occupation, cycle)
+         transaction_amt, entity_tp, state, employer, occupation, transaction_tp, cycle)
         SELECT c.cmte_id, cm.cmte_nm, c.cand_id, cn.cand_name,
                c.transaction_dt, c.transaction_amt, c.entity_tp,
-               c.state, c.employer, c.occupation, c.cycle
+               c.state, c.employer, c.occupation, c.transaction_tp, c.cycle
         FROM fecdb.fec_contributions_to_candidates c
         LEFT JOIN fecdb.fec_committees cm
                ON cm.cmte_id = c.cmte_id AND cm.cycle = c.cycle
@@ -5574,7 +5697,8 @@ def build_member_stats(conn: sqlite3.Connection):
 
     # Add stats columns to congress_members if they don't exist
     existing = {row[1] for row in conn.execute("PRAGMA table_info(congress_members)")}
-    for col in ["trade_count", "speech_count", "bills_sponsored", "vote_count", "fec_total_received"]:
+    for col in ["trade_count", "speech_count", "bills_sponsored", "vote_count",
+                "fec_total_received", "fec_ie_for", "fec_ie_against"]:
         if col not in existing:
             conn.execute(f"ALTER TABLE congress_members ADD COLUMN {col} INTEGER DEFAULT 0")
 
@@ -5585,10 +5709,38 @@ def build_member_stats(conn: sqlite3.Connection):
             speech_count = (SELECT COUNT(*) FROM crec_speakers WHERE bioguide_id = congress_members.bioguide_id),
             bills_sponsored = (SELECT COUNT(*) FROM legislation WHERE sponsor_bioguide_id = congress_members.bioguide_id),
             vote_count = (SELECT COUNT(*) FROM member_votes WHERE bioguide_id = congress_members.bioguide_id),
+            -- 24K/24Z only = PAC/party CONTRIBUTIONS RECEIVED. 24A (against) + 24E (for) are
+            -- independent expenditures by OUTSIDE groups — captured separately below, never
+            -- summed into "received" (audit 2026-05-25; same error class as committee_donor_summary).
             fec_total_received = (SELECT COALESCE(SUM(fc.transaction_amt), 0) FROM fec_contributions fc
                 JOIN fec_candidate_crosswalk xw ON xw.fec_candidate_id = fc.cand_id
-                WHERE xw.bioguide_id = congress_members.bioguide_id)
+                WHERE xw.bioguide_id = congress_members.bioguide_id
+                  AND fc.transaction_tp IN ('24K', '24Z')),
+            fec_ie_for = (SELECT COALESCE(SUM(fc.transaction_amt), 0) FROM fec_contributions fc
+                JOIN fec_candidate_crosswalk xw ON xw.fec_candidate_id = fc.cand_id
+                WHERE xw.bioguide_id = congress_members.bioguide_id
+                  AND fc.transaction_tp = '24E'),
+            fec_ie_against = (SELECT COALESCE(SUM(fc.transaction_amt), 0) FROM fec_contributions fc
+                JOIN fec_candidate_crosswalk xw ON xw.fec_candidate_id = fc.cand_id
+                WHERE xw.bioguide_id = congress_members.bioguide_id
+                  AND fc.transaction_tp = '24A')
     """)
+
+    # Reconciliation gate (audit 2026-05-25): confirm fec_total_received is now contributions-only,
+    # not the old all-types sum. If the transaction_tp filter ever regresses, "received" balloons to
+    # ~5x and this ratio jumps from ~20% toward 100% — fail-loud so it can't ship silently again.
+    k, e, a, allt = conn.execute("""
+        SELECT COALESCE(SUM(CASE WHEN transaction_tp IN ('24K','24Z') THEN transaction_amt END),0),
+               COALESCE(SUM(CASE WHEN transaction_tp='24E' THEN transaction_amt END),0),
+               COALESCE(SUM(CASE WHEN transaction_tp='24A' THEN transaction_amt END),0),
+               COALESCE(SUM(transaction_amt),0)
+        FROM fec_contributions
+    """).fetchone()
+    log.info(f"  FEC type split — received(24K+24Z)=${k/1e9:.2f}B  IE-for(24E)=${e/1e9:.2f}B  "
+             f"IE-against(24A)=${a/1e9:.2f}B  all-types=${allt/1e9:.2f}B")
+    if allt > 0 and (k / allt) > 0.45:
+        log.warning(f"  FEC RECONCILIATION: received is {k/allt:.0%} of all-types (expected ~20%); "
+                    f"transaction_tp filter may have regressed to all-types — CHECK before deploy")
 
     # Composite index for the default sort (current members by most trades)
     conn.execute("DROP INDEX IF EXISTS idx_cm_current_trades")
@@ -5599,7 +5751,8 @@ def build_member_stats(conn: sqlite3.Connection):
     conn.execute("DROP VIEW IF EXISTS member_stats")
     conn.execute("""
         CREATE VIEW member_stats AS
-        SELECT bioguide_id, trade_count, speech_count, bills_sponsored, vote_count, fec_total_received
+        SELECT bioguide_id, trade_count, speech_count, bills_sponsored, vote_count,
+               fec_total_received, fec_ie_for, fec_ie_against
         FROM congress_members
     """)
 
@@ -8023,9 +8176,38 @@ def main():
 
     if DB_PATH.exists():
         backup_path = DB_PATH.with_name("openregs_prev.db")
-        log.info(f"Backing up existing database → {backup_path}")
-        shutil.copy2(str(DB_PATH), str(backup_path))
-        log.info(f"Backup complete ({DB_PATH.stat().st_size / (1024**3):.1f} GB)")
+        # GUARD (incident 2026-05-30): a build that died mid-way (e.g. a required
+        # government API was down) leaves a PARTIAL openregs.db. Blindly copying it
+        # over openregs_prev.db destroys the good rollback copy that BOTH the FR
+        # carry-forward (_carry_forward_presidential_documents) and the dd_id
+        # reconcile read from. So sanity-check the existing DB first; if it looks like
+        # a failed partial, REFUSE the backup-copy and keep the good prev. Either way
+        # the partial is removed and we rebuild fresh from source.
+        n_ent, suspect = 0, False
+        try:
+            sz = DB_PATH.stat().st_size
+            prev_sz = backup_path.stat().st_size if backup_path.exists() else 0
+            chk = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            try:
+                n_ent = chk.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+            except sqlite3.Error:
+                n_ent = 0          # table missing / DB partial → treat as empty
+            finally:
+                chk.close()
+            suspect = (n_ent < 1_000_000) or (prev_sz > 0 and sz < prev_sz * 0.5)
+        except Exception as e:
+            suspect = True
+            log.warning(f"Pre-backup sanity check errored ({e}); treating existing DB as suspect.")
+        if suspect:
+            log.warning(
+                f"REFUSING to back up a partial/suspect openregs.db "
+                f"({DB_PATH.stat().st_size / (1024**3):.1f} GB, entities={n_ent:,}) over "
+                f"{backup_path.name} — preserving the good rollback copy (incident 2026-05-30)."
+            )
+        else:
+            log.info(f"Backing up existing database → {backup_path}")
+            shutil.copy2(str(DB_PATH), str(backup_path))
+            log.info(f"Backup complete ({DB_PATH.stat().st_size / (1024**3):.1f} GB)")
         DB_PATH.unlink()
         log.info("Removed existing database")
 

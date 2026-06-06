@@ -9,9 +9,11 @@
 #
 # Usage:
 #   ./deploy.sh              # full deploy
-#   ./deploy.sh --setup      # first-time server setup
 #   ./deploy.sh --db-only    # just upload new database
 #   ./deploy.sh --dry-run    # show what would happen
+#
+# (--setup was deprecated 2026-05-10 — for fresh-server provisioning,
+# follow bestpractices/disaster_recovery.md instead.)
 #
 set -euo pipefail
 
@@ -30,6 +32,20 @@ REMOTE_FARA_DB="$REMOTE_DIR/fara.db"
 DATASETTE_PORT=8002  # DataDawn uses 8001
 DOMAIN="regs.datadawn.org"  # Subdomain for the regs data
 
+# Predeploy snapshots live on NVMe ($REMOTE_DIR/backups), keep-1 newest + the
+# daily -mtime+5 sweep — the months-proven config. Snapshot-on-volume is PARKED
+# (2026-06-03): SQLite .backup()'s buffered 50 GB write to the ~70 MB/s network
+# volume intermittently wedged the deploy in writeback-throttle
+# (folio_wait_bit_common, 45 min D-state, indefinite). Deliberate fix — NVMe
+# snapshot, then ASYNC post-deploy `dd oflag=direct` to the volume, off the
+# synchronous path where a slow write is invisible — is deferred (decisions_log
+# §94). KEPT here on NVMe: gated/verified snapshot (.tmp→quick_check→mv),
+# .corrupt quarantine, stale-.tmp sweep. Gate 2 FLIPPED 2026-06-03: backups now go to
+# the current off-site bucket via a dedicated rclone remote (new key, post-2026-05-30
+# exposure); the prior bucket retained read-only as legacy history (not deleted).
+B2_RCLONE_REMOTE="${OPENREGS_B2_REMOTE:?Set OPENREGS_B2_REMOTE (rclone remote name for off-site backups)}"
+B2_BUCKET="${OPENREGS_B2_BUCKET:?Set OPENREGS_B2_BUCKET (off-site backup bucket name)}"
+
 # SSH keepalive + timeout options applied to every ssh/scp/rsync call below.
 # Codified 2026-05-02 after the propagation hook's quick_check ssh hung
 # indefinitely when the underlying TCP connection went silent during a long
@@ -43,16 +59,29 @@ DOMAIN="regs.datadawn.org"  # Subdomain for the regs data
 SSH_OPTS="-o ConnectTimeout=15 -o ServerAliveInterval=60 -o ServerAliveCountMax=3"
 
 DRY_RUN=0
-SETUP=0
 DB_ONLY=0
+PROPAGATE_ONLY=0
 
 for arg in "$@"; do
     case $arg in
         --dry-run) DRY_RUN=1 ;;
-        --setup) SETUP=1 ;;
         --db-only) DB_ONLY=1 ;;
+        --propagate-only) PROPAGATE_ONLY=1 ;;
+        --setup)
+            # Deprecated 2026-05-10 — kept as an error path so anyone using
+            # muscle memory or stale docs gets a clear redirect instead of
+            # silently falling through into a full deploy.
+            echo "ERROR: --setup is no longer supported (the path was last current in March 2026)."
+            echo "For fresh-server provisioning, follow bestpractices/disaster_recovery.md instead."
+            echo "For incremental config edits, use the vps-config/ local mirror + caddy-reload."
+            exit 1
+            ;;
         --help)
-            echo "Usage: $0 [--setup|--db-only|--dry-run]"
+            echo "Usage: $0 [--db-only|--dry-run|--propagate-only]"
+            echo "  --propagate-only  Re-propagate the newest existing VPS predeploy"
+            echo "                    backup to local + B2 (+ §5a ledger). No build/"
+            echo "                    upload/swap. Closes an off-site propagation gap;"
+            echo "                    also the §5b 'heal-the-refusal' re-run path."
             exit 0
             ;;
     esac
@@ -62,7 +91,36 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
-# ── Helper: skip rsync when local and remote are byte-identical ──────────
+# Log a fatal message and exit non-zero. It was CALLED at the pre-swap quick_check guard
+# (the #19 gate, 2026-05-25) but never DEFINED — latent since: a pre-swap-quick_check
+# failure would have printed "die: command not found" / exit 127 instead of the intended
+# message (the deploy would still abort under `set -e`, but unclearly). Found + defined
+# 2026-06-01 while adding upload_db_with_retry (which also relies on it).
+die() {
+    log "FATAL: $*"
+    exit 1
+}
+
+# Upload a DB to its `.new` destination with up to 3 retries. --partial-dir resumes
+# (not restarts) each attempt, so a transient broken pipe / socket IO doesn't waste the
+# whole transfer. Added 2026-06-01, mirroring 990 update.sh after a single broken pipe
+# killed a clean build's deploy there (incident_log 2026-06-01); openregs.db (~48GB) is
+# the most blip-exposed upload on the box. Live DB is never at risk — uploads target a
+# `.new` path and the atomic mv runs only on success; die() after 3 fails leaves live
+# untouched. Args: $1=local src, $2=remote dst (.new path), $3=label for logs.
+upload_db_with_retry() {
+    local src="$1" dst="$2" label="$3" ok=0 attempt
+    for attempt in 1 2 3; do
+        if rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$src" "$dst"; then
+            ok=1; break
+        fi
+        log "  WARNING: $label upload attempt $attempt/3 failed (transient transport?); retrying (resumes via --partial-dir)..."
+        sleep 10
+    done
+    [[ $ok -eq 1 ]] || die "rsync upload of $label → $dst failed after 3 attempts — live DB untouched (.new pattern)."
+}
+
+# ── Helpers: skip rsync when local and remote are byte-identical ─────────
 #
 # rsync against a `${path}.new` destination filename has no existing file
 # to baseline against, so it transfers the whole source even when the
@@ -70,32 +128,94 @@ log() {
 # auxiliary DBs (aphis, lobbying, fara — populated by separate pipelines,
 # often unchanged across openregs builds) this means burning 14+ GB of
 # bandwidth on a no-op transfer that can also push disk usage past the
-# headroom guard if the target is large (regression observed 2026-05-12 —
-# lobbying.db rsync failed with rsync code 11 partway through, despite
-# local and VPS being byte-identical: size 15201697792, same mtime to
-# the nanosecond).
+# headroom guard.
 #
-# Compare cheap size+mtime fingerprints before each rsync; skip if identical.
+# Strategy (cheap to expensive):
+#   1. Compare sizes — if different, content differs, upload.
+#   2. Sizes match: compare mtime fast-path — if equal, skip with confidence.
+#   3. Sizes match, mtimes drift: compute a sample hash (first + last 1 MB)
+#      and compare. Catches the case where a separate pipeline rebuilt the
+#      DB to byte-identical content (mtime drifted, content unchanged).
+#
+# Why the sample hash exists: 2026-05-23 deploy failed mid-rsync of
+# lobbying.db because the previous mtime+size-only check returned "differs"
+# under genuine mtime drift (size identical, mtime 57 sec apart from prior
+# pipeline re-run). The unnecessary 14 GB upload exhausted VPS headroom.
+# A 2 MB sample hash is ~50 ms vs ~14 min for an unnecessary rsync.
+#
+# Reliability for SQLite specifically: the first 1 MB includes the SQLite
+# header (page size, schema cookie, file change counter — touched on every
+# write). The last 1 MB usually includes recent journal/freelist pages. A
+# real content change that leaves both windows untouched on a multi-GB
+# SQLite DB is vanishingly rare.
+#
 # Returns 0 (no upload needed) on match, 1 (upload) otherwise. Falls back
-# to "upload" on any stat failure — safe default.
+# to "upload" on any stat/ssh failure — safe default.
 #
 # NOT applied to openregs.db because that DB is rebuilt every run, so its
 # mtime always changes — the check would just add latency.
+sample_hash_local() {
+    python3 - "$1" <<'PYEOF'
+import hashlib, os, sys
+path = sys.argv[1]
+size = os.path.getsize(path)
+h = hashlib.sha256()
+with open(path, 'rb') as f:
+    h.update(f.read(1024 * 1024))  # first 1 MB
+    if size > 2 * 1024 * 1024:
+        f.seek(size - 1024 * 1024)
+        h.update(f.read(1024 * 1024))  # last 1 MB
+print(h.hexdigest())
+PYEOF
+}
+
+sample_hash_remote() {
+    ssh $SSH_OPTS "$REMOTE_HOST" "REMOTE_PATH='$1' python3 -" <<'PYEOF'
+import hashlib, os, sys
+path = os.environ['REMOTE_PATH']
+try:
+    size = os.path.getsize(path)
+except OSError:
+    sys.exit(1)
+h = hashlib.sha256()
+with open(path, 'rb') as f:
+    h.update(f.read(1024 * 1024))
+    if size > 2 * 1024 * 1024:
+        f.seek(size - 1024 * 1024)
+        h.update(f.read(1024 * 1024))
+print(h.hexdigest())
+PYEOF
+}
+
 remote_matches_local() {
     local local_path="$1"
     local remote_path="$2"
-    local local_sig remote_sig
-    local_sig=$(stat -c '%s.%Y' "$local_path" 2>/dev/null) || return 1
-    remote_sig=$(ssh $SSH_OPTS "$REMOTE_HOST" "stat -c '%s.%Y' '$remote_path' 2>/dev/null" || true)
-    [[ -z "$remote_sig" ]] && return 1
-    [[ "$local_sig" == "$remote_sig" ]] && return 0
+    local local_size remote_size local_mtime remote_mtime
+    local_size=$(stat -c%s "$local_path" 2>/dev/null) || return 1
+    remote_size=$(ssh $SSH_OPTS "$REMOTE_HOST" "stat -c%s '$remote_path' 2>/dev/null" || true)
+    [[ -z "$remote_size" ]] && return 1
+    [[ "$local_size" != "$remote_size" ]] && return 1
+
+    # Sizes match: try mtime fast-path (no hash needed in the happy case).
+    local_mtime=$(stat -c%Y "$local_path" 2>/dev/null) || return 1
+    remote_mtime=$(ssh $SSH_OPTS "$REMOTE_HOST" "stat -c%Y '$remote_path' 2>/dev/null" || true)
+    [[ -n "$remote_mtime" && "$local_mtime" == "$remote_mtime" ]] && return 0
+
+    # Size matches but mtime drifted. Fall back to sample hash to confirm
+    # whether contents actually differ. See 2026-05-23 incident in the
+    # header comment above this function.
+    log "  mtime drift on $(basename "$local_path") (size match); computing sample hash..."
+    local local_hash remote_hash
+    local_hash=$(sample_hash_local "$local_path" 2>/dev/null) || return 1
+    remote_hash=$(sample_hash_remote "$remote_path" 2>/dev/null) || return 1
+    [[ "$local_hash" == "$remote_hash" ]] && return 0
     return 1
 }
 
 # ── Backup propagation to local + B2 (post-deploy, non-critical) ─────────
 #
 # Called after a successful deploy. Takes the pre-deploy snapshot that was
-# written to the VPS (cp $REMOTE_DB → $BACKUP_DIR/$BACKUP_FILE) and:
+# written to the VPS (.backup() $REMOTE_DB → $BACKUP_DIR/$BACKUP_FILE) and:
 #   1. Quick-checks it on VPS (refuse to propagate structural corruption)
 #   1b. Writes a sidecar manifest.json on the VPS next to the backup (DR
 #      drill F-001/F-003 follow-up — row counts + schema fingerprint so we
@@ -103,7 +223,7 @@ remote_matches_local() {
 #      detect "wrong backup" or "schema drift since last run" cheaply).
 #   2. Rsyncs both files down to $PROJECT_DIR/backups/
 #   3. Rotates local to last 3 (via deploy/rotate_local_backups.py)
-#   4. rclone copies both files to b2:your-b2-bucket/openregs-weekly/
+#   4. rclone copies both files to $B2_RCLONE_REMOTE:$B2_BUCKET/openregs-weekly/
 #   5. Rotates B2 to last 3 (inline)
 #
 # We use PRAGMA quick_check (not integrity_check) here. quick_check verifies
@@ -128,20 +248,32 @@ propagate_backup_to_local_and_b2() {
     fi
     local remote_backup="$BACKUP_DIR/$backup_file"
     local local_backup_dir="$PROJECT_DIR/backups"
-    local b2_remote="b2:your-b2-bucket/openregs-weekly"
+    local b2_remote="${B2_RCLONE_REMOTE}:${B2_BUCKET}/openregs-weekly"
     local helper="$PROJECT_DIR/deploy/rotate_local_backups.py"
     local crit_path="$PROJECT_DIR/criticality.json"
 
     log "=== Backup propagation (local + B2) ==="
 
-    # 1. Quick-check the VPS snapshot before replicating it.
+    # 1. Quick-check the VPS snapshot before replicating it. SECONDARY tripwire:
+    # the snapshot was already quick_check-gated at birth (see snapshot block), so
+    # a failure here means post-birth/post-swap corruption (bit-rot, fs fault). On
+    # fail: quarantine to .corrupt (de-heads it — the *.db rollback glob no longer
+    # matches it, so ls -t falls back to gen-1) and signal a non-zero exit so the
+    # cron's hc.io fires. Clean heredoc w/ try/except (matches the birth check) so a
+    # truly-unreadable file exits cleanly, not via traceback.
     log "Quick-checking VPS snapshot (structural integrity)..."
-    if ! ssh $SSH_OPTS "$REMOTE_HOST" "python3 -c \"
+    if ! ssh $SSH_OPTS "$REMOTE_HOST" "python3 - '$remote_backup'" <<'PYQC'
 import sqlite3, sys
-r = sqlite3.connect('file:$remote_backup?mode=ro', uri=True).execute('PRAGMA quick_check').fetchone()[0]
-sys.exit(0 if r == 'ok' else 2)
-\""; then
-        log "  WARNING: quick_check FAILED on VPS snapshot — refusing to propagate corruption"
+try:
+    r = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True).execute("PRAGMA quick_check").fetchone()[0]
+except Exception as e:
+    print("quick_check error:", e); sys.exit(1)
+sys.exit(0 if r == "ok" else 1)
+PYQC
+    then
+        log "  WARNING: quick_check FAILED post-birth — quarantining to .corrupt and de-heading"
+        ssh $SSH_OPTS "$REMOTE_HOST" "mv '$remote_backup' '$remote_backup.corrupt'" || true
+        SNAPSHOT_CORRUPT=1   # forces non-zero exit at end (hc.io alerts); NOT local
         return 2
     fi
     log "  quick_check: ok"
@@ -166,6 +298,11 @@ schema_rows = conn.execute(
 ).fetchall()
 schema_text = "\n".join(f"{t}\t{n}\t{s}" for t, n, s in schema_rows)
 schema_fp = hashlib.sha256(schema_text.encode()).hexdigest()
+# schema_objects enables table-level diff in validate_schema_fingerprint
+# (M5 — 2026-05-15). Keys are "{type}:{name}" so 'table:returns' won't
+# collide with a hypothetical 'index:returns'. Adds ~100-300 KB to the
+# manifest — negligible.
+schema_objects = {f"{t}:{n}": s for t, n, s in schema_rows}
 existing = {r[0] for r in conn.execute(
     "SELECT name FROM sqlite_schema WHERE type='table'").fetchall()}
 row_counts = {}
@@ -175,6 +312,24 @@ for t in tables:
             row_counts[t] = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
         except sqlite3.Error:
             row_counts[t] = None
+# Content markers (2026-05-30): the filename carries the DEPLOY date but the
+# content of the PRIOR build (predeploy snapshot = the build being overwritten).
+# These fields make the actual content generation machine-checkable so reading
+# the backup dir by filename can't mislead — the off-by-one that burned a read
+# on 2026-05-30. federal_register max pub date = a weekly-cadence content marker;
+# presidential_documents_last_refresh surfaces FR-carry-forward staleness (#2).
+content_markers = {}
+try:
+    content_markers["federal_register_max_pub_date"] = conn.execute(
+        "SELECT MAX(publication_date) FROM federal_register").fetchone()[0]
+except sqlite3.Error:
+    content_markers["federal_register_max_pub_date"] = None
+try:
+    _r = conn.execute("SELECT value FROM build_metadata "
+                      "WHERE key='presidential_documents_last_refresh'").fetchone()
+    content_markers["presidential_documents_last_refresh"] = _r[0] if _r else None
+except sqlite3.Error:
+    content_markers["presidential_documents_last_refresh"] = None
 manifest = {
     "schema_version": 1,
     "backup_file": os.path.basename(backup),
@@ -183,7 +338,9 @@ manifest = {
     "db_size_bytes": os.path.getsize(backup),
     "quick_check": "ok",
     "schema_fingerprint_sha256": schema_fp,
+    "schema_objects": schema_objects,
     "sqlite_version": sqlite3.sqlite_version,
+    "content_markers": content_markers,
     "row_counts": row_counts,
     "row_count_tables_present": sum(1 for v in row_counts.values() if v is not None),
     "row_count_tables_missing": sum(1 for v in row_counts.values() if v is None),
@@ -206,6 +363,10 @@ PYEOF
     fi
 
     # 2. Pull the VPS snapshot + manifest down to the local backups dir.
+    # INVARIANT — keep this a VPS pull. check_backup_freshness.py --cross-check-dir
+    # asserts off-site (B2) >= this local Tier-2 copy to catch a failed deploy push;
+    # if you ever repoint this to source from B2, that cross-check goes circular
+    # (both sides stale together on a failed push -> false GREEN). Source must != B2.
     mkdir -p "$local_backup_dir"
     log "Pulling $remote_backup → $local_backup_dir/"
     if ! rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --timeout=600 \
@@ -278,9 +439,196 @@ PYEOF
         done <<< "$b2_manifest_orphans"
     fi
 
+    # 6. Propagation ledger (§5a, 2026-05-30). Append a durable record that THIS
+    # generation was hashed and propagated to BOTH local and B2. This is the
+    # spine of the §4 daily parity check: it proves transfer + retention
+    # integrity (is what we shipped still safely off-site, uncorrupted),
+    # orthogonal to the manifest's build-content fingerprint. Append-only JSONL,
+    # workstation-local, single-writer (deploys are serialized by the §6.2
+    # deploy-lock). FULLY NON-FATAL: the deploy + propagation already succeeded
+    # above; a ledger-write failure must never fail a deploy — it is
+    # observability, not a gate.
+    #
+    # SCOPE NOTE (diagnosis 2026-05-30): this records the SUCCESS path only — the
+    # case GO-stamped ("ledger write after confirmed B2 push"). Recording the
+    # REFUSED / FAILED propagation paths (return 2/3/5 above — e.g. the May-24
+    # corrupt-snapshot refusal that left 990's newest gen VPS-only) is the
+    # diagnosis-driven follow-up, bundled with the deploy.sh propagation-
+    # robustness work — NOT this no-decision success-path ledger.
+    local ledger="$local_backup_dir/propagation_ledger.jsonl"
+    log "Writing propagation ledger entry → $ledger"
+    LEDGER="$ledger" LOCAL_COPY="$local_backup_dir/$backup_file" \
+        MANIFEST="$local_backup_dir/${backup_file}.manifest.json" \
+        SNAP_NAME="$backup_file" B2_REMOTE="$b2_remote" python3 - <<'PYEOF' \
+        || log "  WARNING: ledger write failed (non-fatal — backup itself is safe)"
+import json, os, hashlib, time, sys
+ledger = os.environ['LEDGER']
+local_copy = os.environ['LOCAL_COPY']
+# Full-file sha256 of the local copy (byte-identical to the B2 copy rclone just
+# pushed) — recorded NOW so §4 can re-hash the off-site copy later and assert it
+# still matches, catching truncation / bit-rot / interrupted transfer.
+h = hashlib.sha256()
+with open(local_copy, 'rb') as f:
+    for chunk in iter(lambda: f.read(8 << 20), b''):
+        h.update(chunk)
+sha = h.hexdigest()
+# Generation identity comes from the manifest's content_markers + schema fp
+# (#6). content_markers is what §4 generation-parity compares live-vs-offsite.
+fp, markers = None, None
+try:
+    with open(os.environ['MANIFEST']) as mf:
+        m = json.load(mf)
+    fp = m.get('schema_fingerprint_sha256')
+    markers = m.get('content_markers')
+except (OSError, ValueError):
+    pass
+entry = {
+    "ts": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    "db": "openregs",
+    "snapshot_file": os.environ['SNAP_NAME'],
+    "sha256": sha,
+    "size_bytes": os.path.getsize(local_copy),
+    "build_fingerprint": fp,
+    "content_markers": markers,
+    "b2_remote": os.environ['B2_REMOTE'],
+    "local_ok": True,
+    "b2_ok": True,
+}
+with open(ledger, 'a') as f:
+    f.write(json.dumps(entry, sort_keys=True) + "\n")
+print(f"ledger: {entry['snapshot_file']} sha={sha[:12]} fp={(fp or '')[:12]}",
+      file=sys.stderr)
+PYEOF
+
     log "Backup propagation complete"
     return 0
 }
+
+# ── N2 snapshot sidecar backup (post-deploy, non-critical) ────────────────
+#
+# `openregs/state/dd_id_snapshot.db` is the N2 reconciliation baseline that
+# validate_dd_id_stability.py reads on every Saturday rebuild. It lives
+# workstation-local (~500 MB), is NOT deployed to the VPS, and is the
+# single point of failure for the N2 gate: corruption/loss means the next
+# rebuild halts with "no snapshot DB" and recovery requires either
+# restoring the sidecar or running `--force-rebaseline` against fresh
+# scratch (the bootstrap guard added 2026-05-21 refuses silent re-baseline
+# from stale scratch — louder halt, but the failure mode without a backup
+# is harder to recover from).
+#
+# This function (added 2026-05-21 per `decisions_log.md` §60 hygiene
+# follow-up) propagates the workstation sidecar to the local backups dir
+# and B2 on every successful non-dry-run deploy. Same rotate-3 cadence as
+# the main openregs.db backup family, separate B2 prefix to keep listings
+# clean.
+#
+# Failures here do NOT abort the deploy.
+backup_n2_sidecar_to_local_and_b2() {
+    local sidecar="$PROJECT_DIR/state/dd_id_snapshot.db"
+    local local_backup_dir="$PROJECT_DIR/backups"
+    local b2_remote="${B2_RCLONE_REMOTE}:${B2_BUCKET}/openregs-dd-id-snapshot"
+    local helper="$PROJECT_DIR/deploy/rotate_local_backups.py"
+
+    if [[ ! -f "$sidecar" ]]; then
+        log "  (no N2 sidecar at $sidecar — skipping snapshot backup)"
+        return 0
+    fi
+
+    log "=== N2 snapshot sidecar backup (local + B2) ==="
+    local ts
+    ts=$(date -u +'%Y%m%d-%H%M%S')
+    local snap_name="dd_id_snapshot-${ts}.db"
+    local local_path="$local_backup_dir/$snap_name"
+
+    mkdir -p "$local_backup_dir"
+    log "Copying $sidecar → $local_path"
+    if ! cp "$sidecar" "$local_path"; then
+        log "  WARNING: local cp of sidecar failed"
+        return 2
+    fi
+
+    # Quick-check the copy (same rationale as the main propagation function).
+    if ! python3 -c "
+import sqlite3, sys
+r = sqlite3.connect('file:$local_path?mode=ro', uri=True).execute('PRAGMA quick_check').fetchone()[0]
+sys.exit(0 if r == 'ok' else 2)
+"; then
+        log "  WARNING: quick_check FAILED on snapshot copy — removing and skipping B2 push"
+        rm -f "$local_path"
+        return 3
+    fi
+    log "  quick_check: ok"
+
+    # Rotate local snapshot copies to last 3.
+    local rc=0
+    python3 "$helper" --dir "$local_backup_dir" --keep 3 \
+        --glob 'dd_id_snapshot-*.db' || rc=$?
+    if [[ $rc -ne 0 && $rc -ne 2 ]]; then
+        log "  WARNING: local snapshot rotation helper failed (exit $rc)"
+    fi
+
+    # Push to B2.
+    log "Pushing $snap_name → $b2_remote/"
+    if ! rclone copy "$local_path" "$b2_remote/"; then
+        log "  WARNING: B2 snapshot push failed"
+        return 5
+    fi
+
+    # Rotate B2 to last 3.
+    local b2_excess
+    b2_excess=$(rclone lsf "$b2_remote/" --files-only 2>/dev/null \
+                | grep -E '^dd_id_snapshot-.*\.db$' \
+                | sort | head -n -3 || true)
+    if [[ -n "$b2_excess" ]]; then
+        while IFS= read -r f; do
+            [[ -z "$f" ]] && continue
+            log "  rclone delete $b2_remote/$f"
+            rclone delete "$b2_remote/$f" || log "    (delete failed for $f, continuing)"
+        done <<< "$b2_excess"
+    else
+        log "  B2 already at or under 3 sidecar copies"
+    fi
+
+    log "N2 sidecar backup complete"
+    return 0
+}
+
+# ── --propagate-only: re-propagate an existing VPS backup (no build/swap) ──
+#
+# Added 2026-05-31. Re-runs propagate_backup_to_local_and_b2() against the
+# newest existing VPS predeploy backup — the safe way to CLOSE an off-site
+# propagation gap (a generation stranded VPS-only because a manual deploy
+# bypassed the workstation->B2 push) WITHOUT a full rebuild/deploy. Reuses the
+# tested propagation function (quick_check gate, manifest, rotate-3, §5a ledger)
+# so there is no hand-rolled divergence. Also the §5b "re-run after a refusal"
+# mechanism. The function's own quick_check refuses to propagate a torn snapshot.
+# Early-exits before any preflight/build/upload/swap.
+if [[ $PROPAGATE_ONLY -eq 1 ]]; then
+    BACKUP_DIR="$REMOTE_DIR/backups"
+    log "=== --propagate-only: locating newest VPS backup in $BACKUP_DIR ==="
+    # awk NR==1 (not head -1) so the remote ls is fully drained — avoids the
+    # pipefail+SIGPIPE early-exit class (feedback_pipefail_grep_early_exit).
+    PROP_PATH=$(ssh $SSH_OPTS "$REMOTE_HOST" \
+        "ls -1t '$BACKUP_DIR'/openregs-predeploy-*.db 2>/dev/null | awk 'NR==1'")
+    PROP_FILE=$(basename "$PROP_PATH" 2>/dev/null || true)
+    if [[ -z "$PROP_FILE" ]]; then
+        log "ERROR: no openregs-predeploy-*.db found on the VPS to propagate."
+        exit 1
+    fi
+    log "  newest VPS backup: $PROP_FILE"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "  [dry-run] would propagate $PROP_FILE to local + B2 (+ ledger), then exit."
+        exit 0
+    fi
+    if propagate_backup_to_local_and_b2 "$PROP_FILE"; then
+        log "--propagate-only: done."
+        exit 0
+    else
+        rc=$?
+        log "--propagate-only: propagation FAILED (rc=$rc) — see warnings above."
+        exit "$rc"
+    fi
+fi
 
 # ── Preflight checks ──────────────────────────────────────────────────────
 if [[ ! -f "$DB" ]]; then
@@ -292,71 +640,89 @@ fi
 DB_SIZE_MB=$(du -m "$DB" | cut -f1)
 log "Database: $DB (${DB_SIZE_MB}MB)"
 
-# ── First-time server setup (REMOVED 2026-05-10) ─────────────────────────
-# The --setup path was last useful during a March 2026 server migration. It
-# is now stale: it would chown to the SSH operator user (services now run as
-# a dedicated `datasette` system user, per 2026-04-20 hardening), pip-install
-# datasette globally (we use per-service venvs at /opt/datasette +
-# /opt/openregs), set the systemd unit User to the operator (no longer
-# correct), and instruct a manual Caddyfile edit (Caddy now uses a
-# per-tenant include split from 2026-05-07). Running it on a fresh box would
-# produce a half-broken bootstrap.
-#
-# For bare-metal DR or fresh-server provisioning, see:
-#   bestpractices/disaster_recovery.md   (full validated runbook)
-#   vps-config/                          (canonical Caddyfile + systemd units)
-if [[ $SETUP -eq 1 ]]; then
-    log "ERROR: --setup is no longer supported (the path was last current in March 2026)."
-    log "For fresh-server provisioning, follow bestpractices/disaster_recovery.md instead."
-    log "For incremental config edits, use the vps-config/ local mirror + caddy-reload."
-    exit 1
-fi
-
 # BACKUP_DIR is referenced by the disk-check error message and the
 # backup step further down. Define it once up top so the disk-check abort
 # path can print a useful "rm this snapshot" hint without crashing on an
 # unbound variable (regression observed 2026-05-02).
 BACKUP_DIR="$REMOTE_DIR/backups"
 
+# ── Pre-flight: decide which DBs to upload ────────────────────────────────
+#
+# Auxiliary DBs (aphis, lobbying, fara) are produced by independent pipelines
+# and frequently unchanged between Saturday openregs rebuilds. We decide
+# upfront which ones need re-upload so the disk-headroom check below can
+# size against the actual transfer total (the original check sized against
+# openregs alone and ignored auxiliary `.new` files — that's how the
+# 2026-05-23 deploy ran out of VPS disk mid-rsync of lobbying.db). The same
+# remote_matches_local check runs again JIT in the upload blocks further
+# down; double-call cost is ~3 ssh round-trips, negligible vs rsync.
+log "=== Pre-flight: deciding which DBs to upload ==="
+NEW_DB_BYTES=$(stat -c%s "$DB")
+TRANSFER_BYTES=$NEW_DB_BYTES  # openregs.db is always uploaded (rebuilt every run)
+log "  openregs.db (${DB_SIZE_MB} MB): will upload (rebuilt every run)"
+for entry in "APHIS|$APHIS_DB|$REMOTE_APHIS_DB" \
+             "Lobbying|$LOBBYING_DB|$REMOTE_LOBBYING_DB" \
+             "FARA|$FARA_DB|$REMOTE_FARA_DB"; do
+    IFS='|' read -r aux_label aux_local aux_remote <<< "$entry"
+    if [[ ! -f "$aux_local" ]]; then
+        log "  $aux_label: not found locally ($aux_local), nothing to upload"
+        continue
+    fi
+    aux_mb=$(du -m "$aux_local" | cut -f1)
+    if [[ $DRY_RUN -eq 1 ]]; then
+        log "  $aux_label (${aux_mb} MB): [DRY-RUN] assuming upload"
+        TRANSFER_BYTES=$((TRANSFER_BYTES + $(stat -c%s "$aux_local")))
+    elif remote_matches_local "$aux_local" "$aux_remote"; then
+        log "  $aux_label (${aux_mb} MB): byte-identical to VPS, will skip"
+    else
+        log "  $aux_label (${aux_mb} MB): differs from VPS, will upload"
+        TRANSFER_BYTES=$((TRANSFER_BYTES + $(stat -c%s "$aux_local")))
+    fi
+done
+TRANSFER_GB=$(awk -v b=$TRANSFER_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+log "  Total transfer: ${TRANSFER_GB} GB"
+
 # ── Pre-deploy disk-space check ──────────────────────────────────────────
 #
-# Peak disk usage during deploy = live + new_backup + .new (rsync) during
-# transfer, then atomic `mv .new → live` frees the old live. The VPS tier
-# keeps pre-deploy snapshots for up to 5 days (swept by a separate cron);
-# local + B2 tiers are rotated count-based (last 3) via the post-deploy
-# propagation hook below. See deploy/ROLLBACK.md for the 3-tier restore
-# runbook and bestpractices/cron_inventory.md for sweep/monitor cron UUIDs.
-#
-# Minimum safe free-space threshold is **2× new-DB size** (covers new_backup +
-# .new together). We abort below 2×, warn between 2× and 2.5×, proceed above.
+# Snapshot is born on NVMe (.backup() → $BACKUP_DIR) and the .new upload also
+# lands on NVMe before the atomic swap, so peak free we need on / =
+#   snapshot_overhead   (~BACKUP_BYTES, one openregs.db snapshot)
+# + transfer_overhead   (sum of .new files, TRANSFER_BYTES from preflight)
+# After the atomic `mv .new → live` the old live frees; the snapshot is trimmed
+# to keep-1 post-promote in the backup step + swept by the daily -mtime+5 cron.
+# Abort below min; warn between min and +10% margin.
 log "=== Pre-deploy disk-space check ==="
-NEW_DB_BYTES=$(stat -c%s "$DB")
-NEW_DB_GB=$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1024}')
-REQUIRED_MIN_GB=$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%.2f", (b*2)/1024/1024/1024}')
-REQUIRED_SAFE_GB=$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%.2f", (b*2.5)/1024/1024/1024}')
 if [[ $DRY_RUN -eq 1 ]]; then
-    log "[DRY-RUN] Would check remote disk against 2× (${REQUIRED_MIN_GB}G) / 2.5× (${REQUIRED_SAFE_GB}G) of new DB (${NEW_DB_GB}G)"
+    BACKUP_BYTES=$NEW_DB_BYTES  # dry-run estimate (no ssh)
+    log "[DRY-RUN] Would size against snapshot (~${DB_SIZE_MB} MB) + transfer (${TRANSFER_GB} GB)"
+else
+    BACKUP_BYTES=$(ssh $SSH_OPTS "$REMOTE_HOST" "stat -c%s '$REMOTE_DB' 2>/dev/null" || echo 0)
+fi
+NEEDED_MIN_BYTES=$((BACKUP_BYTES + TRANSFER_BYTES))
+NEEDED_SAFE_BYTES=$((NEEDED_MIN_BYTES + NEEDED_MIN_BYTES / 10))
+BACKUP_GB=$(awk -v b=$BACKUP_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+NEEDED_MIN_GB=$(awk -v b=$NEEDED_MIN_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+NEEDED_SAFE_GB=$(awk -v b=$NEEDED_SAFE_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+if [[ $DRY_RUN -eq 1 ]]; then
+    log "[DRY-RUN] Required: ≥${NEEDED_MIN_GB} GB (snapshot ${BACKUP_GB} GB + transfer ${TRANSFER_GB} GB); recommended ${NEEDED_SAFE_GB} GB"
 else
     REMOTE_FREE_KB=$(ssh $SSH_OPTS "$REMOTE_HOST" "df -P / | awk 'NR==2 {print \$4}'")
     REMOTE_FREE_GB=$(awk -v k=$REMOTE_FREE_KB 'BEGIN{printf "%.2f", k/1024/1024}')
-    log "Local new DB: ${NEW_DB_GB} GB   VPS free: ${REMOTE_FREE_GB} GB"
-    log "Thresholds — min safe (2×): ${REQUIRED_MIN_GB} GB   recommended (2.5×): ${REQUIRED_SAFE_GB} GB"
-    # Compare free vs required minimum (in KB to avoid float math in bash)
-    REQUIRED_MIN_KB=$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%d", (b*2)/1024}')
-    REQUIRED_SAFE_KB=$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%d", (b*2.5)/1024}')
-    if [[ $REMOTE_FREE_KB -lt $REQUIRED_MIN_KB ]]; then
-        log "ERROR: insufficient disk headroom — need at least ${REQUIRED_MIN_GB} GB free but only ${REMOTE_FREE_GB} GB available"
-        log "Free space on VPS by removing an old pre-deploy snapshot (only do this if"
-        log "local + B2 tiers have a copy — see deploy/ROLLBACK.md Tier 2/3):"
+    log "Required: ≥${NEEDED_MIN_GB} GB (snapshot ${BACKUP_GB} GB + transfer ${TRANSFER_GB} GB)"
+    log "Recommended: ${NEEDED_SAFE_GB} GB (with 10% margin); VPS free: ${REMOTE_FREE_GB} GB"
+    NEEDED_MIN_KB=$((NEEDED_MIN_BYTES / 1024))
+    NEEDED_SAFE_KB=$((NEEDED_SAFE_BYTES / 1024))
+    if [[ $REMOTE_FREE_KB -lt $NEEDED_MIN_KB ]]; then
+        SHORTFALL_GB=$(awk -v n=$NEEDED_MIN_BYTES -v f=$((REMOTE_FREE_KB * 1024)) 'BEGIN{printf "%.2f", (n-f)/1024/1024/1024}')
+        log "ERROR: insufficient NVMe headroom (short ${SHORTFALL_GB} GB)"
+        log "Free space by removing an old pre-deploy snapshot (local + B2 hold copies — ROLLBACK.md Tier 2/3):"
         log "    ssh $REMOTE_HOST 'ls -lht $BACKUP_DIR/openregs-predeploy-*.db'"
-        log "    ssh $REMOTE_HOST 'rm $BACKUP_DIR/openregs-predeploy-<oldest-timestamp>.db'"
-        log "Aborting deploy."
-        exit 2
-    elif [[ $REMOTE_FREE_KB -lt $REQUIRED_SAFE_KB ]]; then
-        log "WARNING: free space ${REMOTE_FREE_GB} GB is below recommended ${REQUIRED_SAFE_GB} GB (2.5× new DB)"
-        log "Deploy will proceed but margin is tight. Consider removing an old backup to free ~$(awk -v b=$NEW_DB_BYTES 'BEGIN{printf "%.0f", b/1024/1024/1024}') GB."
+        log "    ssh $REMOTE_HOST 'rm $BACKUP_DIR/openregs-predeploy-<oldest>.db'"
+        die "Aborting deploy — insufficient NVMe headroom."
+    elif [[ $REMOTE_FREE_KB -lt $NEEDED_SAFE_KB ]]; then
+        log "WARNING: free space ${REMOTE_FREE_GB} GB below recommended ${NEEDED_SAFE_GB} GB (need +10% margin)"
     else
-        log "OK: ${REMOTE_FREE_GB} GB free comfortably exceeds ${REQUIRED_SAFE_GB} GB safe threshold"
+        log "OK: ${REMOTE_FREE_GB} GB free exceeds ${NEEDED_SAFE_GB} GB safe threshold"
     fi
 fi
 
@@ -372,14 +738,89 @@ else
     ssh $SSH_OPTS "$REMOTE_HOST" "mkdir -p $BACKUP_DIR"
     TIMESTAMP=$(date '+%Y%m%d_%H%M')
     BACKUP_FILE="openregs-predeploy-${TIMESTAMP}.db"
-    # Snapshot of the live DB before we overwrite it. Swept on VPS by a
-    # separate daily cron (`find -mtime +5 -delete`) so deploy.sh doesn't
-    # have to own cleanup — see deploy/ROLLBACK.md Tier 1 and
-    # bestpractices/cron_inventory.md.
     if ssh $SSH_OPTS "$REMOTE_HOST" "test -f $REMOTE_DB"; then
-        log "Backing up existing openregs.db → backups/$BACKUP_FILE"
-        ssh $SSH_OPTS "$REMOTE_HOST" "cp $REMOTE_DB $BACKUP_DIR/$BACKUP_FILE"
-        log "VPS backup complete (cleanup owned by daily sweep cron, 5-day retention)"
+        # Block-start cleanup: orphan *.db.tmp from a hard-killed prior .backup()
+        # (OOM/dropped-ssh/power) matches neither the rollback nor keep-1 glob, so it
+        # would accrue ~48 GB/kill — remove all. Also bound any .corrupt quarantine
+        # files to newest-1 (one forensic sample; the exit-6 page already alerted a
+        # human). awk-drained per feedback_pipefail_grep_early_exit.
+        ssh $SSH_OPTS "$REMOTE_HOST" "rm -f $BACKUP_DIR/openregs-predeploy-*.db.tmp"
+        ssh $SSH_OPTS "$REMOTE_HOST" "DIR='$BACKUP_DIR' bash -s" <<'PYCORRUPT'
+cd "$DIR" || exit 0
+ls -1t openregs-predeploy-*.db.corrupt 2>/dev/null | awk 'NR>1' | while IFS= read -r f; do
+    echo "  rm old quarantine $f"; rm -f -- "$f"
+done
+PYCORRUPT
+
+        log "Snapshot → backups/$BACKUP_FILE.tmp (WAL-safe .backup() API, NVMe)"
+        # WAL-safe SQLite online-backup API — NOT cp (cp of a live WAL DB races
+        # checkpoints → torn copy; hit 2026-05-24). .backup() → .tmp, then the mv to
+        # the final (rollback-head) name is GATED on (1) .backup() success and
+        # (2) quick_check — verify BEFORE head-promotion. On .backup() error: rm .tmp; die.
+        if ! ssh $SSH_OPTS "$REMOTE_HOST" "python3 - '$REMOTE_DB' '$BACKUP_DIR/$BACKUP_FILE.tmp'" <<'PYBACKUP'
+import sqlite3, sys
+src = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+dst = sqlite3.connect(sys.argv[2])
+try:
+    with dst:
+        src.backup(dst)
+    dst.execute("PRAGMA journal_mode=DELETE")  # single-file snapshot: no -wal/-shm orphans on later opens
+finally:
+    src.close(); dst.close()
+PYBACKUP
+        then
+            ssh $SSH_OPTS "$REMOTE_HOST" "rm -f '$BACKUP_DIR/$BACKUP_FILE.tmp'" || true
+            die "Snapshot .backup() failed — removed partial .tmp; live untouched; prior snapshot remains rollback head."
+        fi
+        # Verify the .tmp BEFORE the mv. quick_check (project standard, decisions_log
+        # §21) — catches torn/truncated/header from a write error; full integrity_check
+        # stays at rollback (ROLLBACK.md). On fail: quarantine to .corrupt + die.
+        if ! ssh $SSH_OPTS "$REMOTE_HOST" "python3 - '$BACKUP_DIR/$BACKUP_FILE.tmp'" <<'PYCHECK'
+import sqlite3, sys
+try:
+    r = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True).execute("PRAGMA quick_check").fetchone()[0]
+except Exception as e:
+    print("quick_check error:", e); sys.exit(1)
+sys.exit(0 if r == "ok" else 1)
+PYCHECK
+        then
+            ssh $SSH_OPTS "$REMOTE_HOST" "mv '$BACKUP_DIR/$BACKUP_FILE.tmp' '$BACKUP_DIR/$BACKUP_FILE.corrupt'" || true
+            die "Snapshot quick_check FAILED at birth — quarantined to .corrupt; live untouched; prior snapshot remains rollback head."
+        fi
+        # Complete + verified → atomic promotion to the final (rollback-head) name.
+        ssh $SSH_OPTS "$REMOTE_HOST" "mv '$BACKUP_DIR/$BACKUP_FILE.tmp' '$BACKUP_DIR/$BACKUP_FILE'"
+        # Part B (2026-06-04): the snapshot is journal_mode=DELETE (single file), but
+        # defensively sweep any .tmp-wal/.tmp-shm a WAL-era open could leave so the backup
+        # dir is EXACTLY <snapshot>.db + <snapshot>.db.manifest.json — nothing else.
+        ssh $SSH_OPTS "$REMOTE_HOST" "rm -f '$BACKUP_DIR/$BACKUP_FILE.tmp-wal' '$BACKUP_DIR/$BACKUP_FILE.tmp-shm'"
+        # keep-1 (GATED — option iii, 2026-06-04): trim an older snapshot ONLY after
+        # confirming it is off-box (workstation Tier-2 OR B2 Tier-3). One that ISN'T (a prior
+        # propagation silently failed) is NOT deleted — warn + flag exit 7 so the cron pages,
+        # leaving the only copy intact. Runs workstation-side (the VPS can't see the off-box
+        # tiers). The daily -mtime+5 cron still backstops NVMe disk.
+        TRIM_B2="${B2_RCLONE_REMOTE}:${B2_BUCKET}/openregs-weekly"
+        OLD_SNAPS=$(ssh $SSH_OPTS "$REMOTE_HOST" "ls -1t '$BACKUP_DIR'/openregs-predeploy-*.db 2>/dev/null | awk 'NR>1'") || { log "  WARNING: keep-1: could not list VPS snapshots (ssh failure) — skipping trim this run; daily -mtime+5 cron backstops disk."; OLD_SNAPS=""; }
+        # B2 (Tier-3) listing fetched ONCE for exact-name membership tests below.
+        B2_LIST=$(rclone lsf --files-only "$TRIM_B2/" 2>/dev/null) || B2_LIST=""
+        while IFS= read -r REMOTE_OLD; do
+            [[ -z "$REMOTE_OLD" ]] && continue
+            OB=$(basename "$REMOTE_OLD")
+            OFF_BOX=0
+            [[ -f "$PROJECT_DIR/backups/$OB" ]] && OFF_BOX=1
+            # B2 (Tier-3) fallback: exact-name membership in the once-fetched listing. NOT
+            # `rclone lsf "$TRIM_B2/$OB"` — that lists $OB as a *directory* and exits 0/empty
+            # for a NON-existent file → false "present" (sandbox-caught 2026-06-04). Herestring
+            # (not a pipe) avoids the pipefail + grep-q SIGPIPE masking class.
+            if [[ $OFF_BOX -eq 0 ]] && grep -Fxq "$OB" <<< "$B2_LIST"; then OFF_BOX=1; fi
+            if [[ $OFF_BOX -eq 1 ]]; then
+                log "  keep-1 trim: $OB present off-box (Tier-2/3) → rm on VPS"
+                ssh $SSH_OPTS "$REMOTE_HOST" "rm -f -- '$BACKUP_DIR/$OB' '$BACKUP_DIR/$OB.manifest.json'"
+            else
+                log "  WARNING: keep-1 trim SKIPPED $OB — NOT on workstation OR B2; refusing to delete the only copy (heal via deploy.sh --propagate-only)."
+                TRIM_UNSAFE=1
+            fi
+        done <<< "$OLD_SNAPS"
+        log "VPS snapshot complete+verified on NVMe (keep-1; deeper history → workstation+B2)"
     else
         log "No existing DB to backup"
         BACKUP_FILE=""
@@ -406,7 +847,23 @@ if [[ $DRY_RUN -eq 1 ]]; then
     log "[DRY-RUN] Would upload ${DB_SIZE_MB}MB to $REMOTE_HOST:${REMOTE_DB}.new, then atomic mv to $REMOTE_DB"
 else
     log "Uploading $DB → $REMOTE_HOST:${REMOTE_DB}.new (${DB_SIZE_MB}MB) via rsync..."
-    rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$DB" "$REMOTE_HOST:${REMOTE_DB}.new"
+    upload_db_with_retry "$DB" "$REMOTE_HOST:${REMOTE_DB}.new" "openregs.db"
+    # Pre-swap integrity gate (#19, 2026-05-25): quick_check the uploaded .new
+    # BEFORE it goes live (a corrupt build/transfer can't replace a good live DB).
+    # Companion to the WAL-safe backup fix. Gates the primary DB (openregs.db);
+    # aphis/lobbying/fara could get the same via a small helper (noted follow-up).
+    if ! ssh $SSH_OPTS "$REMOTE_HOST" "python3 - '${REMOTE_DB}.new'" <<'PYCHECK'
+import sqlite3, sys
+try:
+    r = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True).execute("PRAGMA quick_check").fetchone()[0]
+except Exception as e:
+    print("quick_check error:", e); sys.exit(1)
+sys.exit(0 if r == "ok" else 1)
+PYCHECK
+    then
+        die "Pre-swap quick_check FAILED on ${REMOTE_DB}.new — refusing to swap (live DB untouched; .new left in place for inspection)"
+    fi
+    log "Pre-swap quick_check passed — openregs.db is structurally sound"
     log "Upload complete — atomically replacing live database..."
     # rm -wal/-shm post-mv: orphan WAL companions from the pre-swap DB can replay against
     # the new file on the next SQLite checkpoint, clobbering pages the new file thought it owned.
@@ -424,7 +881,7 @@ if [[ -f "$APHIS_DB" ]]; then
         log "APHIS DB byte-identical to VPS (size+mtime match), skipping upload"
     else
         log "Uploading $APHIS_DB → $REMOTE_HOST:${REMOTE_APHIS_DB}.new (${APHIS_SIZE_MB}MB)..."
-        rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$APHIS_DB" "$REMOTE_HOST:${REMOTE_APHIS_DB}.new"
+        upload_db_with_retry "$APHIS_DB" "$REMOTE_HOST:${REMOTE_APHIS_DB}.new" "aphis.db"
         ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_APHIS_DB}.new ${REMOTE_APHIS_DB} && rm -f ${REMOTE_APHIS_DB}-wal ${REMOTE_APHIS_DB}-shm && sudo chown datasette:datasette ${REMOTE_APHIS_DB} && sudo chmod 664 ${REMOTE_APHIS_DB}"
         log "APHIS swap complete"
     fi
@@ -440,7 +897,7 @@ if [[ -f "$LOBBYING_DB" ]]; then
         log "Lobbying DB byte-identical to VPS (size+mtime match), skipping upload (saved ${LOBBYING_SIZE_MB}MB transfer)"
     else
         log "Uploading $LOBBYING_DB → $REMOTE_HOST:${REMOTE_LOBBYING_DB}.new (${LOBBYING_SIZE_MB}MB) via rsync..."
-        rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$LOBBYING_DB" "$REMOTE_HOST:${REMOTE_LOBBYING_DB}.new"
+        upload_db_with_retry "$LOBBYING_DB" "$REMOTE_HOST:${REMOTE_LOBBYING_DB}.new" "lobbying.db"
         ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_LOBBYING_DB}.new ${REMOTE_LOBBYING_DB} && rm -f ${REMOTE_LOBBYING_DB}-wal ${REMOTE_LOBBYING_DB}-shm && sudo chown datasette:datasette ${REMOTE_LOBBYING_DB} && sudo chmod 664 ${REMOTE_LOBBYING_DB}"
         log "Lobbying swap complete"
     fi
@@ -456,7 +913,7 @@ if [[ -f "$FARA_DB" ]]; then
         log "FARA DB byte-identical to VPS (size+mtime match), skipping upload"
     else
         log "Uploading $FARA_DB → $REMOTE_HOST:${REMOTE_FARA_DB}.new (${FARA_SIZE_MB}MB)..."
-        rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --progress --timeout=600 "$FARA_DB" "$REMOTE_HOST:${REMOTE_FARA_DB}.new"
+        upload_db_with_retry "$FARA_DB" "$REMOTE_HOST:${REMOTE_FARA_DB}.new" "fara.db"
         ssh $SSH_OPTS "$REMOTE_HOST" "mv ${REMOTE_FARA_DB}.new ${REMOTE_FARA_DB} && rm -f ${REMOTE_FARA_DB}-wal ${REMOTE_FARA_DB}-shm && sudo chown datasette:datasette ${REMOTE_FARA_DB} && sudo chmod 664 ${REMOTE_FARA_DB}"
         log "FARA swap complete"
     fi
@@ -581,6 +1038,68 @@ else
     fi
 fi
 
+# ── Post-deploy smoke test ────────────────────────────────────────────────
+# Verify prod returns the same row counts as the DBs we just deployed.
+# Catches Datasette serving the old file via a stale handle (see incident_log
+# 2026-05-22 — Datasette held open fd on deleted inode after ad-hoc atomic
+# rename, served pre-PF-dedup data for ~30 min until restart), mid-transfer
+# corruption (2026-04-11 incident), atomic-rename races, or any other
+# "deploy ran but prod is wrong" failure mode. Mirrors the 990project/update.sh
+# smoke test added 2026-05-10. Smoke set lives in criticality.json — adding
+# a table means flipping `smoke: true` there, no code edit here.
+#
+# Failures here do NOT abort the script — backup propagation still runs —
+# but SMOKE_FAILED is set so the final exit is non-zero and the cron's
+# hc.io ping alerts. Added 2026-05-23 (parallel to 990 path).
+if [[ $DRY_RUN -eq 0 ]]; then
+    sleep 15  # let Datasette/WAL warmup after restart
+    log "=== Post-deploy smoke test (prod vs local row counts) ==="
+    SMOKE_FAILED=0
+    # Output one "table,db" line per smoke=true entry in criticality.json.
+    SMOKE_LIST=$(python3 -c "
+import json
+c = json.load(open('$PROJECT_DIR/criticality.json'))
+for t, info in c['tables'].items():
+    if info.get('smoke'):
+        print(f\"{t},{info.get('db','openregs')}\")
+")
+    while IFS=, read -r table db; do
+        [[ -z "$table" ]] && continue
+        case "$db" in
+            openregs) local_db="$DB" ;;
+            lobbying) local_db="$LOBBYING_DB" ;;
+            aphis)    local_db="$APHIS_DB" ;;
+            fara)     local_db="$FARA_DB" ;;
+            *)        log "  SKIP  $table: unknown db='$db'"; SMOKE_FAILED=1; continue ;;
+        esac
+        # Retry 3× with 5s/10s backoff for transient post-restart 503s.
+        PROD=""
+        for attempt in 1 2 3; do
+            PROD=$(curl -fsS --max-time 15 \
+                "https://$DOMAIN/${db}.json?sql=SELECT+COUNT(*)+AS+n+FROM+${table}&_shape=array" \
+                2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['n'])" 2>/dev/null)
+            [[ -n "$PROD" ]] && break
+            [[ $attempt -lt 3 ]] && sleep $((attempt * 5))
+        done
+        LOCAL=$(python3 -c "import sqlite3; print(sqlite3.connect('$local_db').execute('SELECT COUNT(*) FROM $table').fetchone()[0])" 2>/dev/null)
+        if [[ -z "$PROD" ]]; then
+            log "  WARN  $table ($db): prod query failed or returned no data (local=$LOCAL)"
+            SMOKE_FAILED=1
+        elif [[ "$PROD" != "$LOCAL" ]]; then
+            log "  FAIL  $table ($db): prod=$PROD local=$LOCAL"
+            SMOKE_FAILED=1
+        else
+            log "  OK    $table ($db): $PROD"
+        fi
+    done <<< "$SMOKE_LIST"
+    if [[ "$SMOKE_FAILED" -eq 1 ]]; then
+        log "WARNING: post-deploy smoke test failed — prod row counts don't match local."
+        log "Backup propagation will still run; script will exit non-zero at end so the cron's hc.io ping alerts."
+    else
+        log "Post-deploy smoke test passed"
+    fi
+fi
+
 # ── Post-deploy backup propagation (non-critical) ────────────────────────
 # Runs after service restart succeeded. Failures here do not abort the
 # script — the VPS snapshot still exists, and hc.io + daily freshness
@@ -589,9 +1108,31 @@ if [[ $DRY_RUN -eq 0 ]] && [[ $DB_ONLY -eq 0 ]]; then
     if ! propagate_backup_to_local_and_b2 "${BACKUP_FILE:-}"; then
         log "WARNING: backup propagation exited non-zero (see above). Deploy continues."
     fi
+    if ! backup_n2_sidecar_to_local_and_b2; then
+        log "WARNING: N2 sidecar backup exited non-zero (see above). Deploy continues."
+    fi
 fi
 
 log ""
 log "=== Deploy complete ==="
 log "Database: ${DB_SIZE_MB}MB"
 log "URL: https://$DOMAIN/"
+
+# Surface failures as a non-zero exit so the cron's hc.io ping alerts. By this
+# point the deploy is LIVE — these mean "investigate the backup/data," not "redo
+# the deploy." Corruption checked FIRST (more severe than a smoke mismatch): a
+# snapshot failed quick_check post-birth and was quarantined, so the rollback head
+# reverted to gen-1. The deploy itself succeeded (live .new passed its own pre-swap
+# quick_check); the off-site backup chain for THIS generation is what's suspect.
+if [[ "${SNAPSHOT_CORRUPT:-0}" -eq 1 ]]; then
+    log "EXITING with status 6: a snapshot failed quick_check and was quarantined to .corrupt — rollback head reverted to gen-1; investigate."
+    exit 6
+fi
+if [[ "${TRIM_UNSAFE:-0}" -eq 1 ]]; then
+    log "EXITING with status 7: keep-1 trim skipped an un-propagated snapshot (not on workstation OR B2) — the deploy itself succeeded; investigate + deploy.sh --propagate-only."
+    exit 7
+fi
+if [[ "${SMOKE_FAILED:-0}" -eq 1 ]]; then
+    log "EXITING with status 4 due to smoke-test failure (see WARNING above)"
+    exit 4
+fi
