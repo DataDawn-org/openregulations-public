@@ -8176,9 +8176,38 @@ def main():
 
     if DB_PATH.exists():
         backup_path = DB_PATH.with_name("openregs_prev.db")
-        log.info(f"Backing up existing database → {backup_path}")
-        shutil.copy2(str(DB_PATH), str(backup_path))
-        log.info(f"Backup complete ({DB_PATH.stat().st_size / (1024**3):.1f} GB)")
+        # GUARD (incident 2026-05-30): a build that died mid-way (e.g. a required
+        # government API was down) leaves a PARTIAL openregs.db. Blindly copying it
+        # over openregs_prev.db destroys the good rollback copy that BOTH the FR
+        # carry-forward (_carry_forward_presidential_documents) and the dd_id
+        # reconcile read from. So sanity-check the existing DB first; if it looks like
+        # a failed partial, REFUSE the backup-copy and keep the good prev. Either way
+        # the partial is removed and we rebuild fresh from source.
+        n_ent, suspect = 0, False
+        try:
+            sz = DB_PATH.stat().st_size
+            prev_sz = backup_path.stat().st_size if backup_path.exists() else 0
+            chk = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+            try:
+                n_ent = chk.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+            except sqlite3.Error:
+                n_ent = 0          # table missing / DB partial → treat as empty
+            finally:
+                chk.close()
+            suspect = (n_ent < 1_000_000) or (prev_sz > 0 and sz < prev_sz * 0.5)
+        except Exception as e:
+            suspect = True
+            log.warning(f"Pre-backup sanity check errored ({e}); treating existing DB as suspect.")
+        if suspect:
+            log.warning(
+                f"REFUSING to back up a partial/suspect openregs.db "
+                f"({DB_PATH.stat().st_size / (1024**3):.1f} GB, entities={n_ent:,}) over "
+                f"{backup_path.name} — preserving the good rollback copy (incident 2026-05-30)."
+            )
+        else:
+            log.info(f"Backing up existing database → {backup_path}")
+            shutil.copy2(str(DB_PATH), str(backup_path))
+            log.info(f"Backup complete ({DB_PATH.stat().st_size / (1024**3):.1f} GB)")
         DB_PATH.unlink()
         log.info("Removed existing database")
 
