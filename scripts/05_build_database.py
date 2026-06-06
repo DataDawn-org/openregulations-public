@@ -3827,6 +3827,23 @@ def import_stock_trades(conn: sqlite3.Connection):
             return f"{year}-{int(month):02d}-{int(day):02d}"
         return d  # Already ISO or other format
 
+    _today_iso = time.strftime("%Y-%m-%d")
+
+    def clamp_future(d):
+        """Blank future-dated transaction dates — filer typos or scan-text
+        artifacts (e.g. a PTR keyed as 2026-12-26; a 2020 PDF OCR-garbled to
+        2026). Mirrors the parse-time clamp in 12_congress_stock_trades.py
+        (member-hub audit 2026-05-25 §D): keep the trade, blank the impossible
+        date, never fabricate. Needed at import time too because the House PTR
+        parse is incremental — rows cached in all_transactions.json before the
+        parse-time clamp landed never re-parse, so they bypass it forever
+        (followup_queue #72, 2026-06-05).
+        """
+        if d and d > _today_iso:
+            log.warning(f"  Clamped future-dated trade date {d!r} -> blank (import-time, #72)")
+            return ""
+        return d
+
     total = 0
 
     # Senate trades — prefer eFD (government source) over third-party
@@ -3876,7 +3893,7 @@ def import_stock_trades(conn: sqlite3.Connection):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     member_name, bioguide, "Senate",
-                    normalize_date(tx_date),
+                    clamp_future(normalize_date(tx_date)),
                     ticker, asset_desc, asset_type, tx_type,
                     amount, owner, comment, source_url, "P",
                 ))
@@ -3895,6 +3912,7 @@ def import_stock_trades(conn: sqlite3.Connection):
         with open(house_ptr_file) as f:
             house_txs = json.load(f)
         house_tx_count = 0
+        house_artifact_count = 0
         # Track doc_ids that have parsed transactions
         parsed_doc_ids = set()
         for tx in house_txs:
@@ -3903,6 +3921,24 @@ def import_stock_trades(conn: sqlite3.Connection):
                 member_name = tx.get("filer_name", "").strip()
             bioguide = resolve_bioguide(member_name)
             doc_id = tx.get("doc_id", "")
+            # Skip continuation-line parse artifacts: a row with neither a
+            # transaction type nor an amount is not a transaction (real House
+            # PTR rows always carry both) — it's a wrapped description line
+            # the parser mis-split, typically carrying option-expiration or
+            # bond-maturity dates as its "transaction date" (27 such rows
+            # cached as of 2026-06-05, dates like 2165/2079/2026-12-19).
+            # Same policy as the unparsed-PTR skip below: no trade data, no
+            # row. Parser-side fix tracked in followup_queue #91. (#72)
+            #
+            # parsed_doc_ids.add comes AFTER this skip (review catch,
+            # 2026-06-05): a doc whose rows are ALL artifacts must degrade to
+            # the visible "unparsed (no trade data)" bucket below, not be
+            # classified parsed-with-zero-trades and vanish silently. Today 0
+            # such docs exist (all 14 artifact-carrying docs also carry real
+            # trades — any real row still registers the doc as parsed).
+            if not tx.get("transaction_type") and not tx.get("amount"):
+                house_artifact_count += 1
+                continue
             parsed_doc_ids.add(doc_id)
             try:
                 conn.execute("""
@@ -3914,7 +3950,7 @@ def import_stock_trades(conn: sqlite3.Connection):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     member_name, bioguide, "House",
-                    normalize_date(tx.get("transaction_date", "")),
+                    clamp_future(normalize_date(tx.get("transaction_date", ""))),
                     normalize_date(tx.get("filing_date", "")),
                     tx.get("ticker", ""),
                     tx.get("asset_name", ""),
@@ -3933,6 +3969,8 @@ def import_stock_trades(conn: sqlite3.Connection):
         conn.commit()
         total += house_tx_count
         log.info(f"  House PTR transactions (parsed): {house_tx_count:,}")
+        if house_artifact_count:
+            log.info(f"  House PTR continuation-line artifacts skipped (no type+amount): {house_artifact_count:,}")
 
         # Skip unparsed PTR filings (scanned PDFs with no extractable trade data).
         # These create blank rows with only filing metadata — no ticker, amount, or dates.
@@ -6641,6 +6679,31 @@ def validate_critical_tables(conn: sqlite3.Connection):
             log.error(f"  ✗ {table}: {n:,} rows (expected ≥ {min_rows:,})")
         else:
             log.info(f"  ✓ {table}: {n:,}")
+
+    # entity_dominance uniqueness invariant — hard-fail (followup_queue #75,
+    # 2026-06-05). Every phase_c6 tiebreaker attachment (grants, spending,
+    # lobbying, hearing_witnesses, earmarks) resolves a name via a scalar
+    # subquery keyed on entity_dominance.name_normalized and relies on the
+    # PRIMARY KEY for determinism. SQLite scalar subqueries silently take the
+    # FIRST row when multiple match — so a future migration that loses the PK
+    # would degrade those attachments to silent arbitrary picks with no error
+    # anywhere. Assert the invariant here, where failure aborts the deploy
+    # (SystemExit 5) and the weekly pager fires: loud and fail-closed, never
+    # an unread WARN. Verified green 2026-06-05 (0 dupes / 17,705 rows).
+    try:
+        n_dup = conn.execute(
+            "SELECT COUNT(*) FROM (SELECT name_normalized FROM entity_dominance "
+            "GROUP BY name_normalized HAVING COUNT(*) > 1)"
+        ).fetchone()[0]
+        if n_dup:
+            failures.append(f"INVARIANT: entity_dominance has {n_dup:,} duplicate name_normalized values (must be unique — silent-pick risk in phase_c6 attachments)")
+            log.error(f"  ✗ entity_dominance: {n_dup:,} duplicate name_normalized values")
+        else:
+            log.info("  ✓ entity_dominance: name_normalized unique (PK invariant holds)")
+    except sqlite3.OperationalError as e:
+        failures.append(f"MISSING: entity_dominance ({e}) — phase_c6 attachment source absent")
+        log.error(f"  ✗ entity_dominance: {e}")
+
     if failures:
         log.error("\n" + "=" * 60)
         log.error(f"CRITICAL TABLES VALIDATION FAILED: {len(failures)} issue(s)")
@@ -6771,6 +6834,32 @@ def validate_dates(conn: sqlite3.Connection):
         log.info("    (data preserved per primary-source policy; queries that need real freshness use WHERE col <= date('now'))")
     else:
         log.info("  ✓ No future-dated rows >30d in headline date columns.")
+
+    # 1c. Cross-field impossibility: stock_trades disclosure before transaction.
+    # A PTR cannot disclose a trade before it happened; violations are filer
+    # error or scan-text artifacts (2014-2016 House OCR cluster — 57 rows known
+    # at 2026-06-05, pending filer-vs-OCR decompose; followup_queue #91).
+    # WARN-only by design: flag-for-review, never auto-correct (a guard that
+    # auto-corrects is a Bug-#3 surface). Surfacing beyond this log: #90.
+    try:
+        impossible_q = (
+            "FROM stock_trades WHERE disclosure_date < transaction_date "
+            "AND disclosure_date != '' AND transaction_date != '' "
+            "AND disclosure_date IS NOT NULL AND transaction_date IS NOT NULL"
+        )
+        n_impossible = conn.execute(f"SELECT COUNT(*) {impossible_q}").fetchone()[0]
+        if n_impossible:
+            samples = conn.execute(
+                f"SELECT member_name, transaction_date, disclosure_date {impossible_q} "
+                f"ORDER BY transaction_date DESC LIMIT 3"
+            ).fetchall()
+            log.warning(f"\n  ⚠  CROSS_FIELD_DATE_WARNING: {n_impossible:,} stock_trades rows have "
+                        f"disclosure_date earlier than transaction_date (logically impossible; "
+                        f"filer/OCR artifacts, preserved as filed). e.g. {samples}")
+        else:
+            log.info("  ✓ No stock_trades rows with disclosure before transaction.")
+    except sqlite3.OperationalError as e:
+        log.warning(f"  validate_dates cross-field check skipped: {e}")
 
     # 2. policy_area coverage for current-year bills (catches Congress.gov pipeline breaks)
     from datetime import datetime
