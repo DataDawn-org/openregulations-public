@@ -6348,13 +6348,35 @@ def build_summary_tables(conn: sqlite3.Connection):
                     OR UPPER(covered_position) LIKE 'MEMBER OF THE U.S.%'
                 )
             ),
-            best_member AS (
-                SELECT bioguide_id, full_name, party, state, chamber,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY UPPER(full_name)
-                        ORDER BY bioguide_id DESC
-                    ) AS rn
+            member_pool AS (
+                SELECT bioguide_id, full_name, party, state, chamber, is_current,
+                    CAST(substr(last_served,1,4) AS INT) AS last_served_year
                 FROM congress_members
+            ),
+            name_counts AS (
+                SELECT UPPER(full_name) AS nn,
+                    COUNT(DISTINCT bioguide_id) AS n_all,
+                    COUNT(DISTINCT CASE WHEN is_current=0 AND last_served_year>=1991
+                                   THEN bioguide_id END) AS n_modern_former
+                FROM member_pool GROUP BY UPPER(full_name)
+            ),
+            best_member AS (
+                -- Resolve-or-disclose (decisions_log §88; followup #2b): never silently
+                -- pick among same-named members. Former members only (is_current=0).
+                -- Assert a name->member link only when unambiguous: a unique name, OR a
+                -- collision with exactly one "modern-era" former member (last served
+                -- >= 1991, i.e. plausibly active under the post-1995 LDA). The 1991
+                -- cutoff is tunable but low-impact on output: 1989/1991/1995 yield
+                -- 156/155/153 revolving_door rows (±1-2, ~1%; verified 2026-05-31, see
+                -- memory session_2026_05_31_data_integrity). Names with
+                -- >=2 plausible former members (e.g. Sr/Jr pairs) or none are disclosed
+                -- (omitted), not assigned to an arbitrary highest-bioguide pick.
+                SELECT mp.bioguide_id, mp.full_name, mp.party, mp.state, mp.chamber
+                FROM member_pool mp
+                JOIN name_counts nc ON nc.nn = UPPER(mp.full_name)
+                WHERE mp.is_current = 0
+                  AND ( nc.n_all = 1
+                        OR ( nc.n_modern_former = 1 AND mp.last_served_year >= 1991 ) )
             )
             -- Income comes from lobbying_filings.income_amount (canonical,
             -- filing-level) filtered to LD-2 quarterly activity reports.
@@ -6375,7 +6397,7 @@ def build_summary_tables(conn: sqlite3.Connection):
                 GROUP_CONCAT(DISTINCT f.registrant_name) AS lobbying_firms,
                 MIN(pf.covered_position) AS covered_position_sample
             FROM position_filter pf
-            JOIN best_member bm ON UPPER(bm.full_name) = pf.lobbyist_name AND bm.rn = 1
+            JOIN best_member bm ON UPPER(bm.full_name) = pf.lobbyist_name
             JOIN lobbying_filings f ON pf.filing_uuid = f.filing_uuid
             WHERE f.filing_type GLOB '[1234Q]*'
             GROUP BY bm.bioguide_id
@@ -6511,6 +6533,31 @@ def build_summary_tables(conn: sqlite3.Connection):
         log.warning(f"  docket_importance: skipped ({e})")
 
     log.info("  Summary tables built")
+
+
+def build_comment_org_entities(conn: sqlite3.Connection):
+    """Build comment_org_entities — commenter-name → entity match table.
+
+    Maps raw org-name strings on regulations.gov comments (submitter_name /
+    comment_details.organization) to canonical entities via the central
+    EntityMatcher (unique-match-or-miss, §88). Drives the Detailed Comments
+    ranking + hub badges on explore/regulation.html: comments from orgs with
+    a DataDawn hub page (/org/cik/, /org/ein/) sort first.
+
+    Logic lives in scripts/build_comment_org_entities.py (imported, not
+    duplicated — the matcher loop is Python, and a drifted copy here would be
+    a silent ranking bug). Warn-only on failure: the page LEFT JOINs and
+    feature-detects the table, so absence degrades to unranked display.
+    """
+    log.info("Building comment_org_entities...")
+    try:
+        import build_comment_org_entities as coe_builder
+        stats = coe_builder.build(conn)
+        log.info(f"  comment_org_entities: {stats['matched']:,} of "
+                 f"{stats['names_seen']:,} distinct names matched "
+                 f"({stats['hubs']})")
+    except Exception as e:
+        log.warning(f"  comment_org_entities: FAILED — {e}")
 
 
 def build_entity_prominence(conn: sqlite3.Connection):
@@ -6968,6 +7015,31 @@ def validate_freshness(conn: sqlite3.Connection):
          "monthly pipeline; 45d covers monthly cadence + 1 missed run"),
     ]
 
+    # Known-warn snoozes — governance rule A (2026-06-04): an EXPECTED warn
+    # state gets an explicit-expiry snooze in the same session that classifies
+    # it, instead of training alert fatigue on the operational check (the
+    # mechanism that buried the May propagation failure). Narrow by design:
+    # suppresses ONLY the over-age branch for the named (table, column) —
+    # NO_DATA / empty-table / unparseable still warn, so a NEW failure between
+    # now and expiry still fires. Emits a FRESHNESS_SNOOZED line every build
+    # (visible, distinct from the FRESHNESS_WARNING token weekly_update.sh
+    # greps for the operational ping). Auto-expires: past the date the normal
+    # warning path resumes with no code change — expiry comparison is UTC,
+    # matching date('now') above.
+    #   (table, date_column) -> (expiry "YYYY-MM-DD" inclusive, reason)
+    snoozes = {
+        # followup_queue #103: meetings lag upstream posting, fetch path is
+        # healthy (oira_reviews fresh through the May-15 monthly). Verify at
+        # reginfo.gov before the June-15 monthly; that monthly's build runs
+        # June-16 UTC, i.e. the first build evaluated honestly after expiry
+        # is exactly the one that should carry fresh meeting data.
+        ("oira_meetings", "meeting_date_iso"): (
+            "2026-06-15",
+            "#103 — upstream meeting-posting lag; verify at reginfo.gov "
+            "before the 2026-06-15 monthly"),
+    }
+    today_utc = time.strftime("%Y-%m-%d", time.gmtime())
+
     findings = []
     for table, date_col, max_age_days, _why in expectations:
         try:
@@ -7000,6 +7072,14 @@ def validate_freshness(conn: sqlite3.Connection):
                 )
                 continue
             if age_days > max_age_days:
+                snooze = snoozes.get((table, date_col))
+                if snooze and today_utc <= snooze[0]:
+                    log.warning(
+                        f"  ⏸  FRESHNESS_SNOOZED: {table}.{date_col} latest={latest} "
+                        f"({age_days}d old, threshold={max_age_days}d) — known-warn, "
+                        f"expires {snooze[0]} ({snooze[1]})"
+                    )
+                    continue
                 findings.append((table, date_col, latest, age_days, max_age_days))
                 log.warning(
                     f"  ⚠  FRESHNESS_WARNING: {table}.{date_col} latest={latest} "
@@ -8278,6 +8358,7 @@ def main():
         build_lobbying_bill_refs(conn)
         build_summary_tables(conn)
         build_entity_prominence(conn)
+        build_comment_org_entities(conn)
         build_fts(conn)
         print_stats(conn)
         validate_critical_tables(conn)  # fail-loud; aborts on missing/undersized

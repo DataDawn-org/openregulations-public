@@ -910,6 +910,19 @@
             return data.rows || [];
         }
 
+        // Companion to queryOpen() for COUNT queries against the open_comments DB.
+        // Returns the integer count or null on error. Caller falls back gracefully.
+        async function queryOpenCount(sql) {
+            try {
+                const rows = await queryOpen(sql);
+                if (!rows || rows.length === 0) return null;
+                const v = Object.values(rows[0])[0];
+                return typeof v === 'number' ? v : (v != null ? Number(v) : null);
+            } catch (e) {
+                return null;
+            }
+        }
+
         function docketTypeBadge(t) {
             if (!t) return '';
             const lower = t.toLowerCase();
@@ -1064,34 +1077,38 @@
             paginationDiv.style.display = 'none';
 
             try {
-                let rows;
+                let result;
                 const qSafe = currentQuery.replace(/'/g, "''");
                 const qFTS = currentQuery.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
 
                 switch (currentTab) {
                     case 'dockets':
-                        rows = await searchDockets(qSafe, qFTS);
+                        result = await searchDockets(qSafe, qFTS);
                         break;
                     case 'frdocs':
-                        rows = await searchFRDocs(qSafe, qFTS);
+                        result = await searchFRDocs(qSafe, qFTS);
                         break;
                     case 'comments':
-                        rows = await searchComments(qSafe, qFTS);
+                        result = await searchComments(qSafe, qFTS);
                         break;
                     case 'open':
-                        rows = await searchOpen(qSafe);
+                        result = await searchOpen(qSafe);
                         break;
                     case 'agencies':
-                        rows = await searchAgencies(qSafe);
+                        result = await searchAgencies(qSafe);
                         break;
                     case 'executive':
-                        rows = await searchExecutiveOrders(qSafe);
+                        result = await searchExecutiveOrders(qSafe);
                         break;
                     case 'policy':
-                        rows = await searchPolicyAreas(qSafe, qFTS);
+                        result = await searchPolicyAreas(qSafe, qFTS);
                         break;
                 }
 
+                // Each search* function returns { rows, totalCount } where totalCount
+                // may be null if a count isn't available (e.g. browse mode, summary tables).
+                const rows = result.rows || [];
+                const totalCount = result.totalCount;
                 hasMore = rows.length > PAGE_SIZE;
                 const display = rows.slice(0, PAGE_SIZE);
 
@@ -1109,7 +1126,9 @@
                     return;
                 }
 
-                statusDiv.innerHTML = `<span class="count">${display.length}${hasMore ? '+' : ''}</span> results`;
+                const countLabel = formatResultCount(totalCount, display.length, hasMore);
+                const offsetLabel = currentOffset > 0 ? ` (showing ${currentOffset + 1}-${currentOffset + display.length})` : '';
+                statusDiv.innerHTML = `<span class="count">${countLabel}</span> results${offsetLabel}`;
                 let guideHtml = '';
                 if (currentTab === 'agencies' && !currentQuery && currentOffset === 0) {
                     guideHtml = renderAgencyGuide();
@@ -1131,12 +1150,9 @@
         }
 
         async function searchDockets(q, qFTS) {
-            if (!q) return [];
+            if (!q) return { rows: [], totalCount: 0 };
             const agencyFilter = filterAgency ? ` AND d.agency_id = '${filterAgency}'` : '';
-            return await query(`
-                SELECT d.id, d.agency_id, d.title, d.docket_type,
-                    (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
-                    (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+            const baseFrom = `
                 FROM dockets d
                 WHERE d.id IN (
                     SELECT d2.id FROM dockets_fts JOIN dockets d2 ON d2.rowid = dockets_fts.rowid
@@ -1147,35 +1163,56 @@
                     JOIN documents doc ON doc.fr_doc_num = fr.document_number
                     WHERE federal_register_fts MATCH '"${qFTS}"' AND doc.docket_id IS NOT NULL
                 )${agencyFilter}
+            `;
+            const dataSql = `
+                SELECT d.id, d.agency_id, d.title, d.docket_type,
+                    (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
+                    (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
+                ${baseFrom}
                 ORDER BY doc_count DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(*) ${baseFrom}`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchFRDocs(q, qFTS) {
-            if (!q) return [];
+            if (!q) return { rows: [], totalCount: 0 };
             const agencyF = filterAgency ? ` AND fr.agency_names LIKE '%${filterAgency}%'` : '';
             const typeF = filterType ? ` AND fr.type = '${filterType}'` : '';
-            return await query(`
-                SELECT fr.document_number, fr.title, fr.type, fr.agency_names, fr.publication_date, fr.abstract, fr.html_url, fr.pdf_url
+            const baseFrom = `
                 FROM federal_register_fts JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
                 WHERE federal_register_fts MATCH '"${qFTS}"'${agencyF}${typeF}
+            `;
+            const dataSql = `
+                SELECT fr.document_number, fr.title, fr.type, fr.agency_names, fr.publication_date, fr.abstract, fr.html_url, fr.pdf_url
+                ${baseFrom}
                 ORDER BY rank
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(*) ${baseFrom}`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchComments(q, qFTS) {
-            if (!q) return [];
+            if (!q) return { rows: [], totalCount: 0 };
             const agencyF = filterAgency ? ` AND c.agency_id = '${filterAgency}'` : '';
-            return await query(`
-                SELECT c.id, c.title, c.submitter_name, c.submitter_type, c.docket_id,
-                       c.agency_id, c.posted_date
+            const baseFrom = `
                 FROM comments_fts JOIN comments c ON c.rowid = comments_fts.rowid
                 WHERE comments_fts MATCH '"${qFTS}"'${agencyF}
+            `;
+            const dataSql = `
+                SELECT c.id, c.title, c.submitter_name, c.submitter_type, c.docket_id,
+                       c.agency_id, c.posted_date
+                ${baseFrom}
                 ORDER BY rank
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(*) ${baseFrom}`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchOpen(q) {
@@ -1185,14 +1222,26 @@
             const typeFilter = filterOpenType === 'Other'
                 ? `AND document_type NOT IN ('Notice', 'Proposed Rule', 'Rule')`
                 : filterOpenType ? `AND document_type = '${filterOpenType}'` : '';
-            return await queryOpen(`
-                SELECT id, agency_id, title, comment_end_date, docket_id, document_type,
-                    CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+            const baseFrom = `
                 FROM documents
                 WHERE comment_end_date > datetime('now') AND withdrawn = 0 ${deadlineFilter} ${typeFilter} ${agencyFilter} ${filter}
+            `;
+            const dataSql = `
+                SELECT id, agency_id, title, comment_end_date, docket_id, document_type,
+                    CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                ${baseFrom}
                 ORDER BY comment_end_date ASC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            // queryCount uses the same query() helper which hits the openregs DB.
+            // For "open" tab we need queryOpen() which targets open_comments DB.
+            // Build the count URL inline to hit the right DB.
+            const countSql = `SELECT COUNT(*) ${baseFrom}`;
+            const [rows, totalCount] = await Promise.all([
+                queryOpen(dataSql),
+                queryOpenCount(countSql).catch(() => null)
+            ]);
+            return { rows, totalCount };
         }
 
         // Map spending agency names to Regs.gov codes (for agencies with regulatory data)
@@ -1217,36 +1266,48 @@
         async function searchAgencies(q) {
             if (!q) {
                 // Use pre-computed summary table for browsing (~instant vs ~7s)
-                return await query(`
+                const rows = await query(`
                     SELECT name, award_count, total_spending, sub_count
                     FROM spending_agency_summary
                     ORDER BY total_spending DESC
                     LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
                 `);
+                const totalCount = await queryCount(`SELECT COUNT(*) FROM spending_agency_summary`);
+                return { rows, totalCount };
             }
-            return await query(`
+            const baseFrom = `
+                FROM spending_awards s
+                WHERE s.agency LIKE '%${q}%' OR s.sub_agency LIKE '%${q}%'
+                GROUP BY s.agency
+            `;
+            const dataSql = `
                 SELECT s.agency AS name,
                     COUNT(*) AS award_count,
                     CAST(SUM(s.award_amount) AS INTEGER) AS total_spending,
                     COUNT(DISTINCT s.sub_agency) AS sub_count
-                FROM spending_awards s
-                WHERE s.agency LIKE '%${q}%' OR s.sub_agency LIKE '%${q}%'
-                GROUP BY s.agency
+                ${baseFrom}
                 ORDER BY total_spending DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            // Count distinct agencies that match (the GROUP BY is what we're counting)
+            const countSql = `SELECT COUNT(DISTINCT s.agency) FROM spending_awards s WHERE s.agency LIKE '%${q}%' OR s.sub_agency LIKE '%${q}%'`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         async function searchExecutiveOrders(q) {
             const where = q ? `WHERE title LIKE '%${q}%' OR CAST(executive_order_number AS TEXT) LIKE '%${q}%' OR abstract LIKE '%${q}%'` : '';
-            return await query(`
+            const dataSql = `
                 SELECT document_number, title, document_type, executive_order_number,
                        signing_date, publication_date, html_url, abstract
                 FROM presidential_documents
                 ${where}
                 ORDER BY signing_date DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(*) FROM presidential_documents ${where}`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         function renderCard(r) {
@@ -1333,7 +1394,7 @@
         async function searchPolicyAreas(q, qFTS) {
             if (q) {
                 // Search bills within policy areas via FTS
-                return await query(`
+                const dataSql = `
                     SELECT l.policy_area, COUNT(*) AS bill_count,
                         COUNT(DISTINCT l.sponsor_bioguide_id) AS sponsor_count,
                         MIN(l.congress) AS congress_from,
@@ -1343,10 +1404,13 @@
                     GROUP BY l.policy_area
                     ORDER BY bill_count DESC
                     LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-                `);
+                `;
+                const countSql = `SELECT COUNT(DISTINCT l.policy_area) FROM legislation l WHERE l.rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"${qFTS}"')`;
+                const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+                return { rows, totalCount };
             }
             // Browse all policy areas
-            return await query(`
+            const dataSql = `
                 SELECT l.policy_area, COUNT(*) AS bill_count,
                     COUNT(DISTINCT l.sponsor_bioguide_id) AS sponsor_count,
                     MIN(l.congress) AS congress_from,
@@ -1356,7 +1420,10 @@
                 GROUP BY l.policy_area
                 ORDER BY bill_count DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
-            `);
+            `;
+            const countSql = `SELECT COUNT(DISTINCT policy_area) FROM legislation WHERE policy_area IS NOT NULL`;
+            const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
+            return { rows, totalCount };
         }
 
         function renderPolicyCard(r) {
@@ -1786,8 +1853,9 @@
             try {
                 const did = docketId.replace(/'/g, "''");
 
-                // Load docket info, documents, and comment stats in parallel
-                const [docketRows, docs, commentStats, frDocs, orgComments] = await Promise.all([
+                // Load docket info, documents, and comment stats in parallel.
+                // Detailed comments load separately (paginated) via loadDetailComments().
+                const [docketRows, docs, commentStats, frDocs] = await Promise.all([
                     query(`
                         SELECT d.*,
                             (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
@@ -1812,16 +1880,6 @@
                         JOIN federal_register fr ON fr.document_number = xr.fr_document_number
                         WHERE doc.docket_id = '${did}'
                         ORDER BY fr.publication_date DESC
-                        LIMIT 20
-                    `),
-                    query(`
-                        SELECT c.id, c.title, c.submitter_name, c.posted_date,
-                               cd.comment_text, cd.subtype, cd.city, cd.state_province,
-                               cd.attachment_count, cd.attachment_urls
-                        FROM comments c
-                        JOIN comment_details cd ON cd.id = c.id
-                        WHERE c.docket_id = '${did}'
-                        ORDER BY cd.comment_text IS NOT NULL DESC, c.posted_date DESC
                         LIMIT 20
                     `)
                 ]);
@@ -1861,29 +1919,8 @@
                     html += '</div>';
                 }
 
-                // Organization/detailed comments
-                if (orgComments.length > 0) {
-                    html += `<div class="section-title">Detailed Comments (${orgComments.length})</div>`;
-                    orgComments.forEach(c => {
-                        const loc = [c.city, c.state_province].filter(Boolean).join(', ');
-                        const attUrls = c.attachment_urls ? JSON.parse(c.attachment_urls) : [];
-                        html += `<div class="result-card" style="margin-bottom:0.5rem;">
-                            <div class="card-header">
-                                <div class="card-title" style="font-size:0.85rem;">${esc(truncate(c.title || c.submitter_name || 'Comment', 200))}</div>
-                                ${c.subtype ? '<span class="type-badge" style="font-size:0.6rem;">' + esc(c.subtype) + '</span>' : ''}
-                            </div>
-                            <div class="card-meta">
-                                ${c.submitter_name ? '<span class="meta-item">' + esc(c.submitter_name) + '</span>' : ''}
-                                ${loc ? '<span class="meta-item">' + esc(loc) + '</span>' : ''}
-                                <span class="meta-item">${esc(c.posted_date)}</span>
-                                ${c.attachment_count > 0 ? '<span class="meta-item">' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') + '</span>' : ''}
-                                <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">View on Regs.gov &rarr;</a>
-                            </div>
-                            ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + esc(truncate(c.comment_text, 500)) + '</div>' : ''}
-                            ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
-                        </div>`;
-                    });
-                }
+                // Detailed comments — paginated, hub-ranked; rendered by loadDetailComments()
+                html += '<div id="detailComments"></div>';
 
                 // Federal Register documents (cross-referenced)
                 if (frDocs.length > 0) {
@@ -1935,11 +1972,102 @@
                 }
 
                 detailContent.innerHTML = html;
+                loadDetailComments(did, 0);
 
             } catch (err) {
                 detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
             }
         }
+
+        // --- Detailed Comments: paginated + ranked by DataDawn entity coverage ---
+        // Comments whose organization NAME matches an entity with a DataDawn hub page
+        // (company hub /org/cik/, nonprofit hub /org/ein/) sort first, then other
+        // recognized org names, then text-bearing comments, then recency. Ranking is
+        // name-level only — no per-card link/badge asserting the commenter IS that
+        // entity (same-name-different-org collisions are real; §88 resolve-or-disclose).
+        // The match table (comment_org_entities) is built weekly; feature-detect so the
+        // section still works (unranked) against a database that predates it.
+        const DETAIL_PAGE = 50;
+        let detailCommentsTotal = null;   // cached per docket open
+        let coeAvailable = null;          // cached per page load
+
+        window.loadDetailComments = async function(did, offset) {
+            const container = document.getElementById('detailComments');
+            if (!container) return;
+            const didSafe = did.replace(/'/g, "''");
+
+            if (coeAvailable === null) {
+                coeAvailable = (await queryCount(
+                    `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='comment_org_entities'`
+                )) === 1;
+            }
+            if (offset === 0) {
+                detailCommentsTotal = await queryCount(`
+                    SELECT COUNT(*) FROM comments c
+                    JOIN comment_details cd ON cd.id = c.id
+                    WHERE c.docket_id = '${didSafe}'
+                `);
+            }
+
+            const coeJoin = coeAvailable ? `
+                LEFT JOIN comment_org_entities coe
+                  ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(cd.organization),''), c.submitter_name)))` : '';
+            const coeRank = coeAvailable
+                ? `(coe.hub IS NOT NULL) DESC, (coe.entity_id IS NOT NULL) DESC,` : '';
+
+            const rows = await query(`
+                SELECT c.id, c.title, c.submitter_name, c.posted_date,
+                       cd.comment_text, cd.subtype, cd.organization, cd.city, cd.state_province,
+                       cd.attachment_count, cd.attachment_urls
+                FROM comments c
+                JOIN comment_details cd ON cd.id = c.id${coeJoin}
+                WHERE c.docket_id = '${didSafe}'
+                ORDER BY ${coeRank} (cd.comment_text IS NOT NULL) DESC, c.posted_date DESC
+                LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
+            `);
+            const more = rows.length > DETAIL_PAGE;
+            const batch = rows.slice(0, DETAIL_PAGE);
+            if (batch.length === 0 && offset === 0) { container.innerHTML = ''; return; }
+
+            const total = detailCommentsTotal;
+            const rangeLabel = (total != null && total > DETAIL_PAGE)
+                ? `showing ${(offset + 1).toLocaleString()}&ndash;${(offset + batch.length).toLocaleString()} of ${total.toLocaleString()}`
+                : `${(total != null ? total : batch.length).toLocaleString()}`;
+
+            let html = `<div class="section-title">Detailed Comments (${rangeLabel})</div>`;
+            if (coeAvailable) {
+                html += '<div class="hint" style="margin-bottom:0.75rem;">Comments from organization names recognized in DataDawn’s entity database are listed first.</div>';
+            }
+            batch.forEach(c => {
+                const loc = [c.city, c.state_province].filter(Boolean).join(', ');
+                const attUrls = c.attachment_urls ? JSON.parse(c.attachment_urls) : [];
+                html += `<div class="result-card" style="margin-bottom:0.5rem;">
+                    <div class="card-header">
+                        <div class="card-title" style="font-size:0.85rem;">${esc(truncate(c.title || c.submitter_name || 'Comment', 200))}</div>
+                        ${c.subtype ? '<span class="type-badge" style="font-size:0.6rem;">' + esc(c.subtype) + '</span>' : ''}
+                    </div>
+                    <div class="card-meta">
+                        ${c.submitter_name ? '<span class="meta-item">' + esc(c.submitter_name) + '</span>' : ''}
+                        ${loc ? '<span class="meta-item">' + esc(loc) + '</span>' : ''}
+                        <span class="meta-item">${esc(c.posted_date)}</span>
+                        ${c.attachment_count > 0 ? '<span class="meta-item">' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') + '</span>' : ''}
+                        <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">View on Regs.gov &rarr;</a>
+                    </div>
+                    ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + esc(truncate(c.comment_text, 500)) + '</div>' : ''}
+                    ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
+                </div>`;
+            });
+
+            if (offset > 0 || more) {
+                html += '<div style="display:flex;gap:0.5rem;margin:0.5rem 0 1rem;">';
+                if (offset > 0) html += `<button class="load-more-btn" style="margin:0;" onclick="loadDetailComments('${esc(did)}', ${Math.max(0, offset - DETAIL_PAGE)})">&larr; Previous ${DETAIL_PAGE}</button>`;
+                if (more) html += `<button class="load-more-btn" style="margin:0;" onclick="loadDetailComments('${esc(did)}', ${offset + DETAIL_PAGE})">Next ${DETAIL_PAGE} &rarr;</button>`;
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+            if (offset > 0) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
 
         window.loadMoreDocs = async function(did, offset) {
             const docs = await query(`
