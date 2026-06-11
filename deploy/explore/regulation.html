@@ -973,6 +973,9 @@
             if (p.get('docket')) {
                 setTimeout(() => openDocket(p.get('docket')), 300);
             }
+            if (p.get('comment')) {
+                setTimeout(() => openComment(p.get('comment')), 300);
+            }
             if (p.get('agency')) {
                 const aName = p.get('agency');
                 const aCode = p.get('regs_code') || '';
@@ -1358,7 +1361,7 @@
 
         function renderCommentCard(r) {
             return `
-                <div class="result-card" onclick="openDocket('${esc(r.docket_id)}')">
+                <div class="result-card" onclick="openComment('${esc(r.id)}')">
                     <div class="card-header">
                         <div class="card-title">${esc(truncate(r.title || 'Comment by ' + (r.submitter_name || 'Anonymous'), 200))}</div>
                         <span class="agency-badge">${esc(r.agency_id)}</span>
@@ -1845,6 +1848,12 @@
         async function openDocket(docketId) {
             if (!docketId) return;
 
+            // Citable URL for the panel view (and clear any comment deep-link)
+            const urlParams = new URLSearchParams(location.search);
+            urlParams.set('docket', docketId);
+            urlParams.delete('comment');
+            history.replaceState(null, '', '?' + urlParams.toString());
+
             detailOverlay.classList.add('visible');
             detailPanel.classList.add('visible');
             detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
@@ -2041,7 +2050,7 @@
             batch.forEach(c => {
                 const loc = [c.city, c.state_province].filter(Boolean).join(', ');
                 const attUrls = c.attachment_urls ? JSON.parse(c.attachment_urls) : [];
-                html += `<div class="result-card" style="margin-bottom:0.5rem;">
+                html += `<div class="result-card" style="margin-bottom:0.5rem;" onclick="openComment('${esc(c.id)}')">
                     <div class="card-header">
                         <div class="card-title" style="font-size:0.85rem;">${esc(truncate(c.title || c.submitter_name || 'Comment', 200))}</div>
                         ${c.subtype ? '<span class="type-badge" style="font-size:0.6rem;">' + esc(c.subtype) + '</span>' : ''}
@@ -2051,10 +2060,10 @@
                         ${loc ? '<span class="meta-item">' + esc(loc) + '</span>' : ''}
                         <span class="meta-item">${esc(c.posted_date)}</span>
                         ${c.attachment_count > 0 ? '<span class="meta-item">' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') + '</span>' : ''}
-                        <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">View on Regs.gov &rarr;</a>
+                        <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on Regs.gov &rarr;</a>
                     </div>
                     ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + esc(truncate(c.comment_text, 500)) + '</div>' : ''}
-                    ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
+                    ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
                 </div>`;
             });
 
@@ -2067,6 +2076,113 @@
 
             container.innerHTML = html;
             if (offset > 0) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        };
+
+        // --- Single-comment view (citable: ?comment=<id>) ---
+        // Full text + all attachments + docket context. The organization link is a
+        // FINDER SEARCH ("find this org" pattern, same as the docket hub) — never a
+        // hard resolved entity link, since a free-text commenter name can collide with
+        // a different org of the same name (§88 resolve-or-disclose). The match table
+        // is used only to pick the right finder tab (companies vs nonprofits).
+        window.openComment = async function(commentId) {
+            if (!commentId) return;
+
+            const urlParams = new URLSearchParams(location.search);
+            urlParams.set('comment', commentId);
+            urlParams.delete('docket');
+            history.replaceState(null, '', '?' + urlParams.toString());
+
+            detailOverlay.classList.add('visible');
+            detailPanel.classList.add('visible');
+            detailHeader.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+            detailContent.innerHTML = '';
+
+            try {
+                const cid = commentId.replace(/'/g, "''");
+                if (coeAvailable === null) {
+                    coeAvailable = (await queryCount(
+                        `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='comment_org_entities'`
+                    )) === 1;
+                }
+                const coeJoin = coeAvailable ? `
+                    LEFT JOIN comment_org_entities coe
+                      ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(cd.organization),''), c.submitter_name)))` : '';
+                const coeCols = coeAvailable ? `, coe.hub AS dd_hub` : '';
+
+                const rows = await query(`
+                    SELECT c.id, c.docket_id, c.agency_id, c.title, c.submitter_name, c.submitter_type,
+                           c.document_type, c.posted_date, c.withdrawn,
+                           cd.comment_text, cd.organization, cd.subtype, cd.category,
+                           cd.city, cd.state_province, cd.country, cd.duplicate_comments,
+                           cd.page_count, cd.receive_date, cd.attachment_count, cd.attachment_urls${coeCols}
+                    FROM comments c
+                    LEFT JOIN comment_details cd ON cd.id = c.id${coeJoin}
+                    WHERE c.id = '${cid}'
+                `);
+                if (rows.length === 0) {
+                    detailHeader.innerHTML = '<p style="padding:1rem;">Comment not found</p>';
+                    return;
+                }
+                const c = rows[0];
+                const orgName = (c.organization && c.organization.trim()) || (c.submitter_type === 'organization' ? c.submitter_name : null);
+
+                detailHeader.innerHTML = `
+                    <div class="card-title" style="font-size:1.15rem;margin-bottom:0.5rem;">${esc(truncate(c.title || c.submitter_name || 'Public Comment', 250))}</div>
+                    <div class="card-meta">
+                        ${c.submitter_type ? '<span class="type-badge">' + esc(c.submitter_type) + '</span>' : ''}
+                        ${c.subtype ? '<span class="type-badge" style="font-size:0.65rem;">' + esc(c.subtype) + '</span>' : ''}
+                        <span class="meta-item">${esc(c.id)}</span>
+                        <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener">View on Regulations.gov &rarr;</a>
+                    </div>
+                `;
+
+                const loc = [c.city, c.state_province, c.country === 'US' ? null : c.country].filter(Boolean).join(', ');
+                let html = '';
+
+                html += '<div class="section-title">Submitter</div><div class="card-meta" style="margin-bottom:1rem;">';
+                if (c.submitter_name) html += `<span class="meta-item">${esc(c.submitter_name)}</span>`;
+                if (c.organization && c.organization.trim() && c.organization !== c.submitter_name) html += `<span class="meta-item">${esc(c.organization)}</span>`;
+                if (loc) html += `<span class="meta-item">${esc(loc)}</span>`;
+                if (orgName) {
+                    const finderPath = (coeAvailable && c.dd_hub === 'company') ? 'companies' : 'nonprofits';
+                    html += `<a class="source-link" href="https://datadawn.org/${finderPath}?q=${encodeURIComponent(orgName)}" target="_blank" rel="noopener">Find this organization on DataDawn &rarr;</a>`;
+                }
+                html += '</div>';
+
+                if (c.withdrawn) {
+                    html += '<div class="hint" style="margin-bottom:0.75rem;">This comment is marked withdrawn on Regulations.gov.</div>';
+                }
+                if (c.duplicate_comments > 1) {
+                    html += `<div class="hint" style="margin-bottom:0.75rem;">Regulations.gov counts ${Number(c.duplicate_comments).toLocaleString()} duplicate submissions of this comment.</div>`;
+                }
+
+                if (c.comment_text) {
+                    html += '<div class="section-title">Comment Text</div>';
+                    html += `<div class="card-excerpt" style="white-space:pre-wrap;max-height:none;">${esc(c.comment_text)}</div>`;
+                } else {
+                    html += '<div class="hint" style="margin-bottom:0.75rem;">No extracted text for this comment' + (c.attachment_count > 0 ? ' — the substance is in the attachment(s) below.' : '.') + '</div>';
+                }
+
+                const attUrls = c.attachment_urls ? JSON.parse(c.attachment_urls) : [];
+                if (attUrls.length > 0) {
+                    html += `<div class="section-title">Attachments (${attUrls.length})</div><div style="margin-bottom:1rem;">`;
+                    html += attUrls.map((u, i) => '<div style="margin-bottom:0.3rem;"><a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener">Attachment ' + (i + 1) + ' &rarr;</a></div>').join('');
+                    html += '</div>';
+                }
+
+                html += '<div class="section-title">Context</div><div class="card-meta" style="margin-bottom:1rem;">';
+                if (c.docket_id) html += `<a class="source-link" href="#" onclick="event.preventDefault();openDocket('${esc(c.docket_id)}');">Docket ${esc(c.docket_id)} &rarr;</a>`;
+                if (c.agency_id) html += `<span class="meta-item">${esc(c.agency_id)}</span>`;
+                if (c.posted_date) html += `<span class="meta-item">Posted ${esc(c.posted_date)}</span>`;
+                if (c.receive_date && c.receive_date !== c.posted_date) html += `<span class="meta-item">Received ${esc(String(c.receive_date).slice(0, 10))}</span>`;
+                if (c.page_count) html += `<span class="meta-item">${c.page_count} page${c.page_count > 1 ? 's' : ''}</span>`;
+                html += '</div>';
+
+                detailContent.innerHTML = html;
+
+            } catch (err) {
+                detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
+            }
         };
 
         window.loadMoreDocs = async function(did, offset) {
