@@ -167,6 +167,36 @@ def main():
           f"would have returned it — hard stop must prevent that)")
     syn.close()
 
+    # F9: AARP class — corroborated machine alias under MASSIVE name collision.
+    # The alias owner IS one of many entities sharing the literal name (643
+    # entities are named 'AARP'), so membership must be tested exactly — a
+    # truncated candidate fetch (the LIMIT-3 bug, caught 2026-06-11 only by a
+    # delta measurement someone happened to run) wrongly refuses true members.
+    # Discovery requires the owner NOT be the first natural-order name-owner,
+    # so any first-K-rows implementation fails this fixture.
+    row = conn.execute("""
+        SELECT a.alias_name, a.entity_id,
+               (SELECT COUNT(*) FROM entities e WHERE e.name_normalized=a.alias_normalized) AS n_owners
+        FROM entity_aliases a
+        WHERE a.alias_source NOT LIKE 'manual%'
+          AND (SELECT COUNT(DISTINCT a2.entity_id) FROM entity_aliases a2
+               WHERE a2.alias_normalized=a.alias_normalized) = 1
+          AND EXISTS (SELECT 1 FROM entities e WHERE e.name_normalized=a.alias_normalized
+                      AND e.entity_id=a.entity_id)
+          AND (SELECT COUNT(*) FROM entities e WHERE e.name_normalized=a.alias_normalized) > 10
+          AND a.entity_id != (SELECT e.entity_id FROM entities e
+                              WHERE e.name_normalized=a.alias_normalized LIMIT 1)
+        ORDER BY a.alias_normalized LIMIT 1""").fetchone()
+    if row:
+        raw, owner, n_owners = row
+        r = m.resolve(name=raw, source_context="fixture")
+        check("F9", f"corroborated alias under {n_owners}-way name collision resolves to owner ({raw[:30]!r})",
+              r.entity_id == owner,
+              f"expected owner {owner} (not first in natural order), got {r.entity_id} "
+              f"(method={r.match_method})")
+    else:
+        check("F9", "AARP-class corroborated collision", False, "no qualifying instance found")
+
     conn.close()
     n_red = sum(1 for _, _, ok, _ in results if not ok)
     print(f"\n{len(results) - n_red} GREEN / {n_red} RED")
