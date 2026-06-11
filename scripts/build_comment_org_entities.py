@@ -106,6 +106,108 @@ def build(conn: sqlite3.Connection) -> dict:
     return {"names_seen": len(names), "matched": len(rows), "hubs": hubs}
 
 
+# ============================================================================
+# Launch gate (2026-06-11, pre-launch verification ruling): the table ships
+# ONLY on the maintainer's affirmative GO after the verification-packet review. Absence
+# of a GO file means HOLD — the build drops/skips the table (the explore page
+# feature-detects, so a hold is user-invisible) and the criticality floor
+# check skips it with a loud GATE_HOLD log (deliberate hold != silent loss).
+#
+# GO file: openregs/comment_org_entities.GO — `key=value` lines:
+#     mode=pinned | rebuild
+#     snapshot=<path to reviewed snapshot .db>     (pinned mode)
+#     sha256=<table_hash of the reviewed table>    (pinned mode)
+#     reviewed_by=... date=... seed=...            (provenance, free-form)
+# pinned: ship the reviewed artifact VERBATIM, hash-verified (what the reviewer
+#   reviewed is provably what deploys — a fresh rebuild would differ because
+#   the weekly update pulls new comments first). Hash mismatch = loud abort
+#   of this step (table dropped -> floor fires -> deploy aborts -> pager).
+# rebuild: steady-state after launch week — build fresh from current data.
+# ============================================================================
+
+GO_PATH = SCRIPT_DIR.parent / "comment_org_entities.GO"
+
+
+def table_hash(conn: sqlite3.Connection) -> str:
+    """Deterministic content hash of comment_org_entities (ordered dump).
+    Single implementation shared by the verification packet and the gated
+    build — the reviewed hash and the shipped hash must come from one place.
+    """
+    import hashlib
+    h = hashlib.sha256()
+    for row in conn.execute(
+            "SELECT name_key, entity_id, canonical_name, entity_type, "
+            "COALESCE(ein,''), COALESCE(cik,''), COALESCE(hub,''), match_method "
+            "FROM comment_org_entities ORDER BY name_key"):
+        # tuple() first: on a row_factory=sqlite3.Row connection, repr(row)
+        # includes a memory address — non-deterministic. Caught by the packet
+        # generator's snapshot assert on first run.
+        h.update(repr(tuple(row)).encode())
+    return h.hexdigest()
+
+
+def snapshot_table(conn: sqlite3.Connection, dest: Path) -> str:
+    """Copy comment_org_entities into a standalone snapshot DB; return hash."""
+    dest.unlink(missing_ok=True)
+    conn.execute(f"ATTACH DATABASE '{dest}' AS snap")
+    conn.execute("CREATE TABLE snap.comment_org_entities AS SELECT * FROM main.comment_org_entities")
+    conn.commit()
+    conn.execute("DETACH DATABASE snap")
+    return table_hash(conn)
+
+
+def read_gate(go_path: Path = GO_PATH) -> dict | None:
+    """None = HOLD. Otherwise dict of GO-file keys (mode required)."""
+    if not go_path.exists():
+        return None
+    kv = {}
+    for line in go_path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            k, v = line.split('=', 1)
+            kv[k.strip()] = v.strip()
+    if kv.get('mode') not in ('pinned', 'rebuild'):
+        raise ValueError(f"GO file {go_path} has invalid/missing mode= (need pinned|rebuild)")
+    return kv
+
+
+def build_gated(conn: sqlite3.Connection, go_path: Path = GO_PATH, log=print) -> dict | None:
+    """Gate-aware build. Returns build stats, {'shipped': 'pinned'} or None on hold."""
+    gate = read_gate(go_path)
+    if gate is None:
+        log("GATE_HOLD: comment_org_entities — no affirmative GO "
+            f"({go_path.name} absent); table NOT shipped (page degrades to "
+            "unranked via feature-detect). Floor check will skip with the same marker.")
+        conn.execute("DROP TABLE IF EXISTS main.comment_org_entities")
+        conn.commit()
+        return None
+    if gate['mode'] == 'rebuild':
+        log("GATE_GO mode=rebuild: building comment_org_entities fresh")
+        return build(conn)
+    # pinned: ship the reviewed artifact verbatim, verify hash
+    snap = Path(gate['snapshot'])
+    if not snap.exists():
+        raise FileNotFoundError(f"GATE pinned snapshot missing: {snap}")
+    conn.execute("DROP TABLE IF EXISTS main.comment_org_entities")
+    conn.execute(f"ATTACH DATABASE 'file:{snap}?mode=ro' AS snap")
+    conn.execute("CREATE TABLE main.comment_org_entities AS SELECT * FROM snap.comment_org_entities")
+    conn.execute("DETACH DATABASE snap")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_coe_entity ON comment_org_entities(entity_id)")
+    conn.commit()
+    got = table_hash(conn)
+    want = gate.get('sha256', '')
+    if got != want:
+        conn.execute("DROP TABLE IF EXISTS main.comment_org_entities")
+        conn.commit()
+        raise ValueError(
+            f"GATE_PIN_HASH_MISMATCH: reviewed sha256={want[:16]}... but snapshot "
+            f"restored as {got[:16]}... — table dropped; floor will abort deploy.")
+    n = conn.execute("SELECT COUNT(*) FROM comment_org_entities").fetchone()[0]
+    log(f"GATE_SHIPPED_PINNED: comment_org_entities = reviewed artifact "
+        f"({n:,} rows, sha256={got[:16]}…, reviewed_by={gate.get('reviewed_by','?')})")
+    return {'shipped': 'pinned', 'rows': n, 'sha256': got}
+
+
 def main():
     if not OPENREGS.exists():
         sys.exit(f"missing openregs.db at {OPENREGS}")
