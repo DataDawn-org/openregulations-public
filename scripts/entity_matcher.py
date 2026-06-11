@@ -212,7 +212,12 @@ def build_source_id(id_part: str | int, normalized_name: str | None = None) -> s
 # Valid match_method values — enforced at write time
 VALID_METHODS = frozenset({
     'ein', 'cik', 'uei', 'lei', 'ticker', 'fec_cmte_id', 'duns',
-    'alias_ein', 'alias_cik',
+    'alias_manual',   # Tier 2a — manual alias (authoritative; ledger-backed)
+    'alias_name',     # Tier 2b — machine alias (distinct-unique + name-tier gated)
+    'alias_ein', 'alias_cik',  # LEGACY labels: pre-2026-06-11 'alias_ein' was
+                               # hardcoded for EVERY alias match (mislabel —
+                               # audit round 4). Kept so stored rows validate;
+                               # no new rows are written with them.
     'normalized_name',
     'normalized_name_state',
     'government_unit_exact',
@@ -305,9 +310,11 @@ class EntityMatcher:
             if r.is_matched:
                 return r
 
-        # Tier 2 — alias lookup
-        r = self._match_entity_via_alias(nn, source_context)
-        if r.is_matched:
+        # Tier 2 — alias lookup (source-tiered since 2026-06-11; see method doc).
+        # hard_stop=True means a manual-alias collision: refuse the WHOLE
+        # resolution (loud curation error), do not fall through to name tiers.
+        r, hard_stop = self._match_entity_via_alias(nn, source_context)
+        if r.is_matched or hard_stop:
             return r
 
         # Tier 3 — normalized name + state
@@ -348,20 +355,81 @@ class EntityMatcher:
             log.warning(f"Multiple entities with same {col}={val!r} — deterministic ID uniqueness violated")
         return self._miss(source_context)
 
-    def _match_entity_via_alias(self, nn: str, source_context: str) -> ResolveResult:
-        rows = self.conn.execute(
-            "SELECT entity_id FROM entity_aliases WHERE alias_normalized = ? LIMIT 2",
+    def _match_entity_via_alias(self, nn: str, source_context: str) -> tuple[ResolveResult, bool]:
+        """Tier 2 — alias lookup, source-tiered (2026-06-11 hardening).
+
+        History: until 2026-06-11 this tier counted alias ROWS (not distinct
+        entities — false misses), labeled every match 'alias_ein' (mislabel),
+        and ran unconditionally ahead of the name tiers — which let a single
+        semantically-wrong alias (FEC connected-org sponsor names stored as
+        PAC aliases, "easier lookup") beat the sponsor's own exact name match.
+        Audit-confirmed; regression fixtures in test_entity_matcher_fixtures.py.
+
+        Tier 2a — manual aliases (alias_source LIKE 'manual%'): AUTHORITATIVE.
+        Human-verified (curation ledger is the safeguard), exempt from the
+        name-tier gate, consulted first — so a manual pin beats a wrong-but-
+        unique machine match. Two manual rows pointing at DIFFERENT entities
+        is a curation error: refuse the whole resolution loudly (hard stop, no
+        fall-through — the string is contested, repair the curation).
+
+        Tier 2b — machine aliases: distinct-entity uniqueness, then accept
+        only if the name-tier candidate set is EMPTY (mashups, former names)
+        or CONTAINS the alias answer (corroborated). A non-empty disjoint set
+        is the Sunshine-Village class — the string IS some other entity's
+        name — so the alias is refused and resolution falls through to the
+        name tiers, which apply their own uniqueness rules.
+
+        Returns (result, hard_stop).
+        """
+        # Tier 2a — manual
+        manual = self.conn.execute(
+            "SELECT DISTINCT entity_id FROM entity_aliases "
+            "WHERE alias_normalized = ? AND alias_source LIKE 'manual%' LIMIT 2",
             (nn,),
         ).fetchall()
-        if len(rows) == 1:
-            self.stats['alias_ein'] += 1
+        if len(manual) == 1:
+            self.stats['alias_manual'] += 1
             return ResolveResult(
-                entity_id=rows[0][0],
-                match_method='alias_ein',
-                confidence_score=0.95,
+                entity_id=manual[0][0],
+                match_method='alias_manual',
+                confidence_score=0.98,
                 source_context=source_context,
+            ), False
+        if len(manual) > 1:
+            log.warning(
+                f"MANUAL_ALIAS_COLLISION: {nn!r} has >=2 manual aliases pointing at "
+                f"different entities — refusing resolution (curation error; repair "
+                f"the manual alias set) [{source_context}]"
             )
-        return self._miss(source_context)
+            return self._miss(source_context), True
+
+        # Tier 2b — machine
+        rows = self.conn.execute(
+            "SELECT DISTINCT entity_id FROM entity_aliases "
+            "WHERE alias_normalized = ? AND alias_source NOT LIKE 'manual%' LIMIT 2",
+            (nn,),
+        ).fetchall()
+        if len(rows) != 1:
+            return self._miss(source_context), False
+        cand = rows[0][0]
+        # Name-tier gate: exact membership test, not a truncated candidate fetch —
+        # 643 entities share the literal name 'AARP', so any LIMIT-k fetch can
+        # wrongly refuse a true member (caught in first delta measurement).
+        has_name_owner = self.conn.execute(
+            "SELECT 1 FROM entities WHERE name_normalized = ? LIMIT 1", (nn,)).fetchone()
+        if has_name_owner:
+            is_member = self.conn.execute(
+                "SELECT 1 FROM entities WHERE name_normalized = ? AND entity_id = ? LIMIT 1",
+                (nn, cand)).fetchone()
+            if not is_member:
+                return self._miss(source_context), False
+        self.stats['alias_name'] += 1
+        return ResolveResult(
+            entity_id=cand,
+            match_method='alias_name',
+            confidence_score=0.95,
+            source_context=source_context,
+        ), False
 
     def _match_entity_by_name_state(self, nn: str, state: str, source_context: str) -> ResolveResult:
         rows = self.conn.execute(
