@@ -6552,10 +6552,15 @@ def build_comment_org_entities(conn: sqlite3.Connection):
     log.info("Building comment_org_entities...")
     try:
         import build_comment_org_entities as coe_builder
-        stats = coe_builder.build(conn)
-        log.info(f"  comment_org_entities: {stats['matched']:,} of "
-                 f"{stats['names_seen']:,} distinct names matched "
-                 f"({stats['hubs']})")
+        # Launch-gated (2026-06-11 pre-launch verification ruling): no GO file
+        # = deliberate HOLD (table dropped, floor check skips with GATE_HOLD
+        # marker); GO mode=pinned ships the human-reviewed snapshot verbatim,
+        # hash-verified. See openregs/comment_org_entities.GATE.md.
+        stats = coe_builder.build_gated(conn, log=log.info)
+        if stats and 'matched' in stats:
+            log.info(f"  comment_org_entities: {stats['matched']:,} of "
+                     f"{stats['names_seen']:,} distinct names matched "
+                     f"({stats['hubs']})")
     except Exception as e:
         log.warning(f"  comment_org_entities: FAILED — {e}")
 
@@ -6707,6 +6712,14 @@ def validate_critical_tables(conn: sqlite3.Connection):
     critical = [(t, info["floor"]) for t, info in crit.items() if info.get("floor") is not None]
     failures = []
     for table, min_rows in critical:
+        # Launch-gate awareness (2026-06-11): comment_org_entities ships only on
+        # an affirmative GO (see comment_org_entities.GATE.md). A deliberate
+        # HOLD is an expected, loudly-logged absence — not a silent loss — so
+        # the floor skips it. With GO present the floor enforces normally
+        # (including against a failed pinned-restore, which drops the table).
+        if table == 'comment_org_entities' and not (crit_path.parent / 'comment_org_entities.GO').exists():
+            log.warning(f"  ~ {table}: GATE_HOLD — no GO file; deliberate hold, floor check skipped")
+            continue
         exists = conn.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
             (table,)
