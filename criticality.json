@@ -288,6 +288,12 @@
       "growth": "rebuild",
       "snapshot": true,
       "smoke": true
+    },
+    "comment_org_entities": {
+      "floor": 15000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": false
     }
   }
 }
