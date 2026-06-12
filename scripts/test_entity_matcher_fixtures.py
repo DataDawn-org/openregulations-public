@@ -150,12 +150,12 @@ def main():
     syn = sqlite3.connect(":memory:")
     syn.executescript("""
         CREATE TABLE entities (entity_id INTEGER PRIMARY KEY, name_normalized TEXT,
-                               primary_state TEXT);
+                               primary_state TEXT, merged_into_entity_id INTEGER);
         CREATE TABLE entity_aliases (entity_id INTEGER, alias_name TEXT,
                                      alias_normalized TEXT, alias_source TEXT);
-        INSERT INTO entities VALUES (1, 'SOME OTHER NAME A', NULL),
-                                    (2, 'SOME OTHER NAME B', NULL),
-                                    (3, 'CONTESTED COALITION', NULL);
+        INSERT INTO entities VALUES (1, 'SOME OTHER NAME A', NULL, NULL),
+                                    (2, 'SOME OTHER NAME B', NULL, NULL),
+                                    (3, 'CONTESTED COALITION', NULL, NULL);
         INSERT INTO entity_aliases VALUES
             (1, 'Contested Coalition', 'CONTESTED COALITION', 'manual_pinned'),
             (2, 'Contested Coalition', 'CONTESTED COALITION', 'manual_chapter_national');
@@ -196,6 +196,39 @@ def main():
               f"(method={r.match_method})")
     else:
         check("F9", "AARP-class corroborated collision", False, "no qualifying instance found")
+
+    print("== Verification-review fixtures (F-1/F-2/F-3, 2026-06-12) ==")
+
+    # F10: GLEIF-twin (AdvaMed class) — after a dedup-merge, the string must
+    # resolve to the SURVIVOR; a merged shell must never be returned by any
+    # tier (matcher excludes merged_into_entity_id IS NOT NULL everywhere).
+    r = m.resolve(name="ADVANCED MEDICAL TECHNOLOGY ASSOCIATION", source_context="fixture")
+    e = ent(r.entity_id)
+    surv = conn.execute("SELECT entity_id FROM entities WHERE dd_id='DD-E-EIN-521006053'").fetchone()
+    check("F10", "AdvaMed -> merge survivor (c6), never the merged GLEIF twin",
+          bool(surv) and r.entity_id == surv[0],
+          f"resolved [{r.entity_id}] {e[0][:45] if e else 'MISS'} (method={r.match_method})")
+
+    # F11: FEC-shadow-resolved-unique (NAM class) — a name whose only same-norm
+    # entity was an FEC registration of the org itself: post-merge the string
+    # must reach the c6 (which carries the FEC id as a cross-registry attribute).
+    r = m.resolve(name="NATIONAL ASSOCIATION OF MANUFACTURERS", source_context="fixture")
+    e = ent(r.entity_id)
+    check("F11", "NAM -> the c6 (EIN 131084330), not the FEC committee record",
+          bool(e) and e[2] == '131084330',
+          f"resolved {e[0][:50] + ' ein=' + str(e[2]) if e else 'MISS'} (method={r.match_method})")
+
+    # F12: successor-chain (AHP class) — lineage is a RELATIONSHIP, never an
+    # alias. A predecessor/acquired company's name must not resolve to the
+    # acquirer; it resolves to the continuing legal entity (AHP renamed Wyeth
+    # 2002) or correctly misses.
+    r = m.resolve(name="AMERICAN HOME PRODUCTS CORP", source_context="fixture")
+    e = ent(r.entity_id)
+    wyeth = conn.execute("SELECT entity_id FROM entities WHERE dd_id='DD-E-LEI-549300Q9GR3WRH4N4836'").fetchone()
+    pfizer = conn.execute("SELECT entity_id FROM entities WHERE ein='135315170'").fetchone()
+    check("F12", "American Home Products -> Wyeth LLC (continuing entity), never Pfizer",
+          bool(wyeth) and r.entity_id == wyeth[0] and (not pfizer or r.entity_id != pfizer[0]),
+          f"resolved [{r.entity_id}] {e[0][:45] if e else 'MISS'} (method={r.match_method})")
 
     conn.close()
     n_red = sum(1 for _, _, ok, _ in results if not ok)

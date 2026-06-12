@@ -340,7 +340,7 @@ class EntityMatcher:
 
     def _match_entity_by_column(self, col: str, val, method: str, source_context: str) -> ResolveResult:
         row = self.conn.execute(
-            f"SELECT entity_id FROM entities WHERE {col} = ? LIMIT 2", (val,)
+            f"SELECT entity_id FROM entities WHERE {col} = ? AND merged_into_entity_id IS NULL LIMIT 2", (val,)
         ).fetchall()
         if len(row) == 1:
             self.stats[method] += 1
@@ -383,8 +383,9 @@ class EntityMatcher:
         """
         # Tier 2a — manual
         manual = self.conn.execute(
-            "SELECT DISTINCT entity_id FROM entity_aliases "
-            "WHERE alias_normalized = ? AND alias_source LIKE 'manual%' LIMIT 2",
+            "SELECT DISTINCT a.entity_id FROM entity_aliases a "
+            "JOIN entities e ON e.entity_id = a.entity_id AND e.merged_into_entity_id IS NULL "
+            "WHERE a.alias_normalized = ? AND a.alias_source LIKE 'manual%' LIMIT 2",
             (nn,),
         ).fetchall()
         if len(manual) == 1:
@@ -405,8 +406,9 @@ class EntityMatcher:
 
         # Tier 2b — machine
         rows = self.conn.execute(
-            "SELECT DISTINCT entity_id FROM entity_aliases "
-            "WHERE alias_normalized = ? AND alias_source NOT LIKE 'manual%' LIMIT 2",
+            "SELECT DISTINCT a.entity_id FROM entity_aliases a "
+            "JOIN entities e ON e.entity_id = a.entity_id AND e.merged_into_entity_id IS NULL "
+            "WHERE a.alias_normalized = ? AND a.alias_source NOT LIKE 'manual%' LIMIT 2",
             (nn,),
         ).fetchall()
         if len(rows) != 1:
@@ -416,10 +418,10 @@ class EntityMatcher:
         # 643 entities share the literal name 'AARP', so any LIMIT-k fetch can
         # wrongly refuse a true member (caught in first delta measurement).
         has_name_owner = self.conn.execute(
-            "SELECT 1 FROM entities WHERE name_normalized = ? LIMIT 1", (nn,)).fetchone()
+            "SELECT 1 FROM entities WHERE name_normalized = ? AND merged_into_entity_id IS NULL LIMIT 1", (nn,)).fetchone()
         if has_name_owner:
             is_member = self.conn.execute(
-                "SELECT 1 FROM entities WHERE name_normalized = ? AND entity_id = ? LIMIT 1",
+                "SELECT 1 FROM entities WHERE name_normalized = ? AND entity_id = ? AND merged_into_entity_id IS NULL LIMIT 1",
                 (nn, cand)).fetchone()
             if not is_member:
                 return self._miss(source_context), False
@@ -433,7 +435,7 @@ class EntityMatcher:
 
     def _match_entity_by_name_state(self, nn: str, state: str, source_context: str) -> ResolveResult:
         rows = self.conn.execute(
-            "SELECT entity_id FROM entities WHERE name_normalized = ? AND primary_state = ? LIMIT 2",
+            "SELECT entity_id FROM entities WHERE name_normalized = ? AND primary_state = ? AND merged_into_entity_id IS NULL LIMIT 2",
             (nn, state),
         ).fetchall()
         if len(rows) == 1:
@@ -449,7 +451,7 @@ class EntityMatcher:
 
     def _match_entity_by_name_only(self, nn: str, source_context: str) -> ResolveResult:
         rows = self.conn.execute(
-            "SELECT entity_id FROM entities WHERE name_normalized = ? LIMIT 2",
+            "SELECT entity_id FROM entities WHERE name_normalized = ? AND merged_into_entity_id IS NULL LIMIT 2",
             (nn,),
         ).fetchall()
         if len(rows) == 1:
