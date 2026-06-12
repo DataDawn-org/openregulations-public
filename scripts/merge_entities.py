@@ -85,6 +85,15 @@ def merge(conn: sqlite3.Connection, loser_dd: str, survivor_dd: str,
         conn.execute("UPDATE entity_relationships SET parent_entity_id=? WHERE parent_entity_id=?", (sid, lid))
         conn.execute("UPDATE entity_relationships SET child_entity_id=? WHERE child_entity_id=?", (sid, lid))
 
+        # re-point entity_dominance — it feeds the phase_c6 tiebreaker
+        # attachments under the #75 silent-pick invariant; a merged entity_id
+        # left here would be a silent arbitrary pick downstream. (Checked
+        # clean for the first two merges; structural for the gleif program.)
+        try:
+            conn.execute("UPDATE entity_dominance SET entity_id=? WHERE entity_id=?", (sid, lid))
+        except sqlite3.OperationalError:
+            pass  # table absent in some scratch DBs
+
         conn.execute("""UPDATE entities SET status='merged', merged_into_entity_id=?, updated_at=?
                         WHERE entity_id=?""", (sid, now, lid))
         conn.execute("""INSERT OR REPLACE INTO dd_id_redirects
