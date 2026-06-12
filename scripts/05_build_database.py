@@ -4771,6 +4771,10 @@ def import_staging_entities(conn: sqlite3.Connection):
     _attach_ro(conn, STAGING_ENTITIES_DB, 'ent_stg')
     tables = [
         'entities', 'public_actors', 'entity_aliases', 'entity_relationships',
+        # dd_id_redirects added 2026-06-12 (F-1/F-2 merges): redirects are part
+        # of the canonical entity layer — kept in staging so a from-scratch
+        # rebuild preserves dd_id permanence (previously build-side only).
+        'dd_id_redirects',
         'entity_dominance', 'industries', 'industries_sic_map',
         'industries_ntee_map', 'uei_registry',
     ]
