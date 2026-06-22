@@ -685,7 +685,7 @@ log "  Total transfer: ${TRANSFER_GB} GB"
 # ── Pre-deploy disk-space check ──────────────────────────────────────────
 #
 # Snapshot is born on NVMe (.backup() → $BACKUP_DIR) and the .new upload also
-# lands on NVMe before the atomic swap, so peak free we need on / =
+# lands on NVMe before the atomic swap, so peak free we need on the $REMOTE_DIR fs =
 #   snapshot_overhead   (~BACKUP_BYTES, one openregs.db snapshot)
 # + transfer_overhead   (sum of .new files, TRANSFER_BYTES from preflight)
 # After the atomic `mv .new → live` the old live frees; the snapshot is trimmed
@@ -706,7 +706,11 @@ NEEDED_SAFE_GB=$(awk -v b=$NEEDED_SAFE_BYTES 'BEGIN{printf "%.2f", b/1024/1024/1
 if [[ $DRY_RUN -eq 1 ]]; then
     log "[DRY-RUN] Required: ≥${NEEDED_MIN_GB} GB (snapshot ${BACKUP_GB} GB + transfer ${TRANSFER_GB} GB); recommended ${NEEDED_SAFE_GB} GB"
 else
-    REMOTE_FREE_KB=$(ssh $SSH_OPTS "$REMOTE_HOST" "df -P / | awk 'NR==2 {print \$4}'")
+    # df the filesystem that actually holds the DB + backups ($REMOTE_DIR),
+    # NOT '/'. On a split-LVM host /opt is a separate large volume while '/' is
+    # small — checking '/' can falsely abort with "insufficient headroom" even
+    # when /opt has ample free. (Single-partition hosts mount everything on '/'.)
+    REMOTE_FREE_KB=$(ssh $SSH_OPTS "$REMOTE_HOST" "df -P '$REMOTE_DIR' | awk 'NR==2 {print \$4}'")
     REMOTE_FREE_GB=$(awk -v k=$REMOTE_FREE_KB 'BEGIN{printf "%.2f", k/1024/1024}')
     log "Required: ≥${NEEDED_MIN_GB} GB (snapshot ${BACKUP_GB} GB + transfer ${TRANSFER_GB} GB)"
     log "Recommended: ${NEEDED_SAFE_GB} GB (with 10% margin); VPS free: ${REMOTE_FREE_GB} GB"
