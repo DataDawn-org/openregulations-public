@@ -1894,7 +1894,10 @@
                 ]);
 
                 if (docketRows.length === 0) {
-                    detailHeader.innerHTML = '<p style="padding:1rem;">Docket not found</p>';
+                    // Freshness fallback: a docket that opened for comment after the last monthly dockets build
+                    // isn't in `dockets` yet, but the daily open-for-comment snapshot already has it. Render a
+                    // provisional view from that snapshot instead of "not found"; the full record arrives next build.
+                    await renderProvisionalDocketDetail(did, docketId);
                     return;
                 }
 
@@ -1986,6 +1989,62 @@
             } catch (err) {
                 detailHeader.innerHTML = `<p style="color:var(--dawn-rose);padding:1rem;">${esc(err.message)}</p>`;
             }
+        }
+
+        // Freshness fallback: render a docket from the daily open-for-comment snapshot (open_comments.db) when it
+        // isn't in the monthly-built `dockets` table yet (it opened mid-month). Honest + thin — shows the open
+        // document(s) and comment window, and says plainly the full record arrives after the next monthly update.
+        async function renderProvisionalDocketDetail(did, docketId) {
+            let snapDocs = [];
+            try {
+                snapDocs = await queryOpen(`
+                    SELECT id, agency_id, docket_id, title, document_type, posted_date,
+                           comment_start_date, comment_end_date, open_for_comment, withdrawn,
+                           CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                    FROM documents WHERE docket_id = '${did}'
+                    ORDER BY (comment_end_date > datetime('now') AND withdrawn = 0) DESC, posted_date DESC
+                    LIMIT 51
+                `);
+            } catch (e) { snapDocs = []; }
+
+            if (!snapDocs.length) {
+                detailHeader.innerHTML = '<p style="padding:1rem;">Docket not found</p>';
+                return;
+            }
+
+            const now = Date.now();
+            const openDocs = snapDocs.filter(x => x.comment_end_date && Date.parse(x.comment_end_date) > now && !Number(x.withdrawn));
+            const lead = openDocs[0] || snapDocs[0];
+            const agency = lead.agency_id || (docketId.split('-')[0] || '');
+
+            detailHeader.innerHTML = `
+                <div class="card-title" style="font-size:1.3rem;margin-bottom:0.5rem;">${esc(lead.title || ('Docket ' + docketId))}</div>
+                <div class="card-meta">
+                    <span class="agency-badge">${esc(agency)}</span>
+                    ${openDocs.length ? '<span class="type-badge open">' + openDocs[0].days_left + ' days left</span>' : ''}
+                    <span class="meta-item">${esc(docketId)}</span>
+                    <a class="source-link" href="https://www.regulations.gov/docket/${encodeURIComponent(docketId)}" target="_blank" rel="noopener">View on Regulations.gov &rarr;</a>
+                </div>
+            `;
+
+            let html = '';
+            html += `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:3px solid var(--dawn-amber);border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;font-size:0.9rem;line-height:1.55;color:var(--text-secondary);">This docket opened recently and isn’t in DataDawn’s full docket record yet. The detail below comes from our daily open-for-comment snapshot; the complete record — every public comment, the rulemaking lifecycle, and related Federal Register documents — appears after the next monthly update.</div>`;
+
+            html += `<div class="section-title" style="color:var(--dawn-amber);">${openDocs.length ? 'Open for Comment' : 'Recent Documents'} (${snapDocs.length})</div>`;
+            html += '<ul class="timeline">';
+            html += snapDocs.slice(0, 50).map(doc => `
+                <li>
+                    <div class="tl-date">${esc(doc.posted_date)}</div>
+                    <div class="tl-title"><a class="doc-link" href="https://www.regulations.gov/document/${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${esc(truncate(doc.title || doc.id, 150))}</a></div>
+                    <div class="tl-type">
+                        ${docTypeBadge(doc.document_type)}
+                        ${doc.comment_end_date ? '<span class="meta-item">Comments through ' + esc(doc.comment_end_date) + '</span>' : ''}
+                    </div>
+                </li>
+            `).join('');
+            html += '</ul>';
+
+            detailContent.innerHTML = html;
         }
 
         // --- Detailed Comments: paginated + ranked by DataDawn entity coverage ---
