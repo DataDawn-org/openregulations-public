@@ -298,13 +298,13 @@ def main():
         "EPA": "068", "USDA": "012", "HHS": "075", "DOI": "014",
         "DOE": "089", "HUD": "086", "DOJ": "015", "ED": "091",
         "VA": "036", "NASA": "080", "SBA": "073", "DOT": "069",
-        "DOL": "016", "DOC": "013", "DHS": "070",
+        "DOL": "1601", "DOC": "013", "DHS": "070",
     }
 
     # Map subtier agencies to their parent department
     SUBTIER_TO_TOPTIER = {
         "APHIS": ("USDA", "012"), "FDA": ("HHS", "075"), "FWS": ("DOI", "014"),
-        "NOAA": ("DOC", "013"), "OSHA": ("DOL", "016"),
+        "NOAA": ("DOC", "013"), "OSHA": ("DOL", "1601"),
         "FAA": ("DOT", "069"), "NHTSA": ("DOT", "069"), "FEMA": ("DHS", "070"),
     }
 
