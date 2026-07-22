@@ -150,7 +150,7 @@
 
     <div class="search-header">
         <h1>Campaign Contributions</h1>
-        <p>4.4 million FEC individual contribution records. Search by employer, candidate, or committee.</p>
+        <p>Employer-level aggregates of FEC campaign contributions, plus 4.4 million committee-to-candidate transaction records.</p>
     </div>
 
     <div class="search-container">
@@ -166,7 +166,7 @@
             <div class="tab active" data-tab="employers">By Employer</div>
             <div class="tab" data-tab="candidates">Employer &rarr; Candidate</div>
             <div class="tab" data-tab="parties">Employer &rarr; Party</div>
-            <div class="tab" data-tab="individual">Individual Contributions</div>
+            <div class="tab" data-tab="individual">Committee Transactions</div>
         </div>
 
         <div class="examples">
@@ -190,8 +190,8 @@
     </div>
 
     <div class="source-note">
-        Source: <a href="https://www.fec.gov/data/browse-data/?tab=bulk-data">FEC Bulk Data</a> — Individual contributions to candidates and committees, election cycles 2010-2026.
-        Employer aggregations are pre-computed from individual filings. Employer names are as-reported by contributors (not standardized).
+        Source: <a href="https://www.fec.gov/data/browse-data/?tab=bulk-data">FEC Bulk Data</a> — election cycles 2010-2026.
+        Employer aggregations are pre-computed from individual contribution filings; the Committee Transactions tab shows committee-to-candidate and committee-to-committee transaction records (no contributor names). Employer names are as-reported by contributors (not standardized).
         <br><br>
         <a href="/explore/index.html">&larr; Back to OpenRegs</a> &middot; <a href="https://datadawn.org">DataDawn</a>
     </div>
@@ -217,7 +217,7 @@
         employers: 'Search by employer name...',
         candidates: 'Search employer to see candidate recipients...',
         parties: 'Search employer to see party breakdown...',
-        individual: 'Search by employer, candidate, or committee...'
+        individual: 'Search by committee or candidate name...'
     };
 
     document.querySelectorAll('.tab').forEach(tab => {
@@ -274,26 +274,34 @@
         statusDiv.textContent = '';
         paginationDiv.style.display = 'none';
 
+        // BY-EMPLOYER search (employers/candidates/parties tabs) is wired to the filtered
+        // fec_employer_fts (568,770 eligible keys; 2026-07-13 rebuild). The FTS is the curated
+        // search surface: self-concentrated keys are NOT indexed for search (they remain in the
+        // tables and render elsewhere). The 'individual' tab (Committee Transactions) searches
+        // fec_contributions by committee/candidate.
         const qSafe = currentQuery.replace(/"/g, '""').replace(/'/g, "''");
-        const qFTS = currentQuery.replace(/"/g, '""');
+        // per-token prefix match, escaped for both FTS5 phrase syntax and the SQL string literal
+        const ftsQ = currentQuery.trim().split(/\s+/).filter(Boolean)
+            .map(w => '"' + w.replace(/"/g, '""') + '"*').join(' ').replace(/'/g, "''");
+        const ftsFilter = `employer IN (SELECT employer FROM fec_employer_fts WHERE fec_employer_fts MATCH '${ftsQ}')`;
         let sql, countSql;
 
         switch (currentTab) {
             case 'employers':
-                sql = `SELECT employer, donation_count, total_amount, avg_amount, unique_states, min_cycle, max_cycle FROM fec_employer_totals WHERE rowid IN (SELECT rowid FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"') ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
-                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"'`;
+                sql = `SELECT employer, total_amount, donation_count, avg_amount, unique_states, min_cycle, max_cycle FROM fec_employer_totals WHERE ${ftsFilter} ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_totals WHERE ${ftsFilter}`;
                 break;
             case 'candidates':
-                sql = `SELECT employer, cand_name, party, office, state, cycle, donation_count, total_amount, bioguide_id FROM fec_employer_to_candidate WHERE employer LIKE '%${qSafe}%' ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
-                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_candidate WHERE employer LIKE '%${qSafe}%'`;
+                sql = `SELECT employer, cand_name, bioguide_id, party, office, state, cycle, total_amount, donation_count FROM fec_employer_to_candidate WHERE ${ftsFilter} ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_candidate WHERE ${ftsFilter}`;
                 break;
             case 'parties':
-                sql = `SELECT employer, party, cycle, donation_count, total_amount, candidate_count FROM fec_employer_to_party WHERE employer LIKE '%${qSafe}%' ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
-                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_party WHERE employer LIKE '%${qSafe}%'`;
+                sql = `SELECT employer, party, cycle, total_amount, donation_count, candidate_count FROM fec_employer_to_party WHERE ${ftsFilter} ORDER BY total_amount DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_employer_to_party WHERE ${ftsFilter}`;
                 break;
             case 'individual':
-                sql = `SELECT cmte_name, cand_name, transaction_dt, transaction_amt, state, employer, occupation, cycle FROM fec_contributions WHERE employer LIKE '%${qSafe}%' ORDER BY transaction_amt DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
-                countSql = `SELECT COUNT(*) as cnt FROM fec_contributions WHERE employer LIKE '%${qSafe}%'`;
+                sql = `SELECT cmte_name, cand_name, transaction_dt, transaction_amt, state, cycle FROM fec_contributions WHERE cmte_name LIKE '%${qSafe}%' OR cand_name LIKE '%${qSafe}%' ORDER BY transaction_amt DESC LIMIT ${PAGE_SIZE} OFFSET ${currentOffset}`;
+                countSql = `SELECT COUNT(*) as cnt FROM fec_contributions WHERE cmte_name LIKE '%${qSafe}%' OR cand_name LIKE '%${qSafe}%'`;
                 break;
         }
 
@@ -310,12 +318,12 @@
             hasMore = rows.length === PAGE_SIZE;
 
             if (rows.length === 0) {
-                resultsDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">$</div><p>No results for "${esc(currentQuery)}"</p><div class="hint">Try a different employer name or switch tabs</div></div>`;
+                resultsDiv.innerHTML = `<div class="empty-state"><div class="empty-icon">$</div><p>No results for "${esc(currentQuery)}"</p><div class="hint">Try a committee or candidate name</div></div>`;
                 statusDiv.textContent = '0 results';
                 return;
             }
 
-            const countLabel = totalCount ? Number(totalCount).toLocaleString() : `${rows.length}${hasMore ? '+' : ''}`;
+            const countLabel = formatResultCount(totalCount, rows.length, hasMore);
             const offsetLabel = currentOffset > 0 ? ` (showing ${currentOffset + 1}-${currentOffset + rows.length})` : '';
             statusDiv.innerHTML = `<span class="count">${countLabel}</span> results${offsetLabel}`;
 
@@ -408,8 +416,6 @@
             </div>
             <div class="card-meta">
                 <div class="meta-item">Date: <span>${dateStr}</span></div>
-                ${r.employer ? `<div class="meta-item">Employer: <span>${esc(truncate(r.employer, 30))}</span></div>` : ''}
-                ${r.occupation ? `<div class="meta-item">Occupation: <span>${esc(truncate(r.occupation, 25))}</span></div>` : ''}
                 ${r.state ? `<div class="meta-item">State: <span>${esc(r.state)}</span></div>` : ''}
                 <div class="meta-item">Cycle: <span>${r.cycle || '--'}</span></div>
             </div>

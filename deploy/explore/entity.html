@@ -270,6 +270,7 @@
         </div>
     </footer>
 
+    <script src="search-core.js"></script>
     <script src="shared.js"></script>
     <script>
         const API_BASE = '';
@@ -347,6 +348,12 @@
             writeURL(q);
             const qSafe = q.replace(/'/g, "''");
             const qFTS = q.replace(/'/g, "''").replace(/"/g, '').replace(/[*(){}[\]^~:]/g, ' ').trim();
+            // Identifier shapes via the search-core.js substrate. The dockets arm below was a
+            // pre-fix copy of regulation.html's query (B7, search_audit_2026-07-22) — a typed
+            // docket number or pasted /docket/ URL now prefix-matches d.id, exact ID first.
+            const dkId = (window.SearchCore ? SearchCore.detect(q) : []).find(c => c.type === 'docket');
+            const dkArm = dkId ? ` OR d.id LIKE '${dkId.value}%'` : '';
+            const dkRank = dkId ? `CASE WHEN UPPER(d.id) = '${dkId.value}' THEN 0 ELSE 1 END, ` : '';
 
             resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
             statusDiv.textContent = 'Searching across all datasets...';
@@ -408,7 +415,7 @@
                             (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
                             (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
                         FROM dockets d
-                        WHERE d.id IN (
+                        WHERE (d.id IN (
                             SELECT d2.id FROM dockets_fts JOIN dockets d2 ON d2.rowid = dockets_fts.rowid
                             WHERE dockets_fts MATCH '"${qFTS}"'
                             UNION
@@ -416,8 +423,8 @@
                             JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
                             JOIN documents doc ON doc.fr_doc_num = fr.document_number
                             WHERE federal_register_fts MATCH '"${qFTS}"' AND doc.docket_id IS NOT NULL
-                        )
-                        ORDER BY doc_count DESC
+                        )${dkArm})
+                        ORDER BY ${dkRank}doc_count DESC
                         LIMIT 20
                     `),
                     query(`
@@ -450,6 +457,9 @@
                         LIMIT 15
                     `),
                     query(`
+                        -- Employer-aggregate lookup offline until the FEC employer
+                        -- rebuild ships (2026-07 data-quality + privacy pass).
+                        -- Restore: replace WHERE 0 with the employer name lookup.
                         SELECT employer,
                             total_amount AS total_given,
                             donation_count AS contribution_count,
@@ -457,8 +467,7 @@
                             min_cycle AS first_cycle,
                             max_cycle AS last_cycle
                         FROM fec_employer_totals
-                        WHERE rowid IN (SELECT rowid FROM fec_employer_fts WHERE fec_employer_fts MATCH '"${qFTS}"')
-                        ORDER BY total_amount DESC
+                        WHERE 0
                         LIMIT 15
                     `),
                     query(`
@@ -517,7 +526,7 @@
                 }
 
                 // === FEDERAL SPENDING ===
-                if (spending.length > 0) {
+                if (false /* STAGED-REMOVED 2026-06-29 — federal contracts off public surfaces (false-completeness; matches the datadawn.org hub takedown). Remove "false && " to restore. */ && spending.length > 0) {
                     const spendTotal = spending.reduce((s, r) => s + (r.total_amount || 0), 0);
                     const awardTotal = spending.reduce((s, r) => s + (r.award_count || 0), 0);
                     html += `<div class="section">
@@ -633,6 +642,7 @@
                             <div class="section-title-wrap">
                                 <div class="section-title">Revolving Door</div>
                                 <div class="section-subtitle">${formatNumber(revdoor.length)} lobbyists with prior government positions</div>
+                                <div class="section-subtitle muted" style="font-size:0.85em;opacity:0.75;">Self-declared covered positions (LD-1); absence is not evidence of no government service.</div>
                             </div>
                             <a class="section-link" href="/explore/lobbying.html?q=${encodeURIComponent(q)}&tab=revdoor">View all &rarr;</a>
                         </div>
