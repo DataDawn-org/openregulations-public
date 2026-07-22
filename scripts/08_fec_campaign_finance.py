@@ -220,6 +220,33 @@ def build_download_url(file_prefix: str, cycle: int) -> str:
     return f"{FEC_BULK_BASE}/{cycle}/{file_prefix}{suffix}.zip"
 
 
+# In-progress even-year election cycle: 2025 or 2026 -> 2026, 2027 -> 2028.
+CURRENT_CYCLE = time.gmtime().tm_year + (time.gmtime().tm_year % 2)
+# FEC re-publishes the active cycle's bulk files continuously, and continues posting
+# AMENDMENTS to the just-ended cycle for months into the next (year-end reports land in Q1).
+# So both the active cycle AND the immediately-prior cycle (CURRENT_CYCLE-2) are "live" and
+# must force-refresh; only older cycles are final and may skip on existence. The -2 (not a
+# bare `cycle < CURRENT_CYCLE`) closes a latent every-2-years freeze: in early 2027,
+# CURRENT_CYCLE flips to 2028, which would reclassify the still-amending 2026 cycle as
+# historical and skip it forever. A live file is "fresh enough" to skip only if downloaded
+# within MAX_AGE_DAYS — monthly cadence ~30d, so 20d guarantees a monthly refresh while still
+# allowing same-month resume. Fixes the silent freeze (#212) where stale March current-cycle
+# files were re-loaded every build (skip-on-existence had no current-cycle invalidation ->
+# FEC op_ex/IE/contributions/pac_summary froze for months).
+CURRENT_CYCLE_MAX_AGE_DAYS = 20
+LIVE_CYCLE_FLOOR = CURRENT_CYCLE - 2   # active + immediately-prior cycle are still being updated
+
+
+def _existing_is_fresh_enough(path: Path, cycle: int) -> bool:
+    """True if an existing on-disk file may be skipped. Final (older) cycles: always skip.
+    Live cycles (active + immediately-prior, >= LIVE_CYCLE_FLOOR): skip only if younger than
+    CURRENT_CYCLE_MAX_AGE_DAYS, else force re-download (FEC keeps updating them)."""
+    if cycle < LIVE_CYCLE_FLOOR:
+        return True
+    age_days = (time.time() - path.stat().st_mtime) / 86400.0
+    return age_days < CURRENT_CYCLE_MAX_AGE_DAYS
+
+
 # ── Download Phase ───────────────────────────────────────────────────────────
 
 def download_bulk_file(session, file_prefix: str, cycle: int) -> Path:
@@ -236,10 +263,14 @@ def download_bulk_file(session, file_prefix: str, cycle: int) -> Path:
     cycle_dir.mkdir(parents=True, exist_ok=True)
     zip_path = cycle_dir / zip_filename
 
-    # Resume: skip if already downloaded
+    # Resume: skip if already downloaded AND fresh enough (current-cycle files force-refresh).
     if zip_path.exists() and zip_path.stat().st_size > 0:
-        log.info(f"  [SKIP] {zip_filename} already exists ({zip_path.stat().st_size:,} bytes)")
-        return zip_path
+        if _existing_is_fresh_enough(zip_path, cycle):
+            log.info(f"  [SKIP] {zip_filename} already exists ({zip_path.stat().st_size:,} bytes)")
+            return zip_path
+        age = (time.time() - zip_path.stat().st_mtime) / 86400.0
+        log.info(f"  [REFRESH] {zip_filename} is current-cycle and {age:.0f}d old "
+                 f"(>{CURRENT_CYCLE_MAX_AGE_DAYS}d) — re-downloading for fresh data")
 
     log.info(f"  Downloading {url} ...")
     try:
@@ -938,14 +969,22 @@ def load_file_to_db(db: sqlite3.Connection, file_prefix: str, cycle: int) -> int
                     log.info(f"    {table}: {row_count:,} rows loaded...")
             except sqlite3.Error as e:
                 log.error(f"  DB error on batch insert into {table}: {e}")
-                # Try row-by-row for this batch
+                # Try row-by-row for this batch — track inserted vs skipped so
+                # row_count reflects reality (post-DAF-incident counter discipline).
+                inserted = 0
+                skipped = 0
                 for single_row in batch:
                     try:
                         db.execute(insert_sql, single_row)
-                    except sqlite3.Error:
-                        pass
+                        inserted += 1
+                    except sqlite3.Error as row_e:
+                        skipped += 1
+                        if skipped <= 5:
+                            log.warning(f"    skipped row in {table}: {row_e}")
                 db.commit()
-                row_count += len(batch)
+                row_count += inserted
+                if skipped > 0:
+                    log.warning(f"  {table}: {skipped:,} of {len(batch):,} rows in batch failed — see warnings above")
             batch = []
 
     # Final batch
@@ -956,13 +995,20 @@ def load_file_to_db(db: sqlite3.Connection, file_prefix: str, cycle: int) -> int
             row_count += len(batch)
         except sqlite3.Error as e:
             log.error(f"  DB error on final batch insert into {table}: {e}")
+            inserted = 0
+            skipped = 0
             for single_row in batch:
                 try:
                     db.execute(insert_sql, single_row)
-                except sqlite3.Error:
-                    pass
+                    inserted += 1
+                except sqlite3.Error as row_e:
+                    skipped += 1
+                    if skipped <= 5:
+                        log.warning(f"    skipped row in {table}: {row_e}")
             db.commit()
-            row_count += len(batch)
+            row_count += inserted
+            if skipped > 0:
+                log.warning(f"  {table}: {skipped:,} of {len(batch):,} rows in final batch failed — see warnings above")
 
     return row_count
 
@@ -981,8 +1027,12 @@ def download_csv_file(session, file_key: str, cycle: int) -> Path:
     csv_path = cycle_dir / filename
 
     if csv_path.exists() and csv_path.stat().st_size > 0:
-        log.info(f"  [SKIP] {filename} already exists ({csv_path.stat().st_size:,} bytes)")
-        return csv_path
+        if _existing_is_fresh_enough(csv_path, cycle):
+            log.info(f"  [SKIP] {filename} already exists ({csv_path.stat().st_size:,} bytes)")
+            return csv_path
+        age = (time.time() - csv_path.stat().st_mtime) / 86400.0
+        log.info(f"  [REFRESH] {filename} is current-cycle and {age:.0f}d old "
+                 f"(>{CURRENT_CYCLE_MAX_AGE_DAYS}d) — re-downloading for fresh data")
 
     log.info(f"  Downloading {url} ...")
     try:
@@ -1026,14 +1076,7 @@ def load_csv_to_db(db: sqlite3.Connection, file_key: str, cycle: int) -> int:
         log.warning(f"  CSV not found: {csv_path}")
         return 0
 
-    # Table mapping for CSV files
-    table_map = {
-        "independent_expenditure": "fec_independent_expenditures",
-        "ElectioneeringComm": "fec_electioneering",
-        "CommunicationCosts": "fec_communication_costs",
-    }
-
-    table = table_map[file_key]
+    table = CSV_TABLE_BY_KEY[file_key]
     row_count = 0
     batch = []
     batch_size = 10000
@@ -1146,26 +1189,40 @@ def load_csv_to_db(db: sqlite3.Connection, file_key: str, cycle: int) -> int:
                 batch.append((f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({placeholders})", values))
 
                 if len(batch) >= batch_size:
+                    inserted = 0
+                    skipped = 0
                     for sql, vals in batch:
                         try:
                             db.execute(sql, vals)
-                        except sqlite3.Error:
-                            pass
+                            inserted += 1
+                        except sqlite3.Error as row_e:
+                            skipped += 1
+                            if skipped <= 5:
+                                log.warning(f"    skipped row in {table}: {row_e}")
                     db.commit()
-                    row_count += len(batch)
+                    row_count += inserted
+                    if skipped > 0:
+                        log.warning(f"  {table}: {skipped:,} of {len(batch):,} rows in batch failed")
                     if row_count % 100000 == 0:
                         log.info(f"    {table}: {row_count:,} rows loaded...")
                     batch = []
 
         # Final batch
         if batch:
+            inserted = 0
+            skipped = 0
             for sql, vals in batch:
                 try:
                     db.execute(sql, vals)
-                except sqlite3.Error:
-                    pass
+                    inserted += 1
+                except sqlite3.Error as row_e:
+                    skipped += 1
+                    if skipped <= 5:
+                        log.warning(f"    skipped row in {table}: {row_e}")
             db.commit()
-            row_count += len(batch)
+            row_count += inserted
+            if skipped > 0:
+                log.warning(f"  {table}: {skipped:,} of {len(batch):,} rows in final batch failed")
 
     except Exception as e:
         log.error(f"  Error reading {csv_path}: {e}")
@@ -1232,14 +1289,9 @@ def build_disbursements_only(cycles: list[int]):
             break
 
         log.info(f"\n--- Cycle {cycle} ---")
-        for table in disbursement_tables:
-            try:
-                count = db.execute(f"DELETE FROM {table} WHERE cycle = ?", (cycle,)).rowcount
-                if count > 0:
-                    log.info(f"  Cleared {count:,} rows from {table}")
-            except sqlite3.OperationalError:
-                pass
-        db.commit()
+        # Verify inputs, then delete ONLY what this run can actually reload
+        # (delete list = load-ability, not load-intent — spec §5 2026-07-11)
+        ok_prefixes, ok_csv_keys = _guarded_delete(db, cycle)
 
         # Load ZIP files (oppexp, webk)
         for prefix in ["oppexp", "webk"]:
@@ -1247,6 +1299,10 @@ def build_disbursements_only(cycles: list[int]):
                 continue
             if _shutdown:
                 break
+            if prefix not in ok_prefixes:
+                log.error(f"  [MISSING-INPUT] {BULK_FILES.get(prefix, {}).get('description', prefix)} "
+                          f"({prefix}): skipped — input absent/unreadable, table left untouched")
+                continue
             info = BULK_FILES.get(prefix, {})
             log.info(f"  Loading {info.get('description', prefix)}...")
             t0 = time.time()
@@ -1259,6 +1315,10 @@ def build_disbursements_only(cycles: list[int]):
         for csv_key, csv_info in CSV_FILES.items():
             if _shutdown:
                 break
+            if csv_key not in ok_csv_keys:
+                log.error(f"  [MISSING-INPUT] {csv_info['description']} ({csv_key}, cycle {cycle}): "
+                          f"skipped — input absent/unreadable, table left untouched")
+                continue
             log.info(f"  Loading {csv_info['description']} ({csv_key}, cycle {cycle})...")
             t0 = time.time()
             count = load_csv_to_db(db, csv_key, cycle)
@@ -1296,21 +1356,111 @@ def build_disbursements_only(cycles: list[int]):
     log.info(f"\nDatabase size: {size_gb:.1f} GB")
 
 
-def delete_cycle_data(db: sqlite3.Connection, cycle: int):
-    """Delete all data for a given cycle from all tables (for clean reload)."""
-    tables = [
-        "fec_candidates", "fec_committees", "fec_candidate_committee_linkages",
-        "fec_contributions_to_candidates", "fec_individual_contributions",
-        "fec_committee_transactions", "fec_operating_expenditures",
-        "fec_pac_summary", "fec_independent_expenditures",
-        "fec_electioneering", "fec_communication_costs",
-    ]
+# Tables loaded from the enriched CSV files inside the same build_database run
+# (always active — CSV_FILES is unaffected by --skip-indiv).
+CSV_TABLE_BY_KEY = {
+    "independent_expenditure": "fec_independent_expenditures",
+    "ElectioneeringComm": "fec_electioneering",
+    "CommunicationCosts": "fec_communication_costs",
+}
+CSV_TABLE_NAMES = list(CSV_TABLE_BY_KEY.values())
+
+BUILD_INPUT_FAILURES = []  # (cycle, missing, at_risk_tables) — main() exits 3 if non-empty
+
+
+def verify_cycle_inputs(cycle: int):
+    """Check every input the live config would load for a cycle, BEFORE any delete.
+
+    A ZIP passes only if it exists and its central directory is readable (a
+    truncated-but-renamed download fails here, not after the wipe); a CSV passes
+    on exists+non-empty. Derived from the LIVE BULK_FILES/CSV_FILES so --skip-indiv
+    and the filtered harness/disbursements modes verify exactly what they load.
+    Returns (ok_prefixes, ok_csv_keys, missing_descriptions).
+    """
+    suffix = cycle_to_suffix(cycle)
+    ok_prefixes, ok_csv_keys, missing = [], [], []
+    for prefix in BULK_FILES:
+        zip_path = BULK_DIR / str(cycle) / f"{prefix}{suffix}.zip"
+        try:
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.infolist()
+            ok_prefixes.append(prefix)
+        except (OSError, zipfile.BadZipFile) as e:
+            missing.append(f"{prefix}:{zip_path.name} ({type(e).__name__})")
+    for csv_key, info in CSV_FILES.items():
+        url = info["url_pattern"].format(base=FEC_BULK_BASE, cycle=cycle)
+        csv_path = BULK_DIR / str(cycle) / url.split("/")[-1]
+        if csv_path.exists() and csv_path.stat().st_size > 0:
+            ok_csv_keys.append(csv_key)
+        else:
+            missing.append(f"{csv_key}:{csv_path.name} (missing/empty)")
+    return ok_prefixes, ok_csv_keys, missing
+
+
+def delete_cycle_data(db: sqlite3.Connection, cycle: int, ok_prefixes=None, ok_csv_keys=None):
+    """Delete a cycle's rows — ONLY for tables this run will actually reload.
+
+    The delete list is derived from the live TABLE_MAP (which --skip-indiv pops
+    'indiv' from) plus the CSV-loaded tables. It must never be a hardcoded list:
+    delete-list ≠ load-list is how every --skip-indiv monthly from 2026-04 to
+    2026-07 silently wiped fec_individual_contributions (~104M rows) without
+    reloading it (FEC boundary trace, Finding 2).
+
+    2026-07-11 (completeness spec §5): delete-list must equal load-ABILITY, not
+    load-intent — a missing ZIP meant the wipe had already happened by the time
+    load_file_to_db logged "ZIP not found" and returned 0. Callers that verified
+    inputs pass the verified-present subsets; None = legacy behavior (all live
+    TABLE_MAP + CSV tables)."""
+    if ok_prefixes is None:
+        prefix_tables = [info["table"] for info in TABLE_MAP.values()]
+    else:
+        prefix_tables = [TABLE_MAP[p]["table"] for p in ok_prefixes if p in TABLE_MAP]
+    if ok_csv_keys is None:
+        csv_tables = list(CSV_TABLE_NAMES)
+    else:
+        csv_tables = [CSV_TABLE_BY_KEY[k] for k in ok_csv_keys if k in CSV_TABLE_BY_KEY]
+    tables = list(dict.fromkeys(prefix_tables + csv_tables))
     for table in tables:
         try:
             db.execute(f"DELETE FROM {table} WHERE cycle = ?", (cycle,))
         except sqlite3.OperationalError:
             pass  # Table may not exist yet
     db.commit()
+
+
+def _guarded_delete(db: sqlite3.Connection, cycle: int):
+    """verify_cycle_inputs → classify → delete only verified tables.
+
+    A missing input is routine for cycles that never had the file (the legacy
+    [SKIP] path); it is recorded as a FAILURE only when the table holds rows for
+    the cycle — i.e. when the delete-first order would have destroyed data it
+    could not reload (the 2026-04→07 --skip-indiv wipe class). Returns
+    (ok_prefix_set, ok_csv_key_set) for the caller's load loops."""
+    ok_prefixes, ok_csv_keys, missing = verify_cycle_inputs(cycle)
+    ok_prefixes, ok_csv_keys = set(ok_prefixes), set(ok_csv_keys)
+    if missing:
+        skipped_tables = list(dict.fromkeys(
+            [info["table"] for p, info in TABLE_MAP.items() if p not in ok_prefixes]
+            + [CSV_TABLE_BY_KEY[k] for k in CSV_FILES if k not in ok_csv_keys]
+        ))
+        at_risk = []
+        for table in skipped_tables:
+            try:
+                if db.execute(f"SELECT 1 FROM {table} WHERE cycle = ? LIMIT 1", (cycle,)).fetchone():
+                    at_risk.append(table)
+            except sqlite3.OperationalError:
+                pass  # Table may not exist yet
+        if at_risk:
+            log.critical(
+                f"  cycle {cycle}: inputs missing/unreadable ({missing}) — delete+reload SKIPPED "
+                f"for {at_risk}; existing rows PRESERVED (the pre-2026-07-11 order would have "
+                f"wiped them before discovering the input was gone)"
+            )
+            BUILD_INPUT_FAILURES.append((cycle, missing, at_risk))
+        else:
+            log.info(f"  cycle {cycle}: absent inputs with no existing rows at risk (routine): {missing}")
+    delete_cycle_data(db, cycle, ok_prefixes, ok_csv_keys)
+    return ok_prefixes, ok_csv_keys
 
 
 def build_database(cycles: list[int]):
@@ -1333,18 +1483,26 @@ def build_database(cycles: list[int]):
     # then linkages, then transaction tables, then disbursements
     load_order = [p for p in ["cn", "cm", "ccl", "pas2", "oth", "indiv", "oppexp", "webk"] if p in BULK_FILES]
 
+    verified = {}  # cycle -> (ok_prefix_set, ok_csv_key_set), reused by the CSV pass
+
     for cycle in cycles:
         if _shutdown:
             break
         log.info(f"\n--- Loading cycle {cycle} ---")
 
-        # Delete existing data for this cycle (clean reload)
+        # Verify inputs, then delete ONLY what this run can actually reload
+        # (delete list = load-ability, not load-intent — spec §5 2026-07-11)
         log.info(f"  Clearing existing data for cycle {cycle}...")
-        delete_cycle_data(db, cycle)
+        ok_prefixes, ok_csv_keys = _guarded_delete(db, cycle)
+        verified[cycle] = (ok_prefixes, ok_csv_keys)
 
         for prefix in load_order:
             if _shutdown:
                 break
+            if prefix not in ok_prefixes:
+                log.error(f"  [MISSING-INPUT] {BULK_FILES[prefix]['description']} ({prefix}): "
+                          f"skipped — input absent/unreadable, table left untouched")
+                continue
             info = BULK_FILES[prefix]
             log.info(f"  Loading {info['description']} ({prefix})...")
 
@@ -1364,6 +1522,10 @@ def build_database(cycles: list[int]):
         for csv_key, csv_info in CSV_FILES.items():
             if _shutdown:
                 break
+            if csv_key not in verified.get(cycle, (set(), set()))[1]:
+                log.error(f"  [MISSING-INPUT] {csv_info['description']} ({csv_key}, cycle {cycle}): "
+                          f"skipped — input absent/unreadable, table left untouched")
+                continue
             log.info(f"  Loading {csv_info['description']} ({csv_key}, cycle {cycle})...")
             t0 = time.time()
             count = load_csv_to_db(db, csv_key, cycle)
@@ -1577,6 +1739,13 @@ def main():
     hours = int(elapsed // 3600)
     minutes = int((elapsed % 3600) // 60)
     log.info(f"\n=== Done in {hours}h {minutes}m ===")
+
+    if BUILD_INPUT_FAILURES:
+        log.critical(
+            f"BUILD INPUT FAILURES — delete+reload skipped with existing rows at risk "
+            f"(stale rows left in place; investigate before next run): {BUILD_INPUT_FAILURES}"
+        )
+        sys.exit(3)
 
 
 if __name__ == "__main__":
