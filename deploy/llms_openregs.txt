@@ -31,6 +31,12 @@ For training-data ingestion, batch research, or any workflow that wants the whol
 
 Dated, column-level changes to the schema. **If a query that used to work now returns `400 Bad Request` ("Cannot sort table by X" or "no such column"), check here** — your cached catalog likely references a column that was dropped or renamed. (Invalid-sort requests return 400, not 500: a 400 means "you asked for a column that no longer exists," not a server fault.) Machine-readable companion: `https://regs.datadawn.org/schema-changelog.json`.
 
+### 2026-05-25 — FEC contributions vs independent-expenditure fix
+- **Added** `fec_contributions.transaction_tp` (FEC itpas2 type code), restored after an earlier build dropped it. `24K`/`24Z` = contributions **received** by the candidate; `24A` = independent expenditure **AGAINST**; `24E` = IE **FOR**; `24C`/`24F`/`24N` = coordinated/communication. **Rule: never `SUM(transaction_amt)` over `fec_contributions` without filtering `transaction_tp`** — summing all types conflates outside/opposition spending with money received.
+- **Recomputed** `congress_members.fec_total_received` to sum **only** `transaction_tp IN ('24K','24Z')` (PAC/party contributions actually received). It previously summed all types, ~79% of which are independent expenditures (51% spent *against* the member) — e.g. a battleground senator showed $117.3M "received" vs $2.5M actually received. Values are now lower and correct.
+- **Added** `congress_members.fec_ie_for` (24E) and `fec_ie_against` (24A) — outside spending for/against the member, **not** money received.
+- **To compute money received:** `SUM(transaction_amt) WHERE transaction_tp IN ('24K','24Z')`. For independent expenditures use 24E (for) / 24A (against). Never sum all types under a "received" label.
+
 ### 2026-05-22 — Lobbying schema fix (S-C1)
 - **Dropped** `lobbying_activities.income_amount` and `lobbying_activities.expense_amount`. These had replicated filing-level dollar amounts across every activity row, so `SUM()`-ing them over-counted by the number of activity rows per filing (2-3× for many clients). Filing-level dollar amounts now live **only** on `lobbying_filings` (one row per filing).
 - **Dropped** `lobbying_filings.amount_reported` (was a COALESCE of two distinct concepts). Use `lobbying_filings.income_amount` (outside-firm filings report income), `lobbying_filings.expense_amount` (in-house lobbyists report expense), or `COALESCE(income_amount, expense_amount)`.
@@ -152,7 +158,6 @@ GAO reports (1994–2008).
 - `spending_awards_fts`: recipient names and descriptions
 - `hearings_fts`, `crs_reports_fts`, `nominations_fts`, `gao_reports_fts`, `earmarks_fts`
 - `fara_registrants_fts`, `fara_foreign_principals_fts`
-- `fec_employer_fts`
 
 ## Common Queries
 
@@ -199,12 +204,9 @@ ORDER BY congress DESC LIMIT 20
 
 ## Cross-Dataset Connection Pages
 
-9 explore pages at `https://regs.datadawn.org/explore/`:
+6 explore pages at `https://regs.datadawn.org/explore/`:
 - `witness-lobby.html` — Orgs that testify at hearings AND lobby
 - `committee-trades.html` — Committee members' stock trades
-- `committee-donors.html` — Campaign donations to committee members
-- `speeches-trades.html` — Floor speeches near stock trades
-- `trade-conflicts.html` — Trades in committee-regulated sectors
 - `lobbied-bills.html` — Bills ranked by lobbying activity
 - `revolving-door.html` — Former members who became lobbyists
 - `fara-hearings.html` — Foreign agents at hearings
