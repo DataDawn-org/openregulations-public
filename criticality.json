@@ -39,7 +39,7 @@
       "smoke": true
     },
     "comment_details": {
-      "floor": null,
+      "floor": 220000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
@@ -93,7 +93,7 @@
       "smoke": true
     },
     "crec_speakers": {
-      "floor": null,
+      "floor": 475000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
@@ -105,7 +105,7 @@
       "smoke": true
     },
     "stock_trades": {
-      "floor": null,
+      "floor": 30000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
@@ -117,22 +117,25 @@
       "smoke": true
     },
     "fec_operating_expenditures": {
-      "floor": 15000000,
-      "growth": "incremental",
+      "floor": 12000000,
+      "growth": "rebuild",
       "snapshot": true,
-      "smoke": true
+      "smoke": true,
+      "_note": "reclass + floor 15M->12M ride-along (r6: de-arms the 2.4-5% restatement false-abort band)."
     },
     "fec_independent_expenditures": {
-      "floor": null,
-      "growth": "incremental",
+      "floor": 300000,
+      "growth": "rebuild",
       "snapshot": true,
       "smoke": true
     },
     "fec_contributions": {
-      "floor": 3000000,
-      "growth": "incremental",
+      "floor": 3500000,
+      "on_violation": "alert",
+      "growth": "rebuild",
       "snapshot": true,
-      "smoke": true
+      "smoke": true,
+      "_note": "rebuild-class per FEC-family reclass 2026-07-11. Floor RULED 3.5M (2026-07-11): table flat at 4,395,926 across the 8-build window \u2014 the ~50%-of-min doctrine is for tables that move; 3M left a 32% silent-loss window on a 0%-mover, and the floor's only marginal coverage is the DROP/no-baseline case, exactly when the delta guard is absent. 20.4% headroom = real restatement slack. 4M CONSIDERED AND REJECTED: 9% headroom is inside the noise band for a bulk-rebuilt FEC table; a floor that false-aborts on routine restatement becomes a tripwire people learn to override \u2014 worse than loose. Do not re-open on that reasoning. on_violation=alert RULED 2026-07-17: FEC restates legitimately, so a blocking floor false-fires on this table's normal behavior and a false abort takes down the weekly deploy \u2014 UNDERCOUNT now emits a non-blocking CRITICAL_TABLE_ALERT (routed to op-health: deploys-and-warns); MISSING/UNREADABLE still abort regardless of mode (a restatement can shrink a table, not vanish it \u2014 existence stays fail-closed, the 04-19 class)."
     },
     "oira_reviews": {
       "floor": 40000,
@@ -248,37 +251,37 @@
       "smoke": true
     },
     "crs_reports": {
-      "floor": null,
+      "floor": 7000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
     },
     "nominations": {
-      "floor": null,
+      "floor": 20000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
     },
     "treaties": {
-      "floor": null,
+      "floor": 75,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
     },
     "presidential_documents": {
-      "floor": null,
+      "floor": 3000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
     },
     "gao_reports": {
-      "floor": null,
+      "floor": 35000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
     },
     "ig_reports": {
-      "floor": null,
+      "floor": 17000,
       "growth": "incremental",
       "snapshot": true,
       "smoke": true
@@ -294,6 +297,114 @@
       "growth": "rebuild",
       "snapshot": true,
       "smoke": false
+    },
+    "fec_pac_summary": {
+      "floor": 50000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": false
+    },
+    "fec_electioneering": {
+      "floor": 150,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false,
+      "_note": "snapshot:false per r6 \u2014 1,679 rows is below percent-delta usefulness; floor is existence/collapse-only; alert-tier shrink = QC's 1,000 floor."
+    },
+    "fec_communication_costs": {
+      "floor": 12000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": false
+    },
+    "oira_meetings": {
+      "floor": 4000,
+      "growth": "incremental",
+      "snapshot": true,
+      "smoke": false
+    },
+    "oira_meeting_attendees": {
+      "floor": 45000,
+      "growth": "incremental",
+      "snapshot": true,
+      "smoke": false
+    },
+    "ig_recommendations": {
+      "floor": 6000,
+      "growth": "incremental",
+      "snapshot": true,
+      "smoke": false
+    },
+    "fr_regs_crossref": {
+      "floor": 200000,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "earmark_spending_crossref": {
+      "floor": 15000,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "witness_lobby_overlap": {
+      "floor": 300,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "speeches_near_trades": {
+      "floor": 40000,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "revolving_door": {
+      "floor": 15,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "docket_importance": {
+      "floor": 10000,
+      "growth": "rebuild",
+      "snapshot": false,
+      "smoke": false
+    },
+    "fec_employer_totals": {
+      "floor": 290000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": true,
+      "_note": "observed=583,083 @ A13 build 2026-07-12. minted 2026-07-12 from 09 v2 first real output (A13 build); rebuild-class, floor ~0.5x observed per the fec_contributions 50%-of-min doctrine (mover). Gate-2/r13: floor from ACTUAL output, not pre-rebuild expectation."
+    },
+    "fec_employer_to_candidate": {
+      "floor": 560000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": true,
+      "_note": "observed=1,125,030 @ A13 build 2026-07-12. minted 2026-07-12 from 09 v2 first real output (A13 build); rebuild-class, floor ~0.5x observed per the fec_contributions 50%-of-min doctrine (mover). Gate-2/r13: floor from ACTUAL output, not pre-rebuild expectation."
+    },
+    "fec_employer_to_party": {
+      "floor": 350000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": true,
+      "_note": "observed=711,056 @ A13 build 2026-07-12. minted 2026-07-12 from 09 v2 first real output (A13 build); rebuild-class, floor ~0.5x observed per the fec_contributions 50%-of-min doctrine (mover). Gate-2/r13: floor from ACTUAL output, not pre-rebuild expectation."
+    },
+    "fec_top_occupations": {
+      "floor": 570000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": true,
+      "_note": "observed=1,140,849 @ A13 build 2026-07-12. minted 2026-07-12 from 09 v2 first real output (A13 build); rebuild-class, floor ~0.5x observed per the fec_contributions 50%-of-min doctrine (mover). Gate-2/r13: floor from ACTUAL output, not pre-rebuild expectation."
+    },
+    "fec_employer_fts": {
+      "floor": 280000,
+      "growth": "rebuild",
+      "snapshot": true,
+      "smoke": false,
+      "_note": "observed=568,770 @ A13 build 2026-07-12. minted 2026-07-12 from 09 v2 first real output (A13 build); rebuild-class, floor ~0.5x observed per the fec_contributions 50%-of-min doctrine (mover). Gate-2/r13: floor from ACTUAL output, not pre-rebuild expectation."
     }
   }
 }
