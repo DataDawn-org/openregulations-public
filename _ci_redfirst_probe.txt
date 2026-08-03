@@ -1,0 +1,3 @@
+# CI red-first probe (queue #405) — marker already unremovably in this repo network.
+# Expect: scan + scan-tree FAIL. Close without merging.
+legacy_host_note = "ran on hetzner before the OVH cutover"
