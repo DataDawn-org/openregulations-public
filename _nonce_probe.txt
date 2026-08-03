@@ -1,0 +1,3 @@
+# Local-only nonce probe (queue #405). Nonce is newly invented: it CANNOT be in
+# the legacy LEAK_PATTERN, so a block proves LEAK_PATTERN_LOCAL is wired into the job.
+probe_token = "zqx7v4nonceprobe2026"
