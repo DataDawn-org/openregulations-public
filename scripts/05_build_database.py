@@ -8228,8 +8228,12 @@ def validate_pipeline():
     # -- Check 3: Stale data detection --
     # Stale thresholds reflect each source's natural refresh cadence.
     # GUS = Census Government Units Survey, refreshed every ~5 yr, so 400d
-    # gives ~13mo headroom before warning. BMF groups = IRS quarterly refresh,
-    # 100d warns if a quarterly refresh slipped (90d cycle + 10d grace).
+    # gives ~13mo headroom before warning.
+    # BMF groups: the EO BMF is published MONTHLY, on the 2nd Tuesday -- IRS Pub 5926
+    # (Rev. 4-2026) p.1: "The dataset is updated monthly, on the 2nd Tuesday of the
+    # month." An earlier comment here said "IRS quarterly refresh ... (90d cycle +
+    # 10d grace)", which was wrong: the real cycle is ~30d, so 100d tolerates ~3.3
+    # missed releases before warning. Threshold left unchanged pending a decision.
     stale_thresholds = {
         FR_DIR: ("Federal Register", 7),
         COMMENTS_DIR: ("Comments", 7),
