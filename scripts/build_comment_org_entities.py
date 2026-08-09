@@ -28,6 +28,7 @@ Expected scale: ~200K distinct name keys, ~25-60K matched (match rate varies
 by docket mix; many submitter_name values are "Person, Org" mashups or
 coalitions that correctly fail unique resolution).
 """
+import csv
 import sqlite3
 import sys
 import time
@@ -65,28 +66,100 @@ FROM comment_details
 WHERE organization IS NOT NULL AND TRIM(organization) != ''
 """
 
+CORRECTIONS_PATH = SCRIPT_DIR / "comment_org_corrections.csv"
+
+
+def load_corrections(path: Path = CORRECTIONS_PATH) -> dict:
+    """Layer A — confirmed-corrections overlay (decisions_log §102).
+
+    A curated, human-confirmed override keyed on the EXACT raw name_key (not the
+    normalized form), so it is surgically precise: it touches only strings a human
+    has adjudicated and can NEVER affect a legitimate short-token match (3M/FMC/
+    KPMG/…). Consulted in build() before trusting resolve(): 'suppress' drops a
+    confirmed-wrong (name_key -> entity) attribution; 'remap' redirects to the
+    confirmed entity. Durable memory of adjudications — the file IS the record, so
+    they survive every rebuild and are not re-lost. Absent file = clean no-op.
+    """
+    out: dict[str, dict] = {}
+    if not path.exists():
+        return out
+    with open(path, newline="") as f:
+        reader = csv.DictReader(line for line in f if not line.lstrip().startswith("#"))
+        for row in reader:
+            key = (row.get("name_key") or "").strip()
+            action = (row.get("action") or "").strip()
+            if not key or action not in ("suppress", "remap"):
+                continue
+            rid = (row.get("remap_entity_id") or "").strip()
+            if action == "remap" and not rid:
+                raise ValueError(
+                    f"comment_org_corrections: remap for {key!r} missing remap_entity_id")
+            out[key] = {
+                "action": action,
+                "remap_entity_id": int(rid) if rid else None,
+                "reason": (row.get("reason") or "").strip(),
+                "confirmed_by": (row.get("confirmed_by") or "").strip(),
+                "confirmed_date": (row.get("confirmed_date") or "").strip(),
+            }
+    return out
+
+
+def _materialize_corrections(conn: sqlite3.Connection, corrections: dict) -> None:
+    """Audit table — the applied Layer A overlay, queryable on the live DB so the
+    correction (and its adjudication reason) is transparent, not buried in a CSV."""
+    conn.executescript("""
+        DROP TABLE IF EXISTS main.comment_org_corrections;
+        CREATE TABLE main.comment_org_corrections (
+            name_key TEXT PRIMARY KEY,
+            action TEXT NOT NULL,           -- 'suppress' | 'remap'
+            remap_entity_id INTEGER,        -- set when action='remap'
+            reason TEXT,
+            confirmed_by TEXT,
+            confirmed_date TEXT
+        );
+    """)
+    conn.executemany(
+        "INSERT INTO main.comment_org_corrections "
+        "(name_key, action, remap_entity_id, reason, confirmed_by, confirmed_date) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [(k, c["action"], c["remap_entity_id"], c["reason"],
+          c["confirmed_by"], c["confirmed_date"]) for k, c in corrections.items()],
+    )
+
 
 def build(conn: sqlite3.Connection) -> dict:
     """Build the table on an open openregs.db connection. Returns stats."""
     conn.executescript(DDL)
     matcher = EntityMatcher(conn)
+    corrections = load_corrections()  # Layer A overlay (decisions_log §102)
     names = [r[0] for r in conn.execute(NAME_SOURCES)]
 
     rows = []
+    n_suppressed = n_remapped = 0
     for name_key in names:
-        r = matcher.resolve(name=name_key, source_context="comment_org")
-        if r.entity_id is None:
-            continue  # unmatched, ambiguous, or resolved to gov_unit/actor — skip
+        corr = corrections.get(name_key)
+        if corr is not None:
+            # Layer A exact-string override, consulted before trusting resolve().
+            if corr["action"] == "suppress":
+                n_suppressed += 1
+                continue  # confirmed-wrong attribution dropped (-> unmatched)
+            entity_id, match_method = corr["remap_entity_id"], "manual_correction"
+            n_remapped += 1
+        else:
+            r = matcher.resolve(name=name_key, source_context="comment_org")
+            if r.entity_id is None:
+                continue  # unmatched, ambiguous, or resolved to gov_unit/actor — skip
+            entity_id, match_method = r.entity_id, r.match_method
         ent = conn.execute(
             "SELECT canonical_name, entity_type, ein, cik FROM entities WHERE entity_id = ?",
-            (r.entity_id,),
+            (entity_id,),
         ).fetchone()
         if ent is None:
             continue
         canonical_name, entity_type, ein, cik = ent
         hub = "company" if cik is not None else ("nonprofit" if ein else None)
-        rows.append((name_key, r.entity_id, canonical_name, entity_type,
-                     ein, cik, hub, r.match_method))
+        rows.append((name_key, entity_id, canonical_name, entity_type,
+                     ein, cik, hub, match_method))
 
     conn.executemany(
         "INSERT INTO main.comment_org_entities "
@@ -97,13 +170,15 @@ def build(conn: sqlite3.Connection) -> dict:
     conn.execute(
         "CREATE INDEX main.idx_coe_entity ON comment_org_entities(entity_id)"
     )
+    _materialize_corrections(conn, corrections)
     conn.commit()
 
     hubs = dict(conn.execute(
         "SELECT COALESCE(hub, 'matched_no_hub'), COUNT(*) "
         "FROM comment_org_entities GROUP BY hub"
     ).fetchall())
-    return {"names_seen": len(names), "matched": len(rows), "hubs": hubs}
+    return {"names_seen": len(names), "matched": len(rows),
+            "suppressed": n_suppressed, "remapped": n_remapped, "hubs": hubs}
 
 
 # ============================================================================
@@ -182,7 +257,21 @@ def build_gated(conn: sqlite3.Connection, go_path: Path = GO_PATH, log=print) ->
         conn.commit()
         return None
     if gate['mode'] == 'rebuild':
-        log("GATE_GO mode=rebuild: building comment_org_entities fresh")
+        # Gate-not-date (decisions_log §102): the flip to self-rebuild requires a
+        # recorded flip_verified= stamp (the 06-15 entity rebuild verified clean +
+        # re-pin diff matched). A bare mode/date change must NOT graduate the table
+        # unverified — HOLD instead (loud marker; floor skips it; ranking degrades
+        # to unranked via feature-detect, never a silent loss).
+        if not gate.get('flip_verified'):
+            log("GATE_FLIP_UNVERIFIED: mode=rebuild but no flip_verified= stamp — the flip "
+                "precondition (entity-rebuild-verified-clean + re-pin diff matches) was not "
+                "recorded. HOLDING (table not shipped) rather than self-rebuilding on a bare "
+                "mode flip. Add flip_verified=<YYYY-MM-DD by whom> to the GO after verifying.")
+            conn.execute("DROP TABLE IF EXISTS main.comment_org_entities")
+            conn.commit()
+            return None
+        log(f"GATE_GO mode=rebuild (flip_verified={gate['flip_verified']}): "
+            "building comment_org_entities fresh")
         return build(conn)
     # pinned: ship the reviewed artifact verbatim, verify hash
     snap = Path(gate['snapshot'])
@@ -219,6 +308,9 @@ def main():
         db.close()
     print(f"comment_org_entities built in {time.time()-t0:.1f}s — "
           f"{stats['matched']:,} of {stats['names_seen']:,} distinct names matched")
+    if stats.get("remapped") or stats.get("suppressed"):
+        print(f"  Layer A overlay: {stats['remapped']} remapped, "
+              f"{stats['suppressed']} suppressed")
     for hub, n in sorted(stats["hubs"].items()):
         print(f"  {hub}: {n:,}")
 

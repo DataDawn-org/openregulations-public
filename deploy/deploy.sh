@@ -240,6 +240,34 @@ remote_matches_local() {
 # if propagation silently stops working over time.
 #
 # Returns 0 on success, non-zero on any failure (logged).
+ledger_record_fail() {
+    # #146(b) (decisions_log §103): a FAILED/REFUSED propagation must leave a
+    # durable trace, not silence — the success-only §5a ledger was blind to
+    # failure-by-absence (the 2026-06-13 class). Writes a status=FAILED row so the
+    # §4 daily backup-health check (section_ledger) REDs on it and a human sees the
+    # last propagation did NOT fully land off-site. The write itself is non-fatal.
+    local ledger_dir="$1" snap="$2" b2r="$3" stage="$4" code="$5" local_ok="$6" b2_ok="$7"
+    LEDGER="$ledger_dir/propagation_ledger.jsonl" SNAP="$snap" B2R="$b2r" \
+        STAGE="$stage" CODE="$code" LOCAL_OK="$local_ok" B2_OK="$b2_ok" python3 - <<'PYEOF' \
+        || log "  WARNING: failure-row ledger write failed (non-fatal)"
+import json, os, time
+entry = {
+    "ts": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    "db": "openregs",
+    "snapshot_file": os.environ['SNAP'],
+    "b2_remote": os.environ['B2R'],
+    "status": "FAILED",
+    "stage": os.environ['STAGE'],
+    "return_code": int(os.environ['CODE']),
+    "local_ok": os.environ['LOCAL_OK'] == '1',
+    "b2_ok": os.environ['B2_OK'] == '1',
+}
+with open(os.environ['LEDGER'], 'a') as f:
+    f.write(json.dumps(entry, sort_keys=True) + "\n")
+PYEOF
+    log "  §5a FAILURE row recorded (stage=$stage rc=$code) — the daily backup-health check will RED on it"
+}
+
 propagate_backup_to_local_and_b2() {
     local backup_file="$1"
     if [[ -z "$backup_file" ]]; then
@@ -274,6 +302,7 @@ PYQC
         log "  WARNING: quick_check FAILED post-birth — quarantining to .corrupt and de-heading"
         ssh $SSH_OPTS "$REMOTE_HOST" "mv '$remote_backup' '$remote_backup.corrupt'" || true
         SNAPSHOT_CORRUPT=1   # forces non-zero exit at end (hc.io alerts); NOT local
+        ledger_record_fail "$local_backup_dir" "$backup_file" "$b2_remote" "vps_quick_check" 2 0 0
         return 2
     fi
     log "  quick_check: ok"
@@ -372,6 +401,7 @@ PYEOF
     if ! rsync -a --partial-dir=.rsync-partials -e "ssh $SSH_OPTS" --timeout=600 \
             "$REMOTE_HOST:$remote_backup" "$local_backup_dir/$backup_file"; then
         log "  WARNING: rsync down failed; local tier NOT updated this run"
+        ledger_record_fail "$local_backup_dir" "$backup_file" "$b2_remote" "rsync_local" 3 0 0
         return 3
     fi
     log "  local copy: $local_backup_dir/$backup_file"
@@ -385,6 +415,7 @@ PYEOF
     # 3. Rotate local to last 3 (both .db and .db.manifest.json families).
     if ! python3 "$helper" --dir "$local_backup_dir" --keep 3; then
         log "  WARNING: local rotation helper failed"
+        ledger_record_fail "$local_backup_dir" "$backup_file" "$b2_remote" "rotate_local" 4 1 0
         return 4
     fi
     # Manifest sidecars: keep last 3 too. Exit 2 ("nothing matched") is fine
@@ -400,6 +431,7 @@ PYEOF
     log "Pushing to $b2_remote/"
     if ! rclone copy "$local_backup_dir/$backup_file" "$b2_remote/"; then
         log "  WARNING: B2 push failed"
+        ledger_record_fail "$local_backup_dir" "$backup_file" "$b2_remote" "b2_push" 5 1 0
         return 5
     fi
     if [[ -f "$local_backup_dir/${backup_file}.manifest.json" ]]; then
@@ -449,12 +481,11 @@ PYEOF
     # above; a ledger-write failure must never fail a deploy — it is
     # observability, not a gate.
     #
-    # SCOPE NOTE (diagnosis 2026-05-30): this records the SUCCESS path only — the
-    # case GO-stamped ("ledger write after confirmed B2 push"). Recording the
-    # REFUSED / FAILED propagation paths (return 2/3/5 above — e.g. the May-24
-    # corrupt-snapshot refusal that left 990's newest gen VPS-only) is the
-    # diagnosis-driven follow-up, bundled with the deploy.sh propagation-
-    # robustness work — NOT this no-decision success-path ledger.
+    # SCOPE NOTE: this records the SUCCESS path. The REFUSED / FAILED propagation
+    # paths (return 2/3/4/5 above) now ALSO write a row — a status=FAILED entry via
+    # ledger_record_fail() — so a failed propagation is no longer invisible by
+    # absence (#146(b), decisions_log §103; closed the 2026-05-30 follow-up). The §4
+    # daily section_ledger REDs on a FAILED latest row or a missing-row currency gap.
     local ledger="$local_backup_dir/propagation_ledger.jsonl"
     log "Writing propagation ledger entry → $ledger"
     LEDGER="$ledger" LOCAL_COPY="$local_backup_dir/$backup_file" \

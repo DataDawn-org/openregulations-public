@@ -1,0 +1,15 @@
+name_key,action,remap_entity_id,reason,confirmed_by,confirmed_date
+# Layer A — confirmed-corrections overlay (decisions_log §102; spec: working-docs/entity_matching_quality_spec_2026-06-14.md).
+# Keyed on the EXACT raw name_key (UPPER(TRIM) as in NAME_SOURCES), so it is surgically precise and can never touch 3M/FMC/etc.
+# action=suppress: drop a confirmed-wrong (name_key -> entity) attribution.  action=remap: redirect to the confirmed-correct entity_id.
+# Seed: the "Sun Company" over-normalization (normalize_name collapses "SUN COMPANY, INC. (SUNOCO)" -> bare "SUN" -> GLEIF shell entity 2055196).
+"(NAME ILLEGIBLE) SUN COMPANY",remap,2108347,"Sun Company = Sunoco pre-1998 name; lineage Sun->Sunoco->Energy Transfer (decisions_log §11). Over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY",remap,2108347,"Sun Company = Sunoco pre-1998 name; lineage -> Energy Transfer Operating (decisions_log §11). Over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY (SUNOCO)",remap,2108347,"Sun Company (Sunoco) -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY INC.",remap,2108347,"Sun Company Inc -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY, INC.",remap,2108347,"Sun Company, Inc. -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY, INC. (A-98-13-II-D-190)",remap,2108347,"Sun Company, Inc. (docket exhibit ref) -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY, INC. (SUN)",remap,2108347,"Sun Company, Inc. -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN COMPANY, INC. (SUNOCO)",remap,2108347,"Sun Company, Inc. (Sunoco) -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"THE SUN COMPANY, INC. (SUNOCO).",remap,2108347,"The Sun Company, Inc. (Sunoco) -> Energy Transfer Operating; over-normalized to SUN -> shell 2055196.",Crabdaddy,2026-06-14
+"SUN AG LLC",suppress,,"Over-normalized to SUN -> shell 2055196, but NOT Sun Company/Sunoco (no company/sunoco token; 'AG LLC' = a different, likely agricultural entity). Suppress (unmatched) rather than assert a lineage we cannot confirm.",Crabdaddy,2026-06-14
