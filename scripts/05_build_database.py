@@ -8241,11 +8241,34 @@ def validate_pipeline():
     }
     for path, (name, max_days) in stale_thresholds.items():
         if path.exists():
+            # Freshest mtime. For a directory source the ingest writes into
+            # dated SUB-dirs (e.g. federal_register/raw/2026/07/) — which does
+            # NOT bump the top-level dir's mtime, so path.stat() reads falsely
+            # stale. Walk BOTH sub-dir and file mtimes: a source that overwrites
+            # stable-named files in place (e.g. FR's page_0001.json, rewritten
+            # each week) bumps the FILE mtime but NOT the containing dir's mtime
+            # (a dir's mtime only changes on add/remove, not in-place edit), so
+            # dir-only walking read FR false-stale. Stat'ing files catches the
+            # overwrite; genuinely stale sources (no changed files at all, e.g.
+            # comments between monthly refreshes) still read stale, so true
+            # staleness warnings survive. O(#files); ~1s for congress_gov's ~420k.
+            mtime = path.stat().st_mtime
             if path.is_dir():
-                # Use directory mtime
-                mtime = path.stat().st_mtime
-            else:
-                mtime = path.stat().st_mtime
+                import os
+                for _dp, _dn, _fn in os.walk(path):
+                    try:
+                        m = os.stat(_dp).st_mtime
+                        if m > mtime:
+                            mtime = m
+                    except OSError:
+                        pass
+                    for _f in _fn:
+                        try:
+                            m = os.stat(os.path.join(_dp, _f)).st_mtime
+                            if m > mtime:
+                                mtime = m
+                        except OSError:
+                            pass
             age_days = (time.time() - mtime) / 86400
             if age_days > max_days:
                 warnings.append(f"STALE DATA: {name} last modified {age_days:.0f} days ago (threshold: {max_days} days)")
