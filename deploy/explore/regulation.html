@@ -789,7 +789,7 @@
             <div class="search-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </div>
-            <input type="text" id="searchInput" placeholder="Search dockets, documents, or comments..." autocomplete="off">
+            <input type="text" id="searchInput" placeholder="Search dockets, documents, comments — or a docket number like USDA-2025-0008" autocomplete="off">
             <button class="search-btn" id="searchBtn">Search</button>
         </div>
     </div>
@@ -868,6 +868,7 @@
         </div>
     </footer>
 
+    <script src="search-core.js"></script>
     <script src="shared.js"></script>
     <script>
         const API_BASE = '';
@@ -1155,9 +1156,14 @@
         async function searchDockets(q, qFTS) {
             if (!q) return { rows: [], totalCount: 0 };
             const agencyFilter = filterAgency ? ` AND d.agency_id = '${filterAgency}'` : '';
+            // Docket-number queries (a single hyphenated token containing a digit, e.g. USDA-2025-0008,
+            // full or partial) can never match the title/summary FTS — prefix-match d.id too, exact ID first.
+            const isId = /\d/.test(q) && /^[A-Za-z]{2,}(?:[-_][A-Za-z0-9.]+)+$/.test(q);
+            const idArm = isId ? ` OR d.id LIKE '${q}%'` : '';
+            const idRank = isId ? `CASE WHEN UPPER(d.id) = '${q.toUpperCase()}' THEN 0 ELSE 1 END, ` : '';
             const baseFrom = `
                 FROM dockets d
-                WHERE d.id IN (
+                WHERE (d.id IN (
                     SELECT d2.id FROM dockets_fts JOIN dockets d2 ON d2.rowid = dockets_fts.rowid
                     WHERE dockets_fts MATCH '"${qFTS}"'
                     UNION
@@ -1165,14 +1171,14 @@
                     JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
                     JOIN documents doc ON doc.fr_doc_num = fr.document_number
                     WHERE federal_register_fts MATCH '"${qFTS}"' AND doc.docket_id IS NOT NULL
-                )${agencyFilter}
+                )${idArm})${agencyFilter}
             `;
             const dataSql = `
                 SELECT d.id, d.agency_id, d.title, d.docket_type,
                     (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
                     (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
                 ${baseFrom}
-                ORDER BY doc_count DESC
+                ORDER BY ${idRank}doc_count DESC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
             `;
             const countSql = `SELECT COUNT(*) ${baseFrom}`;
@@ -1184,6 +1190,14 @@
             if (!q) return { rows: [], totalCount: 0 };
             const agencyF = filterAgency ? ` AND fr.agency_names LIKE '%${filterAgency}%'` : '';
             const typeF = filterType ? ` AND fr.type = '${filterType}'` : '';
+            // FR document numbers (2025-12345, E9-24001) never match the full-text index as a
+            // phrase (B6) — exact-match document_number and lead with those rows. Kept separate
+            // from the FTS query so ORDER BY rank stays intact.
+            const frdoc = (window.SearchCore ? SearchCore.detect(q) : []).find(c => c.type === 'frdoc');
+            let idRows = [];
+            if (frdoc && currentOffset === 0) {
+                idRows = await query(`SELECT fr.document_number, fr.title, fr.type, fr.agency_names, fr.publication_date, fr.abstract, fr.html_url, fr.pdf_url FROM federal_register fr WHERE UPPER(fr.document_number) = '${frdoc.value}'${agencyF}${typeF} LIMIT 5`);
+            }
             const baseFrom = `
                 FROM federal_register_fts JOIN federal_register fr ON fr.rowid = federal_register_fts.rowid
                 WHERE federal_register_fts MATCH '"${qFTS}"'${agencyF}${typeF}
@@ -1196,7 +1210,9 @@
             `;
             const countSql = `SELECT COUNT(*) ${baseFrom}`;
             const [rows, totalCount] = await Promise.all([query(dataSql), queryCount(countSql)]);
-            return { rows, totalCount };
+            if (!idRows.length) return { rows, totalCount };
+            const seen = new Set(idRows.map(r => r.document_number));
+            return { rows: idRows.concat(rows.filter(r => !seen.has(r.document_number))), totalCount: (totalCount || 0) + idRows.length };
         }
 
         async function searchComments(q, qFTS) {
@@ -1225,9 +1241,19 @@
             const typeFilter = filterOpenType === 'Other'
                 ? `AND document_type NOT IN ('Notice', 'Proposed Rule', 'Rule')`
                 : filterOpenType ? `AND document_type = '${filterOpenType}'` : '';
+            // Served from open_comments_active (queue #476 class fix). The view carries
+            // the population predicates — comment_end_date >= date('now'), withdrawn = 0,
+            // perpetual_docket IS NOT 1 (standing/shell dockets with sentinel end dates:
+            // genuinely open per source, but an item due in 2100 is not actionable, and
+            // this surface exists so a reader can find something to act on).
+            // Rationale + lockstep rules: bestpractices/open_comments_serving_invariants.md
+            // ⚠ COUPLING: needs the open_comments_active view that
+            // 20_daily_open_comments.py creates. Roll that script back and this page
+            // errors — roll them back together.
             const baseFrom = `
-                FROM documents
-                WHERE comment_end_date > datetime('now') AND withdrawn = 0 ${deadlineFilter} ${typeFilter} ${agencyFilter} ${filter}
+                FROM open_comments_active
+                WHERE 1=1
+                      ${deadlineFilter} ${typeFilter} ${agencyFilter} ${filter}
             `;
             const dataSql = `
                 SELECT id, agency_id, title, comment_end_date, docket_id, document_type,
@@ -1645,8 +1671,7 @@
                         ${regsCode ? '<span class="agency-badge">' + esc(regsCode) + '</span>' : ''}
                     </div>
                     <div class="card-meta">
-                        <span class="meta-item"><span>${formatNumber(r.award_count)}</span> awards</span>
-                        <span class="meta-item">${formatMoney(r.total_spending)} spending</span>
+                        <!-- STAGED-REMOVED 2026-06-29: per-agency "awards" + "$ spending" meta off (false-completeness; thin spending_awards). Restore from scratchpad backup. -->
                         <span class="meta-item"><span>${r.sub_count}</span> sub-agencies</span>
                         ${regsCode ? '<span class="meta-item" style="color:var(--dawn-amber);">Has regulation data</span>' : ''}
                     </div>
@@ -1759,8 +1784,10 @@
                 `;
 
                 let html = '<div class="stat-grid">';
+                /* STAGED-REMOVED 2026-06-29 — federal spending off public surfaces (false-completeness: agency totals are SUM(award_amount) over the thin spending_awards table, ~34% captured + ceiling-not-outlay). Uncomment to restore:
                 html += `<div class="stat-box"><div class="num">${formatMoney(totalSpending)}</div><div class="label">Total Spending</div></div>`;
                 html += `<div class="stat-box"><div class="num">${formatNumber((spendingCount[0]||{}).cnt)}</div><div class="label">Awards</div></div>`;
+                */
                 html += `<div class="stat-box"><div class="num">${formatNumber((frCount[0]||{}).cnt)}</div><div class="label">FR Docs</div></div>`;
                 if (aid) {
                     html += `<div class="stat-box"><div class="num">${formatNumber(rs.docket_count)}</div><div class="label">Dockets</div></div>`;
@@ -1798,7 +1825,7 @@
                 }
 
                 // Sub-agencies by spending
-                if (subAgencies.length > 1) {
+                if (false /* STAGED-REMOVED 2026-06-29 — agency spending leaderboard off (false-completeness; thin spending_awards). Remove "false && " to restore. */ && subAgencies.length > 1) {
                     html += `<div class="section-title">Sub-agencies by Spending</div>`;
                     html += '<div class="top-list">';
                     subAgencies.forEach((sa, i) => {
@@ -1815,7 +1842,7 @@
                 }
 
                 // Top spending recipients
-                if (topRecipients.length > 0) {
+                if (false /* STAGED-REMOVED 2026-06-29 — agency spending leaderboard off (false-completeness; thin spending_awards). Remove "false && " to restore. */ && topRecipients.length > 0) {
                     html += '<div class="section-title">Top Spending Recipients</div>';
                     html += '<div class="top-list">';
                     topRecipients.forEach((sp, i) => {
@@ -2272,8 +2299,11 @@
             detailPanel.classList.remove('visible');
         }
 
-        // Load open comment count badge (from separate open_comments.db)
-        queryOpen("SELECT COUNT(*) AS cnt FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0")
+        // Load open comment count badge (from separate open_comments.db).
+        // Served from open_comments_active (#476): withdrawn + perpetual/standing
+        // dockets are excluded in the view, so this badge means "things a reader
+        // can actually act on".
+        queryOpen("SELECT COUNT(*) AS cnt FROM open_comments_active")
             .then(rows => {
                 if (rows.length > 0 && rows[0].cnt > 0) {
                     const badge = document.getElementById('openBadge');
