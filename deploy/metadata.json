@@ -1,5 +1,5 @@
 {
-  "title": "OpenRegs \u2014 Federal Regulatory Data",
+  "title": "OpenRegs — Federal Regulatory Data",
   "description_html": "<p>Federal regulatory data from the Federal Register API and Regulations.gov. Includes Federal Register documents, regulatory dockets, documents, and public comments with full-text search.</p><p>Built by <a href=\"https://datadawn.org\">DataDawn</a>.</p>",
   "license": "Public Domain (U.S. Government data)",
   "license_url": "https://www.regulations.gov/faq",
@@ -31,7 +31,7 @@
         },
         "dockets": {
           "label_column": "title",
-          "description_html": "Regulatory dockets from Regulations.gov \u2014 containers for related documents and comments in a rulemaking proceeding.",
+          "description_html": "Regulatory dockets from Regulations.gov — containers for related documents and comments in a rulemaking proceeding.",
           "facets": [
             "agency_id",
             "docket_type"
@@ -50,7 +50,7 @@
         },
         "presidential_documents": {
           "label_column": "title",
-          "description_html": "Executive Orders and Proclamations from the Federal Register. Covers EO 12890\u201314389 (1994\u2013present) with signing dates, EO numbers, and links to full text.",
+          "description_html": "Executive Orders and Proclamations from the Federal Register. Covers EO 12890–14389 (1994–present) with signing dates, EO numbers, and links to full text.",
           "facets": [
             "document_type"
           ],
@@ -77,7 +77,7 @@
           "sort_desc": "introduced_date"
         },
         "legislation_actions": {
-          "description_html": "Legislative action history for tracked bills \u2014 committee referrals, floor votes, amendments, and presidential signatures.",
+          "description_html": "Legislative action history for tracked bills — committee referrals, floor votes, amendments, and presidential signatures.",
           "sort_desc": "action_date"
         },
         "legislation_subjects": {
@@ -132,7 +132,7 @@
         },
         "cfr_sections": {
           "label_column": "section_heading",
-          "description_html": "Current Code of Federal Regulations (eCFR) \u2014 the actual text of federal regulations in force. Covers 19 CFR titles with 123,000+ regulatory sections and full-text search.",
+          "description_html": "Current Code of Federal Regulations (eCFR) — the actual text of federal regulations in force. Covers 19 CFR titles with 123,000+ regulatory sections and full-text search.",
           "facets": [
             "title_number",
             "agency",
@@ -142,7 +142,7 @@
         },
         "congressional_record": {
           "label_column": "title",
-          "description_html": "Congressional Record \u2014 full text of everything said on the floor of Congress. Speeches, debates, procedural actions from 1994 to present. House, Senate, Extensions of Remarks, and Daily Digest.",
+          "description_html": "Congressional Record — full text of everything said on the floor of Congress. Speeches, debates, procedural actions from 1994 to present. House, Senate, Extensions of Remarks, and Daily Digest.",
           "facets": [
             "chamber",
             "granule_class",
@@ -186,7 +186,7 @@
           "sort_desc": "transaction_date"
         },
         "member_overview": {
-          "description_html": "Pre-computed view: current members of Congress with stock trade counts, floor speech counts, and bills sponsored \u2014 the big picture of each member's activity.",
+          "description_html": "Pre-computed view: current members of Congress with stock trade counts, floor speech counts, and bills sponsored — the big picture of each member's activity.",
           "sort_desc": "trade_count"
         },
         "stock_trades_by_ticker": {
@@ -221,7 +221,7 @@
           "sort_desc": "transaction_date"
         },
         "roll_call_votes": {
-          "description_html": "Roll call votes in the House and Senate, Congresses 106\u2013119. Includes vote question, result, and linked bill.",
+          "description_html": "Roll call votes in the House and Senate, Congresses 106–119. Includes vote question, result, and linked bill.",
           "facets": [
             "chamber",
             "congress",
@@ -242,7 +242,7 @@
         },
         "fec_candidates": {
           "label_column": "cand_name",
-          "description_html": "FEC candidate records \u2014 64,000+ candidates for federal office with party, state, office, and election cycles.",
+          "description_html": "FEC candidate records — 64,000+ candidates for federal office with party, state, office, and election cycles.",
           "facets": [
             "cand_office",
             "cand_pty_affiliation",
@@ -252,7 +252,7 @@
         },
         "fec_committees": {
           "label_column": "cmte_nm",
-          "description_html": "FEC political committees \u2014 PACs, party committees, campaign committees. 155,000+ records.",
+          "description_html": "FEC political committees — PACs, party committees, campaign committees. 155,000+ records.",
           "facets": [
             "cmte_tp",
             "cmte_pty_affiliation"
@@ -270,15 +270,15 @@
           "description_html": "Maps FEC candidate IDs to bioguide_id, enabling cross-reference between campaign finance and congressional activity."
         },
         "fec_employer_totals": {
-          "description_html": "Pre-computed: total individual contributions aggregated by employer name.",
+          "description_html": "Pre-computed aggregates of the FEC employer field as filed — the verbatim employer string from public individual-contribution filings, totaled by employer. DataDawn publishes no donor names, addresses, or donor-level records. Employer keys are verbatim strings from FEC filings and may denote a sole proprietorship or eponymous business; counts reflect contributions, not employees. Keys where a single contributor's giving dominates the aggregate are not indexed for full-text search (they are not representative employer aggregates); they remain in the dataset. The same records are public at fec.gov, which additionally exposes donor name, address, and occupation and is searchable by employer.",
           "sort_desc": "total_amount"
         },
         "fec_employer_to_candidate": {
-          "description_html": "Pre-computed: individual contributions aggregated by employer \u2192 candidate.",
+          "description_html": "Pre-computed: individual contributions aggregated by employer → candidate.",
           "sort_desc": "total_amount"
         },
         "fec_employer_to_party": {
-          "description_html": "Pre-computed: individual contributions aggregated by employer \u2192 party.",
+          "description_html": "Pre-computed: individual contributions aggregated by employer → party.",
           "sort_desc": "total_amount"
         },
         "fec_top_occupations": {
@@ -287,7 +287,7 @@
         },
         "fara_registrants": {
           "label_column": "name",
-          "description_html": "FARA foreign agent registrants \u2014 firms and individuals registered under the Foreign Agents Registration Act.",
+          "description_html": "FARA foreign agent registrants — firms and individuals registered under the Foreign Agents Registration Act.",
           "sort": "name"
         },
         "fara_foreign_principals": {
@@ -299,18 +299,25 @@
           "sort": "foreign_principal"
         },
         "fara_short_forms": {
-          "description_html": "Individual foreign agents (employees/associates of registrants) registered under FARA. 44,000+ records.",
-          "sort": "last_name"
+          "description_html": "Individual foreign agents (employees/associates of registrants) registered under FARA. 44,000+ records. <strong>Note: the address columns are the REGISTRANT ORGANISATION's address, not the named individual's</strong> — DOJ repeats the registrant address on every short-form row in its bulk export (identical for all 44,562 rows).",
+          "sort": "last_name",
+          "columns": {
+            "address_1": "REGISTRANT ORGANISATION's address — NOT the named individual's. DOJ denormalises the registrant address onto every short-form row; byte-identical to the matching fara_registrants row for all 44,562 rows. Often looks residential because FARA registrants are frequently home-office consultancies. The filer's actual residence address (Form NSD-6 Field 3) appears only on the filed PDF and is not held by DataDawn.",
+            "address_2": "Registrant organisation's address line 2 — see address_1; not the individual's.",
+            "city": "Registrant organisation's city — not the individual's.",
+            "state": "Registrant organisation's state — not the individual's.",
+            "zip": "Registrant organisation's ZIP — not the individual's."
+          }
         },
         "fara_registrant_docs": {
-          "description_html": "Documents filed by FARA registrants \u2014 registration statements, supplemental statements, and informational materials. 151,000+ filings.",
+          "description_html": "Documents filed by FARA registrants — registration statements, supplemental statements, and informational materials. 151,000+ filings.",
           "facets": [
             "document_type"
           ],
           "sort_desc": "date_stamped"
         },
         "lobbying_filings": {
-          "description_html": "Senate Lobbying Disclosure Act filings (1999\u20132026). LD-1 registrations and LD-2 quarterly activity reports. 1.9M+ filings.",
+          "description_html": "Senate Lobbying Disclosure Act filings (1999–2026). LD-1 registrations and LD-2 quarterly activity reports. 1.9M+ filings.",
           "facets": [
             "filing_year"
           ],
@@ -346,7 +353,7 @@
         },
         "hearings": {
           "label_column": "title",
-          "description_html": "Committee hearing transcripts from GovInfo (1993\u2013present). Includes committee info, witness testimony, and member attendance.",
+          "description_html": "Committee hearing transcripts from GovInfo (1993–present). Includes committee info, witness testimony, and member attendance.",
           "facets": [
             "chamber",
             "congress"
@@ -354,7 +361,7 @@
           "sort_desc": "date_issued",
           "columns": {
             "chamber": "HOUSE, SENATE, or JOINT.",
-            "congress": "Congress number (e.g., 118 for 2023\u20132024).",
+            "congress": "Congress number (e.g., 118 for 2023–2024).",
             "committees": "JSON array of committee names and hierarchies."
           }
         },
@@ -383,7 +390,7 @@
         },
         "nominations": {
           "label_column": "description",
-          "description_html": "Executive nominations to the Senate (Congresses 100\u2013119), with confirmation status and vote tallies.",
+          "description_html": "Executive nominations to the Senate (Congresses 100–119), with confirmation status and vote tallies.",
           "facets": [
             "congress",
             "status"
@@ -402,7 +409,7 @@
         },
         "treaties": {
           "label_column": "title",
-          "description_html": "Treaties submitted to the Senate (Congresses 89\u2013119), with countries, index terms, and resolution text.",
+          "description_html": "Treaties submitted to the Senate (Congresses 89–119), with countries, index terms, and resolution text.",
           "facets": [
             "congress"
           ],
@@ -414,7 +421,7 @@
         },
         "gao_reports": {
           "label_column": "title",
-          "description_html": "Government Accountability Office reports (1994\u20132008) with abstracts, legal references, and subject classifications.",
+          "description_html": "Government Accountability Office reports (1994–2008) with abstracts, legal references, and subject classifications.",
           "sort_desc": "date_issued"
         },
         "cbo_cost_estimates": {
@@ -431,7 +438,7 @@
         },
         "search_comments": {
           "title": "Search Comments (Full Text)",
-          "description": "Search comment titles and submitter names using full-text search. Use standard search syntax: quotes for exact phrases, OR for alternatives.",
+          "description": "Search comment titles using full-text search. Use standard search syntax: quotes for exact phrases, OR for alternatives. (Submitter-name indexing is offline pending a rebuild; results still display submitter names.)",
           "sql": "SELECT comments.id, comments.agency_id, comments.title, comments.submitter_name, comments.submitter_type, comments.posted_date, comments.docket_id FROM comments_fts JOIN comments ON comments.rowid = comments_fts.rowid WHERE comments_fts MATCH :search ORDER BY rank LIMIT 200",
           "params": [
             "search"
@@ -477,7 +484,7 @@
           "sql": "SELECT submitter_name, comment_count, agencies_commented, dockets_commented, agency_list, first_comment, last_comment FROM top_submitters ORDER BY comment_count DESC LIMIT 100"
         },
         "rulemaking_pipeline": {
-          "title": "Rulemaking Pipeline (Proposed \u2192 Final)",
+          "title": "Rulemaking Pipeline (Proposed → Final)",
           "description": "Dockets that have both proposed rules and final rules, showing the regulatory timeline.",
           "sql": "SELECT d.id AS docket_id, d.agency_id, d.title, proposed.posted_date AS proposed_date, final.posted_date AS final_date, CAST(julianday(final.posted_date) - julianday(proposed.posted_date) AS INTEGER) AS days_to_finalize, (SELECT COUNT(*) FROM comments c WHERE c.docket_id = d.id) AS total_comments FROM dockets d JOIN documents proposed ON proposed.docket_id = d.id AND proposed.document_type = 'Proposed Rule' JOIN documents final ON final.docket_id = d.id AND final.document_type = 'Rule' WHERE d.docket_type = 'Rulemaking' ORDER BY total_comments DESC LIMIT 100"
         },
@@ -528,7 +535,7 @@
           "sql": "SELECT year_month, agency_id, comment_count, active_dockets FROM comments_monthly ORDER BY year_month DESC LIMIT 500"
         },
         "cross_reference": {
-          "title": "Federal Register \u2194 Regulations.gov Lookup",
+          "title": "Federal Register ↔ Regulations.gov Lookup",
           "description": "Find the Regulations.gov documents linked to a Federal Register document number, or vice versa.",
           "sql": "SELECT xr.fr_document_number, fr.title AS fr_title, fr.type AS fr_type, fr.publication_date, fr.html_url AS fr_url, xr.regs_document_id, doc.title AS regs_title, doc.document_type AS regs_type, doc.agency_id, doc.docket_id FROM fr_regs_crossref xr LEFT JOIN federal_register fr ON fr.document_number = xr.fr_document_number LEFT JOIN documents doc ON doc.id = xr.regs_document_id WHERE (:fr_doc_number = '' OR xr.fr_document_number = :fr_doc_number) AND (:regs_doc_id = '' OR xr.regs_document_id = :regs_doc_id) ORDER BY fr.publication_date DESC LIMIT 100",
           "params": [
@@ -584,34 +591,6 @@
           "title": "Presidential Proclamations",
           "description": "All Presidential Proclamations, most recent first.",
           "sql": "SELECT title, signing_date, publication_date, html_url FROM presidential_documents WHERE document_type = 'proclamation' ORDER BY signing_date DESC LIMIT 200"
-        },
-        "spending_by_agency": {
-          "title": "Federal Spending by Agency",
-          "description": "Total grants and contracts by agency and fiscal year from USAspending.gov.",
-          "sql": "SELECT agency, sub_agency, award_category, award_count, total_amount, avg_amount FROM spending_by_agency ORDER BY total_amount DESC"
-        },
-        "top_grant_recipients": {
-          "title": "Top Grant Recipients",
-          "description": "Organizations receiving the most federal grant money from our tracked agencies.",
-          "sql": "SELECT recipient_name, COUNT(*) AS grant_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, GROUP_CONCAT(DISTINCT COALESCE(sub_agency, agency)) AS agencies, MIN(start_date) AS earliest, MAX(start_date) AS latest FROM spending_awards WHERE award_category = 'grants' AND recipient_name IS NOT NULL GROUP BY recipient_name ORDER BY total_amount DESC LIMIT 100"
-        },
-        "top_contractors": {
-          "title": "Top Contractors",
-          "description": "Companies receiving the most federal contract money from our tracked agencies.",
-          "sql": "SELECT recipient_name, COUNT(*) AS contract_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, GROUP_CONCAT(DISTINCT COALESCE(sub_agency, agency)) AS agencies FROM spending_awards WHERE award_category = 'contracts' AND recipient_name IS NOT NULL GROUP BY recipient_name ORDER BY total_amount DESC LIMIT 100"
-        },
-        "search_spending": {
-          "title": "Search Spending Awards",
-          "description": "Search grants and contracts by description keyword.",
-          "sql": "SELECT award_id, COALESCE(sub_agency, agency) AS agency_name, award_category, recipient_name, CAST(award_amount AS INTEGER) AS amount, description, start_date, fiscal_year FROM spending_awards WHERE description LIKE '%' || :search || '%' ORDER BY award_amount DESC LIMIT 200",
-          "params": [
-            "search"
-          ]
-        },
-        "spending_by_state": {
-          "title": "Federal Spending by State",
-          "description": "Total awards by state of performance for our tracked agencies.",
-          "sql": "SELECT state_code, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, SUM(CASE WHEN award_category = 'grants' THEN 1 ELSE 0 END) AS grants, SUM(CASE WHEN award_category = 'contracts' THEN 1 ELSE 0 END) AS contracts FROM spending_awards WHERE state_code IS NOT NULL AND state_code != '' GROUP BY state_code ORDER BY total_amount DESC"
         },
         "search_legislation": {
           "title": "Search Legislation",
@@ -707,7 +686,7 @@
         },
         "congressional_record_stats": {
           "title": "Congressional Record by Congress",
-          "description": "Volume of floor activity per Congress \u2014 speeches, proceedings, and extensions of remarks.",
+          "description": "Volume of floor activity per Congress — speeches, proceedings, and extensions of remarks.",
           "sql": "SELECT congress, chamber, COUNT(*) AS entries, COUNT(DISTINCT date) AS session_days FROM congressional_record WHERE congress IS NOT NULL GROUP BY congress, chamber ORDER BY congress DESC, chamber"
         },
         "speeches_by_member": {
@@ -750,8 +729,8 @@
         },
         "member_profile": {
           "title": "Member Profile: Trades, Speeches, Bills",
-          "description": "Complete profile for a member of Congress \u2014 their stock trades, floor speeches, and sponsored bills. Enter a bioguide_id (e.g., G000386 for Chuck Grassley).",
-          "sql": "SELECT cm.full_name, cm.party, cm.state, cm.chamber, cm.first_served, cm.last_served, (SELECT COUNT(*) FROM stock_trades WHERE bioguide_id = cm.bioguide_id) AS total_trades, (SELECT COUNT(*) FROM crec_speakers WHERE bioguide_id = cm.bioguide_id) AS total_speeches, (SELECT COUNT(*) FROM legislation WHERE sponsor_bioguide_id = cm.bioguide_id) AS bills_sponsored, (SELECT GROUP_CONCAT(DISTINCT ticker, ', ') FROM stock_trades WHERE bioguide_id = cm.bioguide_id AND ticker != '' LIMIT 20) AS tickers_traded FROM congress_members cm WHERE cm.bioguide_id = :bioguide_id",
+          "description": "Complete profile for a member of Congress — their stock trades, floor speeches, and sponsored bills. Enter a bioguide_id (e.g., G000386 for Chuck Grassley).",
+          "sql": "SELECT cm.full_name, cm.party, cm.state, cm.chamber, cm.first_served, cm.last_served, (SELECT COUNT(*) FROM stock_trades WHERE bioguide_id = cm.bioguide_id) AS total_trades, (SELECT COUNT(*) FROM crec_speakers WHERE bioguide_id = cm.bioguide_id) AS total_speeches, (SELECT COUNT(*) FROM legislation WHERE sponsor_bioguide_id = cm.bioguide_id) AS bills_sponsored, (SELECT GROUP_CONCAT(DISTINCT ticker) FROM stock_trades WHERE bioguide_id = cm.bioguide_id AND ticker != '') AS tickers_traded FROM congress_members cm WHERE cm.bioguide_id = :bioguide_id",
           "params": {
             "bioguide_id": "G000386"
           }
@@ -841,16 +820,6 @@
           "title": "Bipartisan Bills (Cross-Party Cosponsorship)",
           "description": "Bills that have cosponsors from both parties, indicating bipartisan support.",
           "sql": "SELECT l.bill_id, l.congress, UPPER(l.bill_type) || ' ' || l.bill_number AS bill, l.title, l.sponsor_name, l.sponsor_party, COUNT(DISTINCT lc.bioguide_id) AS total_cosponsors, SUM(CASE WHEN lc.party = 'R' THEN 1 ELSE 0 END) AS r_cosponsors, SUM(CASE WHEN lc.party = 'D' THEN 1 ELSE 0 END) AS d_cosponsors FROM legislation l JOIN legislation_cosponsors lc ON l.bill_id = lc.bill_id GROUP BY l.bill_id HAVING r_cosponsors > 0 AND d_cosponsors > 0 ORDER BY total_cosponsors DESC LIMIT 100"
-        },
-        "spending_by_sub_agency": {
-          "title": "Federal Spending by Sub-Agency",
-          "description": "Total grants and contracts broken down by sub-agency within each parent agency, with award counts and totals.",
-          "sql": "SELECT agency, sub_agency, award_category, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, CAST(AVG(award_amount) AS INTEGER) AS avg_amount, MIN(start_date) AS earliest, MAX(start_date) AS latest FROM spending_awards WHERE sub_agency IS NOT NULL AND sub_agency != '' GROUP BY agency, sub_agency, award_category ORDER BY total_amount DESC"
-        },
-        "spending_trends_over_time": {
-          "title": "Spending Trends Over Time",
-          "description": "Federal spending by fiscal year and agency, showing how grant and contract funding changes year to year across all 20 tracked agencies.",
-          "sql": "SELECT fiscal_year, COALESCE(sub_agency, agency) AS agency_name, COUNT(*) AS award_count, CAST(SUM(award_amount) AS INTEGER) AS total_amount, SUM(CASE WHEN award_category = 'grants' THEN 1 ELSE 0 END) AS grants, SUM(CASE WHEN award_category = 'contracts' THEN 1 ELSE 0 END) AS contracts, CAST(SUM(CASE WHEN award_category = 'grants' THEN award_amount ELSE 0 END) AS INTEGER) AS grant_total, CAST(SUM(CASE WHEN award_category = 'contracts' THEN award_amount ELSE 0 END) AS INTEGER) AS contract_total FROM spending_awards WHERE fiscal_year IS NOT NULL GROUP BY fiscal_year, agency_name ORDER BY fiscal_year DESC, total_amount DESC"
         },
         "explore_member_search": {
           "title": "Explore: Member Search",
@@ -1052,7 +1021,7 @@
         },
         "commenter_lobbyist_overlap": {
           "title": "Organizations That Comment on Regulations AND Lobby",
-          "description": "Organizations that submit public comments on regulations while also paying lobbyists \u2014 showing dual-channel influence on the same regulatory process.",
+          "description": "Organizations that submit public comments on regulations while also paying lobbyists — showing dual-channel influence on the same regulatory process.",
           "sql": "SELECT * FROM commenter_lobby_overlap ORDER BY comments_filed DESC"
         },
         "committee_trading_activity": {
@@ -1067,7 +1036,7 @@
         },
         "speeches_near_trades": {
           "title": "Floor Speeches Within 7 Days of Stock Trades",
-          "description": "Members who gave floor speeches mentioning specific bills within 7 days of making stock trades \u2014 a potential indicator of trading on legislative knowledge.",
+          "description": "Members who gave floor speeches mentioning specific bills within 7 days of making stock trades — a potential indicator of trading on legislative knowledge.",
           "sql": "SELECT full_name, party, state, trade_date, ticker, asset_description, transaction_type, amount_range, speech_date, speech_title, days_apart FROM speeches_near_trades ORDER BY full_name, trade_date DESC LIMIT 500"
         },
         "most_lobbied_bills": {
@@ -1077,7 +1046,7 @@
         },
         "committee_trade_conflicts": {
           "title": "Stock Trades in Committee-Regulated Sectors",
-          "description": "Members of Congress trading stocks that fall within the sectors regulated by their committee assignments \u2014 potential conflicts of interest.",
+          "description": "Members of Congress trading stocks that fall within the sectors regulated by their committee assignments — potential conflicts of interest.",
           "sql": "SELECT full_name, party, state, committee_name, jurisdiction_desc, jurisdiction_tier, sic_code, sic_description, transaction_date, ticker, asset_description, transaction_type, amount_range FROM committee_trade_conflicts ORDER BY full_name, transaction_date DESC LIMIT 500"
         },
         "revolving_door": {
@@ -1086,12 +1055,12 @@
           "sql": "SELECT full_name, party, state, congress_chamber, lobbying_filing_count, client_count, firm_count, first_lobbying_year, last_lobbying_year, total_reported_income, lobbying_firms, covered_position_sample FROM revolving_door ORDER BY lobbying_filing_count DESC LIMIT 300"
         },
         "committee_sector_map": {
-          "title": "Committee Jurisdiction \u2192 Regulated Sectors",
+          "title": "Committee Jurisdiction → Regulated Sectors",
           "description": "Reference table mapping each congressional committee to the industries, tickers, and GICS/SIC sectors under its jurisdiction.",
           "sql": "SELECT committee_id, committee_name, chamber, regulated_sectors, example_tickers, gics_sectors, sic_ranges FROM committee_sectors ORDER BY chamber, committee_name"
         },
         "lobbying_issue_agency_map": {
-          "title": "Lobbying Issue Codes \u2192 Agencies & Committees",
+          "title": "Lobbying Issue Codes → Agencies & Committees",
           "description": "Reference table mapping each lobbying disclosure issue code to the federal agencies and congressional committees with jurisdiction.",
           "sql": "SELECT issue_code, issue_description, primary_agencies, regs_gov_agency_prefixes, related_committee_ids, notes FROM lobbying_issue_agencies ORDER BY issue_code"
         },
@@ -1102,7 +1071,7 @@
         },
         "house_nonpersonnel_top_vendors": {
           "title": "House top vendors (non-personnel)",
-          "description": "Biggest vendors paid across all House offices (2016\u2013present), excluding staff payroll.",
+          "description": "Biggest vendors paid across all House offices (2016–present), excluding staff payroll.",
           "sql": "SELECT vendor_name,\n    COUNT(*) AS n_transactions,\n    ROUND(SUM(amount), 2) AS total_paid,\n    COUNT(DISTINCT organization) AS n_offices,\n    MIN(quarter) AS first_quarter,\n    MAX(quarter) AS last_quarter\nFROM house_disbursements_nonpersonnel\nWHERE vendor_name IS NOT NULL AND vendor_name != ''\nGROUP BY vendor_name\nORDER BY total_paid DESC\nLIMIT 100"
         },
         "house_quarterly_spending_by_office": {
@@ -1117,7 +1086,7 @@
         },
         "house_pre2016_member_totals": {
           "title": "House pre-2016 member office totals",
-          "description": "Member-office OFFICE TOTALS for 2009Q3\u20132015Q4, deduplicated (OCR continuation pages collapsed).",
+          "description": "Member-office OFFICE TOTALS for 2009Q3–2015Q4, deduplicated (OCR continuation pages collapsed).",
           "sql": "SELECT office_name, quarter, ROUND(quarter_amount,2) AS quarter_amount\nFROM house_pre2016_office_totals_dedup\nWHERE office_type='member' AND category='OFFICE TOTALS'\nORDER BY quarter_amount DESC\nLIMIT 200"
         },
         "wh_top_policy_visitors": {
@@ -1190,7 +1159,7 @@
           "sort": "legal_name"
         },
         "inspections": {
-          "description_html": "APHIS inspection records for licensed facilities. 110,000+ inspections from 2014\u2013present with violation counts and links to official reports.",
+          "description_html": "APHIS inspection records for licensed facilities. 110,000+ inspections from 2014–present with violation counts and links to official reports.",
           "facets": [
             "inspection_type"
           ],
@@ -1268,13 +1237,12 @@
       "tables": {
         "lobbying_filings_raw": {
           "label_column": "registrant_name",
-          "description_html": "Raw lobbying disclosure filings from the Senate Office of Public Records (SOPR). Each row is a single filing \u2014 registrations, quarterly reports, amendments, and terminations. Includes registrant and client names, reported income/expenses, filing period, and the full raw JSON from the API.",
+          "description_html": "Raw lobbying disclosure filings from the Senate Office of Public Records (SOPR). Each row is a single filing — registrations, quarterly reports, amendments, and terminations. Includes registrant and client names, reported income/expenses, filing period, and the full raw JSON from the API.",
           "facets": [
             "filing_type",
             "filing_year",
             "filing_period",
             "is_amendment",
-            "is_no_activity",
             "is_termination"
           ],
           "sort_desc": "received_date"
@@ -1289,7 +1257,7 @@
         },
         "lobbying_activities": {
           "label_column": "client_name",
-          "description_html": "Individual lobbying activities reported in quarterly filings. Each row is one issue area for one client \u2014 includes the specific issues lobbied on, government entities contacted, and income/expense amounts.",
+          "description_html": "Individual lobbying activities reported in quarterly filings. Each row is one issue area for one client — includes the specific issues lobbied on, government entities contacted, and income/expense amounts.",
           "facets": [
             "issue_code",
             "filing_year",
@@ -1307,7 +1275,7 @@
         },
         "lobbying_contributions": {
           "label_column": "recipient_name",
-          "description_html": "Political contributions reported by lobbyists on LD-203 forms. Includes contribution amounts, recipients, and dates \u2014 required disclosures for registered lobbyists.",
+          "description_html": "Political contributions reported by lobbyists on LD-203 forms. Includes contribution amounts, recipients, and dates — required disclosures for registered lobbyists.",
           "facets": [
             "contribution_type",
             "filing_year"
@@ -1321,7 +1289,7 @@
         },
         "lobbying_gov_entities": {
           "label_column": "name",
-          "description_html": "Government entities contacted during lobbying activities \u2014 Congress, executive agencies, and White House offices.",
+          "description_html": "Government entities contacted during lobbying activities — Congress, executive agencies, and White House offices.",
           "sort": "name"
         },
         "lobbying_filing_types": {
@@ -1356,7 +1324,7 @@
         },
         "lobbying_activity_for_client": {
           "title": "Lobbying Activity for a Client",
-          "description": "Detailed lobbying activity for a specific client \u2014 every issue area, government entity contacted, and specific issues lobbied on. Income/expense are filing-level, joined from lobbying_filings_raw.",
+          "description": "Detailed lobbying activity for a specific client — every issue area, government entity contacted, and specific issues lobbied on. Income/expense are filing-level, joined from lobbying_filings_raw.",
           "sql": "SELECT la.filing_year, la.filing_period, la.registrant_name, la.issue_code, COALESCE(lic.description, la.issue_code) AS issue_description, la.government_entities, la.specific_issues, CAST(f.income_amount AS INTEGER) AS income, CAST(f.expense_amount AS INTEGER) AS expenses FROM lobbying_activities la JOIN lobbying_filings_raw f ON f.filing_uuid = la.filing_uuid LEFT JOIN lobbying_issue_codes lic ON la.issue_code = lic.code WHERE la.client_name = :client_name ORDER BY la.filing_year DESC, la.filing_period DESC LIMIT 500",
           "params": [
             "client_name"
@@ -1385,7 +1353,7 @@
         },
         "lobbyists_with_government_positions": {
           "title": "Lobbyists with Government Positions",
-          "description": "Lobbyists who held covered government positions (revolving door) \u2014 former congressional staff, executive branch officials, and other government roles.",
+          "description": "Lobbyists who held covered government positions (revolving door) — former congressional staff, executive branch officials, and other government roles.",
           "sql": "SELECT DISTINCT ll.lobbyist_name, ll.covered_position, la.registrant_name, la.client_name, la.filing_year FROM lobbying_lobbyists ll JOIN lobbying_activities la ON ll.filing_uuid = la.filing_uuid WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' ORDER BY ll.lobbyist_name, la.filing_year DESC LIMIT 500"
         },
         "political_contributions_by_lobbyists": {
@@ -1399,7 +1367,7 @@
       }
     },
     "open_comments": {
-      "title": "Open for Comment \u2014 Daily Updated",
+      "title": "Open for Comment — Daily Updated",
       "description_html": "<p>Documents currently open for public comment on Regulations.gov. Updated daily at 6:30 AM UTC. This is a small, frequently-refreshed database separate from the main OpenRegs archive.</p>",
       "tables": {
         "documents": {
@@ -1409,14 +1377,17 @@
             "agency_id",
             "document_type"
           ],
-          "sort_desc": "comment_end_date"
+          "sort_desc": "comment_end_date",
+          "columns": {
+            "perpetual_docket": "1 = a standing/perpetual docket carrying a sentinel comment-end date (2050 or later; in practice 2099/2100 — agency guidance and exemption dockets that never close). 0 = an ordinary docket with a real deadline. NULL = no end date reported. The site's Open-for-Comment surface EXCLUDES perpetual_docket = 1 by default, so the site count and the bulk dump answer the same question differently: the dump is complete and includes them."
+          }
         }
       },
       "queries": {
         "explore_open_comments": {
           "title": "Explore: Open Comment Periods",
-          "description": "Documents currently open for public comment, ordered by closing date.",
-          "sql": "SELECT id, agency_id, title, document_type, comment_end_date, docket_id, CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left FROM documents WHERE comment_end_date > datetime('now') AND withdrawn = 0 ORDER BY comment_end_date ASC LIMIT 50"
+          "description": "Documents currently open for public comment, ordered by closing date. Served from the open_comments_active view (excludes withdrawn and perpetual/standing dockets); raw `documents` is the unfiltered population.",
+          "sql": "SELECT id, agency_id, title, document_type, comment_end_date, docket_id, CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left FROM open_comments_active ORDER BY comment_end_date ASC LIMIT 50"
         }
       }
     }
