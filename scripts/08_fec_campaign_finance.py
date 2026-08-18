@@ -1116,28 +1116,36 @@ def load_csv_to_db(db: sqlite3.Connection, file_key: str, cycle: int) -> int:
                             "dissem_dt, cycle")
 
                 elif file_key == "ElectioneeringComm":
+                    # ElectioneeringComm CSVs use LONG headers (COMMITTEE_ID,
+                    # CANDIDATE_NAME, DISBURSEMENT_DATE, ...) -- verified
+                    # identical across every cycle on disk; the short-name
+                    # guesses left 11 columns dead on all rows (#311). Legacy
+                    # short names kept as fallbacks. Columns with no source
+                    # header (party, amendment, receipt, file_num, disb_amt,
+                    # sb_link) stay NULL -- source-faithful. SB_IMAGE_NUM is
+                    # the file's only image number (Schedule B) -> image_num.
                     values = (
-                        row.get("cmte_id") or row.get("CMTE_ID"),
-                        row.get("cmte_nm") or row.get("CMTE_NM"),
-                        row.get("cand_id") or row.get("CAND_ID"),
-                        row.get("cand_name") or row.get("CAND_NAME"),
-                        row.get("cand_office") or row.get("CAND_OFFICE"),
-                        row.get("cand_office_st") or row.get("CAND_OFFICE_ST"),
-                        row.get("cand_office_district") or row.get("CAND_OFFICE_DISTRICT"),
+                        row.get("COMMITTEE_ID") or row.get("cmte_id") or row.get("CMTE_ID"),
+                        row.get("COMMITTEE_NAME") or row.get("cmte_nm") or row.get("CMTE_NM"),
+                        row.get("CANDIDATE_ID") or row.get("cand_id") or row.get("CAND_ID"),
+                        row.get("CANDIDATE_NAME") or row.get("cand_name") or row.get("CAND_NAME"),
+                        row.get("CANDIDATE_OFFICE") or row.get("cand_office") or row.get("CAND_OFFICE"),
+                        row.get("CANDIDATE_STATE") or row.get("cand_office_st") or row.get("CAND_OFFICE_ST"),
+                        row.get("CANDIDATE_DISTRICT") or row.get("cand_office_district") or row.get("CAND_OFFICE_DISTRICT"),
                         row.get("cand_pty_affiliation") or row.get("CAND_PTY_AFFILIATION"),
-                        row.get("payee_name") or row.get("PAYEE_NAME"),
-                        row.get("payee_st1") or row.get("PAYEE_ST1"),
-                        row.get("payee_city") or row.get("PAYEE_CITY"),
-                        row.get("payee_st") or row.get("PAYEE_ST"),
+                        row.get("PAYEE_NAME") or row.get("payee_name"),
+                        row.get("PAYEE_STREET") or row.get("payee_st1") or row.get("PAYEE_ST1"),
+                        row.get("PAYEE_CITY") or row.get("payee_city"),
+                        row.get("PAYEE_STATE") or row.get("payee_st") or row.get("PAYEE_ST"),
                         _to_float(row.get("disb_amt") or row.get("DISB_AMT")),
-                        row.get("disb_dt") or row.get("DISB_DT"),
-                        row.get("comm_dt") or row.get("COMM_DT"),
-                        row.get("pub_distrib_dt") or row.get("PUB_DISTRIB_DT"),
-                        _to_float(row.get("reported_disb_amt") or row.get("REPORTED_DISB_AMT")),
+                        row.get("DISBURSEMENT_DATE") or row.get("disb_dt") or row.get("DISB_DT"),
+                        row.get("COMMUNICATION_DATE") or row.get("comm_dt") or row.get("COMM_DT"),
+                        row.get("PUBLIC_DISBURSEMENT_DATE") or row.get("pub_distrib_dt") or row.get("PUB_DISTRIB_DT"),
+                        _to_float(row.get("REPORTED_DISBURSEMENT_AMOUNT") or row.get("reported_disb_amt") or row.get("REPORTED_DISB_AMT")),
                         row.get("sb_link") or row.get("SB_LINK"),
                         row.get("amndt_ind") or row.get("AMNDT_IND"),
                         row.get("tran_id") or row.get("TRAN_ID"),
-                        row.get("image_num") or row.get("IMAGE_NUM"),
+                        row.get("SB_IMAGE_NUM") or row.get("image_num") or row.get("IMAGE_NUM"),
                         row.get("receipt_dt") or row.get("RECEIPT_DT"),
                         _to_int(row.get("file_num") or row.get("FILE_NUM")),
                         cycle,
@@ -1156,7 +1164,10 @@ def load_csv_to_db(db: sqlite3.Connection, file_key: str, cycle: int) -> int:
                         row.get("cand_id") or row.get("CAND_ID"),
                         row.get("cand_name") or row.get("CAND_NAME"),
                         row.get("cand_office") or row.get("CAND_OFFICE"),
-                        row.get("cand_office_st") or row.get("CAND_OFFICE_ST"),
+                        # CommunicationCosts headers are the short names, with
+                        # two exceptions (#311): candidate state is CAND_STATE,
+                        # and support/oppose is SUPPORT_OPPOSE_IND.
+                        row.get("CAND_STATE") or row.get("cand_office_st") or row.get("CAND_OFFICE_ST"),
                         row.get("cand_office_district") or row.get("CAND_OFFICE_DISTRICT"),
                         row.get("cand_pty_affiliation") or row.get("CAND_PTY_AFFILIATION"),
                         row.get("transaction_dt") or row.get("TRANSACTION_DT"),
@@ -1164,7 +1175,7 @@ def load_csv_to_db(db: sqlite3.Connection, file_key: str, cycle: int) -> int:
                         row.get("communication_tp") or row.get("COMMUNICATION_TP"),
                         row.get("communication_class") or row.get("COMMUNICATION_CLASS"),
                         row.get("purpose") or row.get("PURPOSE"),
-                        row.get("sup_opp") or row.get("SUP_OPP"),
+                        row.get("SUPPORT_OPPOSE_IND") or row.get("sup_opp") or row.get("SUP_OPP"),
                         row.get("amndt_ind") or row.get("AMNDT_IND"),
                         row.get("tran_id") or row.get("TRAN_ID"),
                         row.get("image_num") or row.get("IMAGE_NUM"),

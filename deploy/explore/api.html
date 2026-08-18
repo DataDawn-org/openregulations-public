@@ -50,7 +50,7 @@
             {"name": "lobbying_lobbyists", "description": "Individual lobbyists with covered government positions", "rows": 194151, "foreignKeys": ["filing_uuid → lobbying_activities.filing_uuid"]},
             {"name": "lobbying_filings", "description": "Filing metadata with income_amount + expense_amount (filing-level, XOR-populated). For lobbying spending, filter to LD-2 quarterly: filing_type GLOB '[1234Q]*'", "rows": 71064, "key": "filing_uuid"},
             {"name": "lobbying_issue_codes", "description": "32 lobbying issue area codes", "rows": 32, "key": "code"},
-            {"name": "spending_awards", "description": "Federal grants and contracts from USASpending.gov", "rows": 175504},
+            {"name": "spending_awards", "description": "Federal grants and contracts from ~20 civilian/regulatory agencies (excludes Dept. of Defense and indefinite-delivery vehicles), FY2017–present; values are awarded/obligated amounts, not outlays. PARTIAL COVERAGE — not a comprehensive federal-spending dataset; do not present aggregates as complete. (Contract displays were removed from DataDawn's curated hubs/explore views; the raw table remains queryable with this scope in mind.)", "rows": 987895},
             {"name": "presidential_documents", "description": "Executive Orders and Proclamations", "rows": 5904, "key": "document_number"},
             {"name": "fr_regs_crossref", "description": "Cross-references between Federal Register and Regulations.gov documents", "rows": 70030},
             {"name": "member_stats", "description": "Pre-computed member activity counts (trades, speeches, bills)", "rows": 12763, "key": "bioguide_id"},
@@ -468,7 +468,7 @@
             <a href="#response">Response Format</a>
             <a href="#schema">Database Schema</a>
             <a href="#relationships">Table Relationships</a>
-            <a href="#queries">Pre-built Queries (72 endpoints)</a>
+            <a href="#queries">Pre-built Queries (113 endpoints)</a>
             <a href="#fts">Full-Text Search</a>
             <a href="#cross">Cross-Dataset Queries</a>
             <a href="#explore">Interactive Explore Pages</a>
@@ -495,8 +495,9 @@
             <h3>Example: Get open comment periods</h3>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                <pre>curl "https://regs.datadawn.org/open_comments.json?sql=SELECT+id,agency_id,title,comment_end_date+FROM+documents+WHERE+comment_end_date>datetime('now')+AND+withdrawn=0+ORDER+BY+comment_end_date+LIMIT+10&_shape=objects"</pre>
+                <pre>curl "https://regs.datadawn.org/open_comments.json?sql=SELECT+id,agency_id,title,comment_end_date+FROM+open_comments_active+ORDER+BY+comment_end_date+LIMIT+10&_shape=objects"</pre>
             </div>
+            <p>The <code>open_comments_active</code> view excludes withdrawn documents and perpetual/standing dockets (sentinel end dates like 2099/2100). The raw <code>documents</code> table is deliberately unfiltered — query it directly for the full population, perpetual shells included.</p>
 
             <h3>Example: Top lobbying clients (LD-2 scope)</h3>
             <div class="code-block">
@@ -564,7 +565,7 @@
                     <tr><td>comments</td><td>Public comments on regulations</td><td class="count" id="schComments">3.2M</td><td>id, docket_id, agency_id, submitter_name, submitter_type, organization, posted_date</td></tr>
                     <tr><td>fr_regs_crossref</td><td>Links FR documents to Regulations.gov</td><td class="count">70,030</td><td>fr_document_number, regs_document_id</td></tr>
                     <tr><td>presidential_documents</td><td>Executive Orders &amp; Proclamations</td><td class="count" id="schPresDoc">5,904</td><td>document_number, title, document_type, signing_date, executive_order_number</td></tr>
-                    <tr><td>spending_awards</td><td>Federal contracts &amp; grants (USASpending)</td><td class="count" id="schSpending">175,504</td><td>recipient_name, agency, sub_agency, award_amount, award_category, fiscal_year</td></tr>
+                    <tr><td>spending_awards</td><td>Federal contracts &amp; grants &mdash; ~20 civilian/regulatory agencies, FY2017+, awarded value (not outlays); <strong>partial coverage, not comprehensive</strong></td><td class="count" id="schSpending">987,895</td><td>recipient_name, agency, sub_agency, award_amount, award_category, fiscal_year</td></tr>
                     <tr><td>cfr_sections</td><td>Code of Federal Regulations</td><td class="count">55K+</td><td>title_number, part_number, section_number, heading, content</td></tr>
                     <tr><td>agency_map</td><td>Maps agency codes across datasets</td><td class="count">5</td><td>regs_code, fr_agency_name</td></tr>
                 </tbody>
@@ -575,7 +576,7 @@
                 <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
                 <tbody>
                     <tr><td>lobbying_activities</td><td>Lobbying activity records (one row per issue). Income/expense live on lobbying_filings — JOIN by filing_uuid</td><td class="count" id="schLobby">3,860,624</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, specific_issues</td></tr>
-                    <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (with revolving door data)</td><td class="count">194,151</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
+                    <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (incl. self-declared prior covered positions, where held)</td><td class="count">194,151</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
                     <tr><td>lobbying_filings</td><td>Filing metadata with canonical income_amount + expense_amount (XOR per filing)</td><td class="count">1,934,917</td><td>filing_uuid, registrant_name, client_name, income_amount, expense_amount, filing_year, filing_type</td></tr>
                     <tr><td>lobbying_issue_codes</td><td>Issue area code reference</td><td class="count">32</td><td>code, description</td></tr>
                     <tr><td>lobbying_contributions</td><td>Political contributions by lobbyists</td><td class="count">—</td><td>lobbyist_name, recipient_name, amount, contribution_date</td></tr>
@@ -637,7 +638,7 @@ documents.comment_end_date             (open comment periods: WHERE > datetime('
             <div class="code-block">
                 <pre>lobbying_activities.filing_uuid
   ├── lobbying_lobbyists.filing_uuid   (who lobbied)
-  │     └── covered_position           (revolving door: former gov't roles)
+  │     └── covered_position           (LD-1 self-declared prior covered position; blank ≠ no gov service)
   └── lobbying_issue_codes.code = lobbying_activities.issue_code
 
 Group by client_name for client view, registrant_name for firm view</pre>
@@ -647,7 +648,7 @@ Group by client_name for client view, registrant_name for firm view</pre>
         <!-- Pre-built Queries -->
         <div class="section" id="queries">
             <h2>Pre-built queries</h2>
-            <p>72 pre-built endpoints with named parameters and optimized SQL. Use <code>.json</code> suffix for JSON output. All accept <code>_shape=objects</code>.</p>
+            <p>113 pre-built endpoints with named parameters and optimized SQL. Use <code>.json</code> suffix for JSON output. All accept <code>_shape=objects</code>.</p>
 
             <h3>Explore endpoints (used by interactive UI)</h3>
 
@@ -819,11 +820,6 @@ Group by client_name for client view, registrant_name for firm view</pre>
                 <div class="qc-params">Params: <span>search</span></div>
             </div>
 
-            <div class="query-card">
-                <div class="qc-header"><span class="qc-name">search_spending</span></div>
-                <div class="qc-desc">Search federal spending awards by recipient</div>
-                <div class="qc-params">Params: <span>search</span></div>
-            </div>
 
             <div class="query-card">
                 <div class="qc-header"><span class="qc-name">search_cfr</span></div>
@@ -887,17 +883,7 @@ Group by client_name for client view, registrant_name for firm view</pre>
                 <div class="qc-params">No params required</div>
             </div>
 
-            <div class="query-card">
-                <div class="qc-header"><span class="qc-name">top_contractors</span></div>
-                <div class="qc-desc">Top federal contractors by award amount</div>
-                <div class="qc-params">No params required</div>
-            </div>
 
-            <div class="query-card">
-                <div class="qc-header"><span class="qc-name">spending_by_agency</span></div>
-                <div class="qc-desc">Federal spending broken down by agency</div>
-                <div class="qc-params">No params required</div>
-            </div>
 
             <div class="query-card">
                 <div class="qc-header"><span class="qc-name">executive_orders</span></div>
@@ -961,7 +947,7 @@ Group by client_name for client view, registrant_name for firm view</pre>
                 <div class="qc-params">Params: <span>eo_number</span> (e.g., 14067)</div>
             </div>
 
-            <p style="margin-top:1rem;font-size:0.85rem;">Full list of all 72 endpoints available at <a href="/openregs" style="color:var(--dawn-amber);">/openregs</a> (Datasette homepage).</p>
+            <p style="margin-top:1rem;font-size:0.85rem;">Full list of all 113 endpoints available at <a href="/openregs" style="color:var(--dawn-amber);">/openregs</a> (Datasette homepage).</p>
         </div>
 
         <!-- Full-Text Search -->
@@ -1029,7 +1015,8 @@ FROM lobbying_filings WHERE client_name LIKE '%Boeing%'
   AND filing_type GLOB '[1234Q]*' AND income_amount > 0
 GROUP BY client_name;
 
--- Federal contracts
+-- Federal contracts (SCOPE: ~20 civilian/regulatory agencies, FY2017+, awarded value not outlays;
+-- partial coverage — treat as a sample, not a complete contract record for any recipient)
 SELECT recipient_name, SUM(award_amount) AS total, COUNT(*) AS awards
 FROM spending_awards WHERE recipient_name LIKE '%Boeing%'
 GROUP BY recipient_name;
@@ -1097,7 +1084,7 @@ ORDER BY la.filing_year DESC</pre>
             <h3>For AI Agents</h3>
             <p>This page includes structured <code>application/ld+json</code> metadata with complete table schemas, row counts, foreign keys, and FTS index descriptions. Recommended approach:</p>
             <ul style="list-style:none;margin:0.75rem 0;">
-                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Start with canned queries (72 pre-built endpoints) before writing raw SQL</li>
+                <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Start with canned queries (113 pre-built endpoints) before writing raw SQL</li>
                 <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use <code>member_stats</code> and <code>docket_summary</code> tables for counts instead of COUNT(*) subqueries</li>
                 <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use FTS tables for keyword search (much faster than LIKE '%...%')</li>
                 <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Join across datasets via <code>bioguide_id</code> (members), <code>docket_id</code> (regulations), <code>filing_uuid</code> (lobbying)</li>
