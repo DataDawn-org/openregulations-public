@@ -1243,6 +1243,7 @@
             "filing_year",
             "filing_period",
             "is_amendment",
+            "is_no_activity",
             "is_termination"
           ],
           "sort_desc": "received_date"
