@@ -36,6 +36,12 @@
     color: #666;
     margin-top: 0.25rem;
   }
+  .stat-card .asof {
+    font-size: 0.72rem;
+    color: #8a8a8a;
+    margin-top: 0.2rem;
+    font-variant-numeric: tabular-nums;
+  }
 
   .db-section { margin: 1.5rem 0; }
   .db-section h2 {
@@ -114,12 +120,14 @@
         <div class="stat-card">
           <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
           <div class="label">APHIS Facilities</div>
+          <div class="asof">data as of 2026-03-02</div>
         </div>
       {% endif %}
       {% if db.name == "aphis" and table.name == "inspections" %}
         <div class="stat-card">
           <div class="number">{{ "{:,}".format(table.count or 0) }}</div>
           <div class="label">APHIS Inspections</div>
+          <div class="asof">data as of 2026-03-02</div>
         </div>
       {% endif %}
     {% endfor %}
