@@ -71,6 +71,8 @@ Regulations.gov documents (rules, proposed rules, notices, supporting materials)
 
 Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `document_type`, `posted_date`, `comment_start_date`, `comment_end_date`, `fr_doc_num`
 
+⚠ `comment_end_date` and `comment_start_date` are FULL UTC INSTANTS, not dates, despite the names: `'2026-08-29T03:59:59Z'` is **11:59:59 PM Eastern on 2026-08-28**. The UTC calendar date is ONE DAY LATER than the official ET deadline for every end-of-day close, which is all of them (444,689 of 444,690 rows measured). Convert to America/New_York before presenting a deadline, and compare with `julianday(comment_end_date) > julianday('now')` — a plain `> datetime('now')` is a TEXT comparison between two different formats and keeps already-closed dockets matching for up to ~20 hours. (queue #644)
+
 ### comments (9.7M rows)
 Public comments from regulations.gov.
 
