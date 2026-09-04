@@ -33,8 +33,12 @@ STATE_DIR = BASE_DIR / "logs"
 
 # Both domains point to the same Salesforce instance
 CANDIDATE_BASES = [
-    "https://efile.aphis.usda.gov/PublicSearchTool",
+    # 2026-08-27: efile.aphis.usda.gov REFUSES CONNECTIONS (measured: 000 in 0.12s, twice)
+    # and its cert fails verification. It was first in this list, so EVERY call burned a
+    # failed SSL handshake plus 3 urllib3 retries before falling through. Reordered so the
+    # working Salesforce tenant is tried first — fewer wasted requests at their end and ours.
     "https://aphis.my.site.com/PublicSearchTool",
+    "https://efile.aphis.usda.gov/PublicSearchTool",
 ]
 
 ROWS_PER_PAGE = 100
@@ -63,6 +67,21 @@ class TooManyResultsError(Exception):
 class BadResponseError(Exception):
     """Raised when the API returns an unparseable or error response."""
     pass
+
+
+
+# 2026-08-27: this source throttles with HTTP 200 + a generic HTML error page, NOT 429/503.
+# urllib3's Retry is STATUS-based, so a 200 never triggers it — the client would receive an
+# unparseable body and treat it as a parse failure. Learned across five days of PDF fetching
+# (52 documents were recorded as permanently deleted; all 52 returned real PDFs ~20h later).
+THROTTLE_MARKERS = ("Unable to Process Request", "content has been deleted")
+
+
+def _is_throttle(text: str) -> bool:
+    """True for the transient 'content unavailable' page served under load."""
+    if not text or len(text) > 4096:
+        return False
+    return any(m in text for m in THROTTLE_MARKERS)
 
 
 class AuraClient:
@@ -214,6 +233,10 @@ class AuraClient:
                         time.sleep(RETRY_DELAY)
                     continue
 
+                if _is_throttle(resp.text):
+                    logger.warning("THROTTLED (200 + error page) — backing off 60s")
+                    time.sleep(60)
+                    continue
                 data = resp.json()
 
                 # Check for Aura framework errors
