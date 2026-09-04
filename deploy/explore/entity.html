@@ -671,7 +671,7 @@
                             <a class="section-link" href="/explore/regulation.html?q=${encodeURIComponent(q)}">View all &rarr;</a>
                         </div>
                         <table class="data-table">
-                            <thead><tr><th>Docket</th><th>Agency</th><th>Title</th><th>Comments</th><th>Docs</th></tr></thead>
+                            <thead><tr><th>Docket</th><th>Agency</th><th>Title</th><th>Comments held</th><th>Docs</th></tr></thead>
                             <tbody>${dockets.map(r => `<tr>
                                 <td style="white-space:nowrap;"><a href="/explore/regulation.html?docket=${encodeURIComponent(r.id)}">${esc(r.id)}</a></td>
                                 <td class="muted">${esc(r.agency_id)}</td>
