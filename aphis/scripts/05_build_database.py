@@ -530,6 +530,9 @@ class DatabaseBuilder:
 
 
 def main():
+    from lib.corpus_gate import acquire as _corpus_acquire
+    _corpus_acquire("rebuild aphis.db from raw/ extraction output", "aphis-scripts")
+
     DB_DIR.mkdir(parents=True, exist_ok=True)
 
     builder = DatabaseBuilder(DB_PATH)

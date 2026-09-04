@@ -40,7 +40,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = 6
+MAX_WORKERS = 1   # 2026-08-27: was 6. AuraClient is instantiated PER WORKER, so 6
+                  # workers x rate_limit 1.0 = up to 6 req/sec aggregate — ~5x the
+                  # 1.25/sec the PDF fetch settled on and ~3x the 2/sec that hit the
+                  # wall. Rate, not volume, is what this source punishes.
 
 # Default action names — updated by discovery results if available
 DEFAULT_ACTIONS = {
@@ -92,7 +95,7 @@ def fetch_prefix_worker(args: tuple) -> tuple[str, str, list[dict]]:
     """
     category, prefix, action_name, base_criteria = args
 
-    client = AuraClient(rate_limit=1.0)
+    client = AuraClient(rate_limit=0.8)
     try:
         client.fetch_fwuid()
     except Exception as e:
@@ -180,7 +183,7 @@ def extract_category(
                     logger.error(f"[{category}] Prefix '{prefix}' worker failed: {e}")
     else:
         # Sequential extraction
-        client = AuraClient(rate_limit=1.0)
+        client = AuraClient(rate_limit=0.8)
         client.fetch_fwuid()
 
         for prefix in pending_prefixes:
@@ -223,6 +226,9 @@ def extract_category(
 
 
 def main():
+    from lib.corpus_gate import acquire as _corpus_acquire
+    _corpus_acquire("refresh the APHIS inspection index from the live Aura API (--reset overwrites raw/)", "aphis-scripts")
+
     import argparse
 
     parser = argparse.ArgumentParser(description="Extract APHIS Public Search Tool data")
