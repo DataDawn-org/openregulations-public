@@ -1360,7 +1360,7 @@
                     </div>
                     <div class="card-meta">
                         ${docketTypeBadge(r.docket_type)}
-                        <span class="meta-item"><span>${formatNumber(r.comment_count)}</span> comments</span>
+                        <span class="meta-item"><span>${formatNumber(r.comment_count)}</span> comments held</span>
                         <span class="meta-item"><span>${formatNumber(r.doc_count)}</span> documents</span>
                         <span class="meta-item">${esc(r.id)}</span>
                         <a class="source-link" href="https://www.regulations.gov/docket/${encodeURIComponent(r.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on Regulations.gov &rarr;</a>
@@ -1792,7 +1792,7 @@
                 if (aid) {
                     html += `<div class="stat-box"><div class="num">${formatNumber(rs.docket_count)}</div><div class="label">Dockets</div></div>`;
                     html += `<div class="stat-box"><div class="num">${formatNumber(rs.doc_count)}</div><div class="label">Reg Docs</div></div>`;
-                    html += `<div class="stat-box"><div class="num">${formatNumber(rs.comment_count)}</div><div class="label">Comments</div></div>`;
+                    html += `<div class="stat-box"><div class="num">${formatNumber(rs.comment_count)}</div><div class="label">Comments held (floor)</div></div>`;
                 } else {
                     html += `<div class="stat-box"><div class="num">${subAgencies.length}</div><div class="label">Sub-agencies</div></div>`;
                 }
@@ -1817,7 +1817,7 @@
                         html += `<div class="top-item" onclick="openDocket('${esc(d.id)}')">
                             <div class="top-info">
                                 <div class="top-name">${esc(truncate(d.title, 100))}</div>
-                                <div class="top-meta">${esc(d.id)} &middot; ${formatNumber(d.comment_count)} comments &middot; ${formatNumber(d.doc_count)} docs</div>
+                                <div class="top-meta">${esc(d.id)} &middot; ${formatNumber(d.comment_count)} comments held &middot; ${formatNumber(d.doc_count)} docs</div>
                             </div>
                         </div>`;
                     });

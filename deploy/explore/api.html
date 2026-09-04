@@ -631,7 +631,12 @@
   │     └── fr_regs_crossref.regs_document_id → federal_register (FR links)
   └── comments.docket_id              (public comments)
 
-documents.comment_end_date             (open comment periods: WHERE > datetime('now'))</pre>
+documents.comment_end_date             (FULL UTC INSTANT, e.g. '2026-08-29T03:59:59Z'
+                                        = 11:59:59 PM EASTERN on 2026-08-28 — the UTC
+                                        date is ONE DAY LATER than the ET deadline.
+                                        Compare with julianday(), NOT with `&gt; datetime('now')`:
+                                        that is a TEXT compare of two different formats and
+                                        keeps closed dockets matching for up to ~20h. #644)</pre>
             </div>
 
             <h3>Lobbying chain</h3>
@@ -861,15 +866,7 @@ Group by client_name for client view, registrant_name for firm view</pre>
                 <div class="qc-params">Params: <span>committee_id</span></div>
             </div>
 
-            <div class="query-card">
-                <div class="qc-header">
-                    <span class="qc-name">most_commented_dockets</span>
-                    <button class="try-btn" onclick="tryQuery(this, 'most_commented_dockets', '')">Try it</button>
-                </div>
-                <div class="qc-desc">Regulatory dockets ranked by public comment volume</div>
-                <div class="qc-params">No params required</div>
-                <div class="try-result"></div>
-            </div>
+            <!-- most_commented_dockets removed 2026-09-04 (#706): a ranking by held comment volume is biased against mass-comment dockets while holdings are ~41.5% of upstream -->
 
             <div class="query-card">
                 <div class="qc-header"><span class="qc-name">most_cosponsored_bills</span></div>
