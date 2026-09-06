@@ -4,6 +4,13 @@
 because a bulk artifact makes a promise the serving layer does not: that someone can come back
 later and get **the same bytes**. Below is exactly which parts of that promise we keep.
 
+> ⚠ **STATUS, 2026-09-06 — the monthly tier is NOT LIVE YET.** The bucket currently carries a
+> **bucket-wide 28-day delete rule**, so today everything is reaped at 28 days regardless of
+> prefix, and only `manifest_history.jsonl` (rewritten weekly, so its age resets) and the git
+> copy of it persist. The layout and retention below describe the committed design and take
+> effect when that rule is re-scoped to the `weekly/` prefix. **Until then, do not rely on a
+> monthly archive being present.** This file ships with the rule change, not ahead of it.
+
 ## The two retention tiers, and why they differ
 
 | tier | prefix | retained | citable? |
@@ -48,6 +55,9 @@ re-supply the monthly ones.
 ## Layout
 
     manifest.json                 current pointer — the most recent weekly
+    (pre-2026-09 entries in manifest_history.jsonl predate the prefix restructure
+     and used a FLAT layout: <week_id>/ rather than weekly/<week_id>/. The sha256
+     identifies them either way; only the URL shape changed.)
     manifest_history.jsonl        every week ever published (cumulative)
     manifests/<week_id>.json      per-week manifest, kept outside the reaped prefix
     YYYY-MM/                      MONTHLY ARCHIVE — retained 12 months, cite these
