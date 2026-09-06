@@ -24,7 +24,10 @@ possible extract; it is deleted within about three weeks and **will not be there
 follows your citation**.
 
 > **Why this is spelled out.** The manifest history records every weekly vintage, so you can
-> always *prove* which copy you hold. If we stopped there we would have built a citation trap:
+> always *prove* which copy you hold. The copy of that file in the bucket survives only because
+> it is rewritten every week — the 28-day rule would otherwise delete it — so **treat the bucket
+> copy as a convenience mirror and the public git repository as the record.**
+> If we stopped at identification we would have built a citation trap:
 > you could demonstrate you had `2026-W37` and no one — including us — could ever obtain it
 > again. The monthly tier exists so that a citation resolves to something a reader can actually
 > download.
