@@ -495,9 +495,9 @@
             <h3>Example: Get open comment periods</h3>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-                <pre>curl "https://regs.datadawn.org/open_comments.json?sql=SELECT+id,agency_id,title,comment_end_date+FROM+open_comments_active+ORDER+BY+comment_end_date+LIMIT+10&_shape=objects"</pre>
+                <pre>curl "https://regs.datadawn.org/open_comments.json?sql=SELECT+id,agency_id,title,comment_end_datetime+FROM+open_comments_active+ORDER+BY+comment_end_datetime+LIMIT+10&_shape=objects"</pre>
             </div>
-            <p>The <code>open_comments_active</code> view excludes withdrawn documents and perpetual/standing dockets (sentinel end dates like 2099/2100). The raw <code>documents</code> table is deliberately unfiltered — query it directly for the full population, perpetual shells included.</p>
+            <p>The <code>open_comments_active</code> view excludes withdrawn documents and perpetual/standing dockets (sentinel end dates like 2099/2100). The raw <code>documents</code> table is deliberately unfiltered — query it directly for the full population, perpetual shells included. <code>comment_end_datetime</code> is the full UTC close; the date-only <code>comment_end_date</code> is that value's UTC date, which reads one day after the official Eastern-time deadline date.</p>
 
             <h3>Example: Top lobbying clients (LD-2 scope)</h3>
             <div class="code-block">

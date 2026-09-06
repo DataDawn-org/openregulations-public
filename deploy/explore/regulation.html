@@ -874,6 +874,28 @@
         const API_BASE = '';
         const API = API_BASE + '/openregs';
         const API_OPEN = API_BASE + '/open_comments';
+        // Official comment-close date in EASTERN time (queue #498; paired with the same
+        // helper in datadawn-website/regs-shared.js — change one, change both).
+        // `comment_end_datetime` is the full UTC close ('2026-08-15 03:59:59' ==
+        // 11:59:59 PM ET Aug 14); `comment_end_date` is the UTC-ROLLED day AFTER the
+        // official ET deadline, so displaying it overstates every deadline by one day.
+        // Convert by TIMEZONE, never by subtracting a day — a -1d shortcut hard-codes
+        // the current end-of-ET-day distribution and breaks on the first mid-day close.
+        // GRAIN-TOLERANT (queue #647): accepts the open_comments grain ('2026-08-15 03:59:59',
+        // naive UTC) AND the openregs grain ('2026-09-11T03:59:59Z'); appending 'Z' to a value
+        // that already carries a zone produced 'Invalid Date' (measured in node, #647).
+        const fmtCloseET = (dt, d) => {
+            if (dt) {
+                const s = String(dt).trim().replace(' ', 'T');
+                const iso = /(Z|[+-]\d\d:?\d\d)$/.test(s) ? s : s + 'Z';
+                const t = Date.parse(iso);
+                if (!isNaN(t)) return new Date(t).toLocaleDateString('en-CA', {timeZone: 'America/New_York'});
+            }
+            return String(d == null ? '' : d).slice(0, 10);
+        };
+        const closeMs = r => r.comment_end_datetime
+            ? Date.parse(String(r.comment_end_datetime).replace(' ', 'T') + 'Z')
+            : (r.comment_end_date ? Date.parse(r.comment_end_date) : NaN);
 
         let currentTab = 'dockets';
         let currentQuery = '';
@@ -1236,7 +1258,7 @@
 
         async function searchOpen(q) {
             const filter = q ? `AND (title LIKE '%${q}%' OR agency_id LIKE '%${q}%' OR docket_id LIKE '%${q}%')` : '';
-            const deadlineFilter = filterDays ? `AND comment_end_date <= datetime('now', '+${filterDays} days')` : '';
+            const deadlineFilter = filterDays ? `AND comment_end_datetime <= datetime('now', '+${filterDays} days')` : '';
             const agencyFilter = filterAgency ? `AND agency_id = '${filterAgency}'` : '';
             const typeFilter = filterOpenType === 'Other'
                 ? `AND document_type NOT IN ('Notice', 'Proposed Rule', 'Rule')`
@@ -1256,10 +1278,10 @@
                       ${deadlineFilter} ${typeFilter} ${agencyFilter} ${filter}
             `;
             const dataSql = `
-                SELECT id, agency_id, title, comment_end_date, docket_id, document_type,
-                    CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                SELECT id, agency_id, title, comment_end_date, comment_end_datetime, docket_id, document_type,
+                    CAST(julianday(comment_end_datetime) - julianday('now') AS INTEGER) AS days_left
                 ${baseFrom}
-                ORDER BY comment_end_date ASC
+                ORDER BY comment_end_datetime ASC
                 LIMIT ${PAGE_SIZE + 1} OFFSET ${currentOffset}
             `;
             // queryCount uses the same query() helper which hits the openregs DB.
@@ -1413,7 +1435,7 @@
                     <div class="card-meta">
                         <span class="agency-badge">${esc(r.agency_id)}</span>
                         ${docTypeBadge(r.document_type)}
-                        <span class="meta-item">Closes ${esc(r.comment_end_date)}</span>
+                        <span class="meta-item">Closes ${esc(fmtCloseET(r.comment_end_datetime, r.comment_end_date))}</span>
                         <span class="meta-item">${esc(r.docket_id)}</span>
                         <a class="source-link" href="https://www.regulations.gov/document/${encodeURIComponent(r.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">Submit Comment &rarr;</a>
                     </div>
@@ -1757,11 +1779,11 @@
                             LIMIT 20
                         `),
                         queryOpen(`
-                            SELECT id, title, comment_end_date, docket_id,
-                                CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
-                            FROM documents
-                            WHERE agency_id = '${aid}' AND comment_end_date > datetime('now') AND withdrawn = 0
-                            ORDER BY comment_end_date ASC
+                            SELECT id, title, comment_end_date, comment_end_datetime, docket_id,
+                                CAST(julianday(comment_end_datetime) - julianday('now') AS INTEGER) AS days_left
+                            FROM open_comments_active
+                            WHERE agency_id = '${aid}'
+                            ORDER BY comment_end_datetime ASC
                             LIMIT 20
                         `)
                     );
@@ -2026,10 +2048,10 @@
             try {
                 snapDocs = await queryOpen(`
                     SELECT id, agency_id, docket_id, title, document_type, posted_date,
-                           comment_start_date, comment_end_date, open_for_comment, withdrawn,
-                           CAST(julianday(comment_end_date) - julianday('now') AS INTEGER) AS days_left
+                           comment_start_date, comment_end_date, comment_end_datetime, open_for_comment, withdrawn,
+                           CAST(julianday(comment_end_datetime) - julianday('now') AS INTEGER) AS days_left
                     FROM documents WHERE docket_id = '${did}'
-                    ORDER BY (comment_end_date > datetime('now') AND withdrawn = 0) DESC, posted_date DESC
+                    ORDER BY (comment_end_datetime >= datetime('now') AND withdrawn = 0) DESC, posted_date DESC
                     LIMIT 51
                 `);
             } catch (e) { snapDocs = []; }
@@ -2040,7 +2062,7 @@
             }
 
             const now = Date.now();
-            const openDocs = snapDocs.filter(x => x.comment_end_date && Date.parse(x.comment_end_date) > now && !Number(x.withdrawn));
+            const openDocs = snapDocs.filter(x => x.comment_end_date && closeMs(x) > now && !Number(x.withdrawn));
             const lead = openDocs[0] || snapDocs[0];
             const agency = lead.agency_id || (docketId.split('-')[0] || '');
 
@@ -2065,7 +2087,7 @@
                     <div class="tl-title"><a class="doc-link" href="https://www.regulations.gov/document/${encodeURIComponent(doc.id)}" target="_blank" rel="noopener">${esc(truncate(doc.title || doc.id, 150))}</a></div>
                     <div class="tl-type">
                         ${docTypeBadge(doc.document_type)}
-                        ${doc.comment_end_date ? '<span class="meta-item">Comments through ' + esc(doc.comment_end_date) + '</span>' : ''}
+                        ${doc.comment_end_date ? '<span class="meta-item">Comments through ' + esc(fmtCloseET(doc.comment_end_datetime, doc.comment_end_date)) + '</span>' : ''}
                     </div>
                 </li>
             `).join('');
