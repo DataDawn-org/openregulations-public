@@ -85,11 +85,15 @@ what a monthly archive is for.
 is a 404; the file is at `dumps.datadawn.org/monthly/2026-09/openregs.db.gz`. The manifest
 lists `filename` only, so prepend the archive you want.
 
-⚠ **A monthly archive's `manifest.json` is a copy of that week's**, so each entry's `key` and
-`url` still name the `weekly/<week_id>/` path the artifact was promoted from — and that path is
-deleted 28 days after upload. **Use the `filename` and the `sha256_gzipped`, and prepend
-`monthly/<YYYY-MM>/` yourself.** The bytes under the monthly prefix are the same bytes: every
-artifact in `monthly/2026-09/` matches its manifest's `size_bytes` exactly.
+**A monthly archive's `manifest.json` names monthly paths.** Each entry's `key` and `url` point at
+that artifact's own `monthly/<YYYY-MM>/` location, so you can follow them directly; a top-level
+`promoted_from` records the `weekly/<week_id>/` prefix the month was promoted from, which is
+provenance rather than a place to fetch from — that weekly prefix is deleted 28 days after upload.
+
+Earlier monthly manifests were byte copies of the week's and named `weekly/` paths in `key` and
+`url`. **2026-09 was rewritten on 2026-09-22 and every month since is written this way.** Only
+`key` and `url` changed: each artifact's `sha256_gzipped` and `size_bytes` are exactly as first
+published, and the artifacts themselves were never touched.
 
 ## What is in a dump
 
