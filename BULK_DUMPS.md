@@ -4,29 +4,31 @@
 because a bulk artifact makes a promise the serving layer does not: that someone can come back
 later and get **the same bytes**. Below is exactly which parts of that promise we keep.
 
-> ⚠ **STATUS, 2026-09-06 — the monthly tier is NOT LIVE YET.** The bucket currently carries a
-> **bucket-wide 28-day delete rule**, so today everything is reaped at 28 days regardless of
-> prefix, and only `manifest_history.jsonl` (rewritten weekly, so its age resets) and the git
-> copy of it persist. The layout and retention below describe the committed design and take
-> effect when that rule is re-scoped to the `weekly/` prefix. **Until then, do not rely on a
-> monthly archive being present.** This file ships with the rule change, not ahead of it.
+> **Every archive is a snapshot as of its build date, and we do not reissue it.** If a comment is
+> withdrawn or removed at regulations.gov *after* an archive was built, that archive still
+> contains it. The live site, its Datasette and API, and the MCP hide such comments; a dated
+> archive is a record of what the corpus looked like on its date, and rewriting it would break the
+> one promise a citation depends on. Prefer a recent archive if you need the current picture.
 
 ## The two retention tiers, and why they differ
 
 | tier | prefix | retained | citable? |
 |---|---|---|---|
-| **Monthly archive** | `YYYY-MM/` | **12 months** | ✅ **cite this** |
-| Weekly snapshot | `YYYY-Www/` | ~3 weeks, then deleted | ❌ ephemeral by design |
+| **Monthly archive** | `monthly/YYYY-MM/` | **not rotated — retained** | ✅ **cite this** |
+| Weekly snapshot | `weekly/YYYY-Www/` | 28 days, then deleted | ❌ ephemeral by design |
 | Manifest history | `manifest_history.jsonl` | **every week, forever** | identification only |
+
+**Monthly archives are not rotated.** The bucket's rotation rule is scoped to the `weekly/`
+prefix and does not reach `monthly/`, so a monthly archive stays where a citation can find it.
+Weekly snapshots rotate out after 28 days.
 
 **Cite the monthly archive.** A weekly prefix is a convenience for people who want the freshest
 possible extract; it is deleted within about three weeks and **will not be there when a reader
 follows your citation**.
 
 > **Why this is spelled out.** The manifest history records every weekly vintage, so you can
-> always *prove* which copy you hold. The copy of that file in the bucket survives only because
-> it is rewritten every week — the 28-day rule would otherwise delete it — so **treat the bucket
-> copy as a convenience mirror and the public git repository as the record.**
+> always *prove* which copy you hold. **Treat the bucket copy as a convenience mirror and the
+> public git repository as the record** — the git copy is the one with a history.
 > If we stopped at identification we would have built a citation trap:
 > you could demonstrate you had `2026-W37` and no one — including us — could ever obtain it
 > again. The monthly tier exists so that a citation resolves to something a reader can actually
