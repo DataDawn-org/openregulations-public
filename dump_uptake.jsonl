@@ -1,1 +1,3 @@
 {"week_id":"2026-W36","qualifying_downloads":3,"checked_at":"2026-09-06T23:56:50Z","method":"dumps_uptake_probe --emit, artifact .db.gz requests (zone dataset; blind to S3-API access)"}
+{"week_id":"2026-W37","qualifying_downloads":12,"checked_at":"2026-09-13T12:40:06Z","method":"dumps_uptake_probe --emit, artifact .db.gz requests (zone dataset; blind to S3-API access)"}
+{"week_id":"2026-W38","qualifying_downloads":4,"checked_at":"2026-09-20T12:40:07Z","method":"dumps_uptake_probe --emit, artifact .db.gz requests (zone dataset; blind to S3-API access)"}
