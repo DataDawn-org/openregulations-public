@@ -4,12 +4,14 @@
 because a bulk artifact makes a promise the serving layer does not: that someone can come back
 later and get **the same bytes**. Below is exactly which parts of that promise we keep.
 
-> **Every archive is a snapshot as of its build date, and we do not reissue it — except where the
-> law requires it.** If a comment is withdrawn or removed at regulations.gov *after* an archive was
-> built, that archive still contains it. On the live site, its Datasette and API, and the MCP, we
-> hide a comment once our own checks confirm it was withdrawn or removed at the source. A dated
-> archive is a record of what the corpus looked like on its date, and rewriting it would break the
-> one promise a citation depends on. Prefer a recent archive if you need the current picture.
+> **Every archive is a snapshot as of its build date, and our practice is not to reissue it.** If a
+> comment is withdrawn or removed at regulations.gov *after* an archive was built, that archive
+> still contains it. On the live site, its Datasette and API, and the MCP, we hide a comment once
+> our own checks confirm it was withdrawn or removed at the source. The practice exists because a
+> citation is only worth making if the thing cited stays put: an archive that could be rewritten
+> later is one a reader cannot check anything against, including our own published numbers. So a
+> dated archive is left as a record of what the corpus looked like on its date. Prefer a recent
+> archive if you need the current picture.
 
 ## The two retention tiers, and why they differ
 
@@ -62,8 +64,10 @@ Match that against `manifest_history.jsonl` — one JSON line per week, cumulati
       | grep -F "<your sha256>"
 
 **This works even for a weekly vintage whose files are long gone.** Identification and
-availability are separate guarantees here: we can always tell you *what* you hold; we can only
-re-supply the monthly ones.
+availability are different things here: we can always tell you *what* you hold, because the
+history is permanent; we can only still be **serving** the monthly ones. That is a separate matter
+from reissuing — serving is handing back the same bytes that have been there all along, which is
+what a monthly archive is for.
 
 ## Layout
 
