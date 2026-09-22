@@ -122,9 +122,12 @@ this entry will be updated when it does.
 
 ### If you use the bulk dumps
 
-This section is for people holding a `.db.gz` from `dumps.datadawn.org`. **You will not see
-any of the above** — a dump is a database file with no metadata, no column notes and no
-release notes attached, so nothing in the file itself can tell you this.
+This section is for people holding a `.db.gz` from `dumps.datadawn.org`. **You will not see any
+of the above** — a dump carries no column notes and no release notes, so nothing in the file
+announces a grain change to you. A dump *does* carry a small `build_metadata` table (build
+completion time, a few refresh dates and known-gap notes), and the `manifest.json` beside the
+artifact carries per-artifact notes; neither records this column's grain, which is why the dates
+below are the test.
 
 **Affected: `open_comments.db`, table `documents`, column `comment_end_date`.**
 
