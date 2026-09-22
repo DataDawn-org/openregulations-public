@@ -4,9 +4,10 @@
 because a bulk artifact makes a promise the serving layer does not: that someone can come back
 later and get **the same bytes**. Below is exactly which parts of that promise we keep.
 
-> **Every archive is a snapshot as of its build date, and we do not reissue it.** If a comment is
-> withdrawn or removed at regulations.gov *after* an archive was built, that archive still
-> contains it. The live site, its Datasette and API, and the MCP hide such comments; a dated
+> **Every archive is a snapshot as of its build date, and we do not reissue it — except where the
+> law requires it.** If a comment is withdrawn or removed at regulations.gov *after* an archive was
+> built, that archive still contains it. On the live site, its Datasette and API, and the MCP, we
+> hide a comment once our own checks confirm it was withdrawn or removed at the source. A dated
 > archive is a record of what the corpus looked like on its date, and rewriting it would break the
 > one promise a citation depends on. Prefer a recent archive if you need the current picture.
 
@@ -16,15 +17,22 @@ later and get **the same bytes**. Below is exactly which parts of that promise w
 |---|---|---|---|
 | **Monthly archive** | `monthly/YYYY-MM/` | **not rotated — retained** | ✅ **cite this** |
 | Weekly snapshot | `weekly/YYYY-Www/` | 28 days, then deleted | ❌ ephemeral by design |
+| *(legacy weeklies)* | `YYYY-Www/`, no prefix | kept indefinitely | ⚠ see below |
 | Manifest history | `manifest_history.jsonl` | **every week, forever** | identification only |
 
 **Monthly archives are not rotated.** The bucket's rotation rule is scoped to the `weekly/`
 prefix and does not reach `monthly/`, so a monthly archive stays where a citation can find it.
-Weekly snapshots rotate out after 28 days.
+Weekly snapshots, which are published under `weekly/`, are deleted 28 days after upload.
+
+**A few older weekly archives sit at a bare `YYYY-Www/` path**, from before weekly snapshots moved
+under the `weekly/` prefix. The rotation rule does not reach those either, so they are still there
+and we are not deleting them. They are not citable in the sense this page means — nothing promises
+they will stay — but if you already hold a reference to one, it currently resolves.
 
 **Cite the monthly archive.** A weekly prefix is a convenience for people who want the freshest
-possible extract; it is deleted within about three weeks and **will not be there when a reader
-follows your citation**.
+possible extract; it is deleted 28 days after upload and **will not be there when a reader
+follows your citation**. The handful of legacy bare-path weeklies are an accident of an old
+layout, not a promise — do not build a citation on one.
 
 > **Why this is spelled out.** The manifest history records every weekly vintage, so you can
 > always *prove* which copy you hold. **Treat the bucket copy as a convenience mirror and the
