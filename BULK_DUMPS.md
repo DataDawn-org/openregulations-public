@@ -45,8 +45,8 @@ layout, not a promise — do not build a citation on one.
 ## Citing a vintage
 
     DataDawn OpenRegs database, monthly archive 2026-09.
-    https://dumps.datadawn.org/2026-09/openregs.db.gz
-    sha256 (gzipped): <from 2026-09/manifest.json>
+    https://dumps.datadawn.org/monthly/2026-09/openregs.db.gz
+    sha256 (gzipped): <from monthly/2026-09/manifest.json>
 
 Cite the **month**, the **filename**, and the **sha256 of the gzipped artifact**. The sha256 is
 what makes the citation checkable: it is stable, it is in the manifest, and it is the identifier
@@ -73,12 +73,19 @@ re-supply the monthly ones.
      identifies them either way; only the URL shape changed.)
     manifest_history.jsonl        every week ever published (cumulative)
     manifests/<week_id>.json      per-week manifest, kept outside the reaped prefix
-    YYYY-MM/                      MONTHLY ARCHIVE — retained 12 months, cite these
-    YYYY-Www/                     weekly — deleted after ~3 weeks
+    monthly/YYYY-MM/              MONTHLY ARCHIVE — not rotated, cite these
+    weekly/YYYY-Www/              weekly — deleted 28 days after upload
+    YYYY-Www/                     legacy weekly, no prefix — reached by no rule, kept indefinitely
 
 ⚠ **Artifacts live under a prefix, not at the root.** `dumps.datadawn.org/openregs.db.gz`
-is a 404; the file is at `dumps.datadawn.org/2026-09/openregs.db.gz`. The manifest lists
-`filename` only, so prepend the archive you want.
+is a 404; the file is at `dumps.datadawn.org/monthly/2026-09/openregs.db.gz`. The manifest
+lists `filename` only, so prepend the archive you want.
+
+⚠ **A monthly archive's `manifest.json` is a copy of that week's**, so each entry's `key` and
+`url` still name the `weekly/<week_id>/` path the artifact was promoted from — and that path is
+deleted 28 days after upload. **Use the `filename` and the `sha256_gzipped`, and prepend
+`monthly/<YYYY-MM>/` yourself.** The bytes under the monthly prefix are the same bytes: every
+artifact in `monthly/2026-09/` matches its manifest's `size_bytes` exactly.
 
 ## What is in a dump
 
