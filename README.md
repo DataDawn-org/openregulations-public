@@ -214,6 +214,9 @@ All pages use the same DataDawn dark theme and share a common `shared.js` utilit
 **License**
 - All U.S. government data. Public domain. No copyright restrictions.
 
+**Visitor data**
+- How regs.datadawn.org and datadawn.org handle visitor data (what our servers record, the one cookie, analytics, how long logs are kept): https://datadawn.org/privacy
+
 ---
 
 ## Prerequisites & Setup
