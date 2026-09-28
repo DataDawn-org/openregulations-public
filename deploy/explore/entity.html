@@ -447,15 +447,18 @@
                         ORDER BY la.filing_year DESC
                         LIMIT 25
                     `),
-                    query(`
+                    (async () => {   // A.6 (§129/§130): either DB state, API text preferred, source labelled
+                        const T = textShape(await bulkTextAvailable());
+                        return query(`
                         SELECT c.id, c.title, c.submitter_name, c.agency_id, c.docket_id, c.posted_date,
-                               cd.comment_text, cd.subtype, cd.attachment_count
+                               ${T.text} AS comment_text, ${T.col('subtype')} AS subtype, cd.attachment_count, ${T.src} AS text_source
                         FROM comments c
-                        JOIN comment_details cd ON cd.id = c.id
+                        ${T.join}
                         WHERE c.rowid IN (SELECT rowid FROM comments_fts WHERE comments_fts MATCH '"${qFTS}"')
-                        ORDER BY cd.comment_text IS NOT NULL DESC, c.posted_date DESC
+                          AND ${T.present}
+                        ORDER BY ${T.text} IS NOT NULL DESC, c.posted_date DESC
                         LIMIT 15
-                    `),
+                    `); })(),
                     query(`
                         -- Employer-aggregate lookup offline until the FEC employer
                         -- rebuild ships (2026-07 data-quality + privacy pass).
@@ -704,8 +707,9 @@
                                 ${c.subtype ? esc(c.subtype) + ' &middot; ' : ''}${esc(c.posted_date || '')} &middot;
                                 <a href="/explore/regulation.html?docket=${encodeURIComponent(c.docket_id)}" style="color:var(--dawn-amber);text-decoration:none;">${esc(c.docket_id)}</a>
                                 ${c.attachment_count > 0 ? ' &middot; ' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') : ''}
+                                ${c.comment_text && c.text_source ? ' &middot; text: ' + esc(c.text_source) : ''}
                             </div>
-                            ${c.comment_text ? '<div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;">' + esc(truncate(c.comment_text, 400)) + '</div>' : ''}
+                            ${c.comment_text ? '<div style="font-size:0.8rem;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;">' + escComment(truncate(c.comment_text, 400)) + '</div>' : ''}
                         </div>`;
                     });
                     html += `</div>`;

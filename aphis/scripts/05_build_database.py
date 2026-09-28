@@ -570,6 +570,16 @@ def main():
     finally:
         builder.close()
 
+    # Past the try/finally: an exception in the build propagates and never reaches here,
+    # so this line is the success point.
+    # In-file build stamp (data-history audit 2026-09-06): a published dump is a bare SQLite
+    # file and the R2 manifest does not survive a download, so build_metadata is the only
+    # vintage a consumer retains. Shared helper — one implementation, three callers.
+    # Non-gating: warns and proceeds. Reached ONLY on a genuinely successful build.
+    sys.path.insert(0, "/mnt/data/datadawn/tools")
+    from stamp_db import stamp_build_metadata
+    stamp_build_metadata(DB_PATH, log=logger.info)
+
     logger.info(f"\nDatabase ready at: {DB_PATH}")
 
 

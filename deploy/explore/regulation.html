@@ -2118,28 +2118,30 @@
                     `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='comment_org_entities'`
                 )) === 1;
             }
+            const T = textShape(await bulkTextAvailable());   // A.6 (§129/§130): either DB state
             if (offset === 0) {
                 detailCommentsTotal = await queryCount(`
                     SELECT COUNT(*) FROM comments c
-                    JOIN comment_details cd ON cd.id = c.id
-                    WHERE c.docket_id = '${didSafe}'
+                    ${T.join}
+                    WHERE c.docket_id = '${didSafe}' AND ${T.present}
                 `);
             }
 
             const coeJoin = coeAvailable ? `
                 LEFT JOIN comment_org_entities coe
-                  ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(cd.organization),''), c.submitter_name)))` : '';
+                  ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(${T.col('organization')}),''), c.submitter_name)))` : '';
             const coeRank = coeAvailable
                 ? `(coe.hub IS NOT NULL) DESC, (coe.entity_id IS NOT NULL) DESC,` : '';
 
             const rows = await query(`
                 SELECT c.id, c.title, c.submitter_name, c.posted_date,
-                       cd.comment_text, cd.subtype, cd.organization, cd.city, cd.state_province,
-                       cd.attachment_count, cd.attachment_urls
+                       ${T.text} AS comment_text, ${T.col('subtype')} AS subtype, ${T.col('organization')} AS organization,
+                       ${T.col('city')} AS city, ${T.col('state_province')} AS state_province,
+                       cd.attachment_count, cd.attachment_urls, ${T.src} AS text_source
                 FROM comments c
-                JOIN comment_details cd ON cd.id = c.id${coeJoin}
-                WHERE c.docket_id = '${didSafe}'
-                ORDER BY ${coeRank} (cd.comment_text IS NOT NULL) DESC, c.posted_date DESC
+                ${T.join}${coeJoin}
+                WHERE c.docket_id = '${didSafe}' AND ${T.present}
+                ORDER BY ${coeRank} (${T.text} IS NOT NULL) DESC, c.posted_date DESC
                 LIMIT ${DETAIL_PAGE + 1} OFFSET ${offset}
             `);
             const more = rows.length > DETAIL_PAGE;
@@ -2168,9 +2170,10 @@
                         ${loc ? '<span class="meta-item">' + esc(loc) + '</span>' : ''}
                         <span class="meta-item">${esc(c.posted_date)}</span>
                         ${c.attachment_count > 0 ? '<span class="meta-item">' + c.attachment_count + ' attachment' + (c.attachment_count > 1 ? 's' : '') + '</span>' : ''}
+                        ${c.comment_text && c.text_source ? '<span class="meta-item" title="Which regulations.gov channel supplied the text">text: ' + esc(c.text_source) + '</span>' : ''}
                         <a class="source-link" href="https://www.regulations.gov/comment/${encodeURIComponent(c.id)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">View on Regs.gov &rarr;</a>
                     </div>
-                    ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + esc(truncate(c.comment_text, 500)) + '</div>' : ''}
+                    ${c.comment_text ? '<div class="card-excerpt" style="white-space:pre-wrap;">' + escComment(truncate(c.comment_text, 500)) + '</div>' : ''}
                     ${attUrls.length > 0 ? '<div style="margin-top:0.5rem;">' + attUrls.slice(0, 3).map((u, i) => '<a class="source-link" href="' + esc(u) + '" target="_blank" rel="noopener" onclick="event.stopPropagation();">Attachment ' + (i+1) + ' &rarr;</a>').join(' ') + '</div>' : ''}
                 </div>`;
             });
@@ -2212,19 +2215,23 @@
                         `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='comment_org_entities'`
                     )) === 1;
                 }
+                const T = textShape(await bulkTextAvailable());   // A.6 (§129/§130): either DB state
+                const S = suppressionShape(await suppressionReasonAvailable());  // §128/§144 marker
                 const coeJoin = coeAvailable ? `
                     LEFT JOIN comment_org_entities coe
-                      ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(cd.organization),''), c.submitter_name)))` : '';
+                      ON coe.name_key = UPPER(TRIM(COALESCE(NULLIF(TRIM(${T.col('organization')}),''), c.submitter_name)))` : '';
                 const coeCols = coeAvailable ? `, coe.hub AS dd_hub` : '';
 
                 const rows = await query(`
                     SELECT c.id, c.docket_id, c.agency_id, c.title, c.submitter_name, c.submitter_type,
                            c.document_type, c.posted_date, c.withdrawn,
-                           cd.comment_text, cd.organization, cd.subtype, cd.category,
-                           cd.city, cd.state_province, cd.country, cd.duplicate_comments,
-                           cd.page_count, cd.receive_date, cd.attachment_count, cd.attachment_urls${coeCols}
+                           ${S.col} AS suppression_reason,
+                           ${T.text} AS comment_text, ${T.col('organization')} AS organization, ${T.col('subtype')} AS subtype, ${T.col('category')} AS category,
+                           ${T.col('city')} AS city, ${T.col('state_province')} AS state_province, ${T.col('country')} AS country, ${T.col('duplicate_comments')} AS duplicate_comments,
+                           ${T.col('page_count')} AS page_count, ${T.col('receive_date')} AS receive_date, cd.attachment_count, cd.attachment_urls,
+                           ${T.src} AS text_source${coeCols}
                     FROM comments c
-                    LEFT JOIN comment_details cd ON cd.id = c.id${coeJoin}
+                    ${T.join}${coeJoin}
                     WHERE c.id = '${cid}'
                 `);
                 if (rows.length === 0) {
@@ -2257,8 +2264,17 @@
                 }
                 html += '</div>';
 
-                if (c.withdrawn) {
-                    html += '<div class="hint" style="margin-bottom:0.75rem;">This comment is marked withdrawn on Regulations.gov.</div>';
+                // §128/§144 — the explanation is gated on suppression_reason, with the fallback to
+                // c.withdrawn for a DB that predates the column. WHY NOT `c.withdrawn` ALONE, which
+                // is what this was: a comment can be suppressed while carrying withdrawn = 0 (the
+                // bulk export's withdrawal REASON and its withdrawal BOOLEAN disagree, and 4dc3169
+                // resolves that toward hiding). Those rows rendered as EMPTY TEXT WITH NO
+                // EXPLANATION — indistinguishable from missing data, which is precisely what §128
+                // says the suppression must not look like. queue_inbox 811c065.
+                const suppReason = S.reasonOf(c);
+                const suppNote = suppressionNote(suppReason);   // §128/§144 + operator classes (shared.js)
+                if (suppNote) {
+                    html += '<div class="hint" style="margin-bottom:0.75rem;">' + esc(suppNote) + '</div>';
                 }
                 if (c.duplicate_comments > 1) {
                     html += `<div class="hint" style="margin-bottom:0.75rem;">Regulations.gov counts ${Number(c.duplicate_comments).toLocaleString()} duplicate submissions of this comment.</div>`;
@@ -2266,8 +2282,12 @@
 
                 if (c.comment_text) {
                     html += '<div class="section-title">Comment Text</div>';
-                    html += `<div class="card-excerpt" style="white-space:pre-wrap;max-height:none;">${esc(c.comment_text)}</div>`;
-                } else {
+                    html += `<div class="card-excerpt" style="white-space:pre-wrap;max-height:none;">${escComment(c.comment_text)}</div>`;
+                    if (c.text_source) html += `<div class="hint" style="margin-bottom:0.75rem;">Text source: ${esc(c.text_source)}</div>`;
+                } else if (!suppReason) {
+                    // Only say "no extracted text" when the absence is NOT deliberate. Saying it
+                    // over a suppressed row contradicts the marker two lines above and re-creates
+                    // the "looks like missing data" failure from the other direction.
                     html += '<div class="hint" style="margin-bottom:0.75rem;">No extracted text for this comment' + (c.attachment_count > 0 ? ' — the substance is in the attachment(s) below.' : '.') + '</div>';
                 }
 
@@ -2339,3 +2359,4 @@
     </script>
 </body>
 </html>
+EXIT=0

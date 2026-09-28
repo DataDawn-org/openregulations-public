@@ -1035,13 +1035,13 @@ GROUP BY cb.bill_id
 ORDER BY floor_mentions DESC LIMIT 20</pre>
             </div>
 
-            <h3>Revolving door: lobbyists with government experience by client</h3>
+            <h3>Revolving door: lobbyists who self-declared a prior government position, by client</h3>
             <div class="code-block">
                 <button class="copy-btn" onclick="copyCode(this)">Copy</button>
                 <pre>SELECT la.client_name, ll.lobbyist_name, ll.covered_position, la.filing_year
 FROM lobbying_lobbyists ll
 JOIN lobbying_activities la ON la.filing_uuid = ll.filing_uuid
-WHERE ll.covered_position IS NOT NULL AND ll.covered_position != ''
+WHERE ll.covered_position IS NOT NULL AND ll.covered_position != '' AND ll.covered_position != 'N/A'
   AND la.client_name LIKE '%Pfizer%'
 ORDER BY la.filing_year DESC</pre>
             </div>

@@ -55,13 +55,13 @@ Key parameters:
 
 ## Core Tables
 
-### federal_register (994K rows)
+### federal_register (1.0M rows)
 Federal Register documents (1994–present). Rules, proposed rules, notices, presidential documents.
 Federal Register documents (1994–present). Rules, proposed rules, notices, presidential documents.
 
 Key columns: `document_number` (PK), `title`, `type` (Rule/Proposed Rule/Notice/Presidential Document), `abstract`, `publication_date`, `agency_names`, `html_url`, `pdf_url`
 
-### dockets (254K rows)
+### dockets (278K rows)
 Regulations.gov dockets.
 
 Key columns: `id` (PK, e.g. "EPA-HQ-OAR-2021-0208"), `agency_id`, `title`, `docket_type` (Rulemaking/Nonrulemaking)
@@ -73,34 +73,34 @@ Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `document_type`, `pos
 
 ⚠ `comment_end_date` and `comment_start_date` are FULL UTC INSTANTS, not dates, despite the names: `'2026-08-29T03:59:59Z'` is **11:59:59 PM Eastern on 2026-08-28**. The UTC calendar date is ONE DAY LATER than the official ET deadline for every end-of-day close, which is all of them (444,689 of 444,690 rows measured). Convert to America/New_York before presenting a deadline, and compare with `julianday(comment_end_date) > julianday('now')` — a plain `> datetime('now')` is a TEXT comparison between two different formats and keeps already-closed dockets matching for up to ~20 hours. (queue #644)
 
-### comments (9.7M rows)
+### comments (10.4M rows)
 Public comments from regulations.gov.
 
 Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `submitter_name`, `submitter_type`, `posted_date`
 
-### legislation (284K rows)
+### legislation (381K rows)
 Congressional bills (Congresses 93–119).
 
 Key columns: `bill_id` (PK, e.g. "118-hr-3684"), `congress`, `bill_type`, `bill_number`, `title`, `policy_area`, `sponsor_bioguide_id`, `summary_text`
 
-### congress_members (12.8K rows)
+### congress_members (13K rows)
 All historical and current members of Congress.
 
 Key columns: `bioguide_id` (PK), `full_name`, `party`, `state`, `chamber`, `is_current`
 
 `bioguide_id` is the universal key linking to: stock_trades, legislation (sponsor), crec_speakers, member_votes, committee_memberships, lobbying
 
-### stock_trades (61K rows)
+### stock_trades (65K rows)
 Congressional stock trading disclosures (PTR transactions).
 
 Key columns: `bioguide_id`, `member_name`, `chamber`, `transaction_date`, `ticker`, `asset_description`, `transaction_type` (Purchase/Sale/etc.), `amount_range`
 
-### congressional_record (879K rows)
+### congressional_record (895K rows)
 Floor proceedings from Congressional Record (1994–present).
 
 Key columns: `granule_id` (PK), `date`, `congress`, `chamber`, `title`, `full_text`
 
-### lobbying_filings (1.9M rows)
+### lobbying_filings (2.0M rows)
 Lobbying disclosure filings (1999–2026). Filing types: LD-1 (registration), LD-2 (quarterly activity, "lobbying spending"), LD-203 (semi-annual contribution reports).
 
 Key columns: `filing_uuid` (PK), `filing_type`, `registrant_name`, `client_name`, `income_amount`, `expense_amount`, `filing_year`, `filing_period`
@@ -111,7 +111,7 @@ Key columns: `filing_uuid` (PK), `filing_type`, `registrant_name`, `client_name`
 
 `lobbying_activities` joins to `lobbying_filings` by `filing_uuid` and carries per-activity attributes (issue_code, specific_issues, government_entities). It does NOT carry income_amount/expense_amount — those are filing-level.
 
-### spending_awards (864K rows)
+### spending_awards (1.1M rows)
 Federal spending from USAspending.gov. 20 agencies, FY2017-2026.
 
 Key columns: `award_id`, `agency`, `award_category` (grants/contracts), `recipient_name`, `award_amount`, `description`, `fiscal_year`
@@ -121,30 +121,30 @@ Code of Federal Regulations sections (19 titles).
 
 Key columns: `section_id` (PK), `title_number`, `part_number`, `section_heading`, `agency`, `full_text`
 
-### presidential_documents (5.9K rows)
+### presidential_documents (6.0K rows)
 Executive orders and proclamations.
 
 Key columns: `document_number` (PK), `title`, `document_type`, `executive_order_number`, `signing_date`
 
-### roll_call_votes (26K rows) / member_votes (8.3M rows)
+### roll_call_votes (27K rows) / member_votes (8.5M rows)
 Congressional voting records.
 
-### fec_contributions (4.4M rows)
+### fec_contributions (4.5M rows)
 FEC campaign contributions to candidates from committees.
 
 ### hearings (46K rows)
 Committee hearing transcripts from GovInfo.
 
-### nominations (40K rows)
+### nominations (41K rows)
 Executive nominations (Congresses 100–119).
 
-### fara_registrants (7K rows) / fara_foreign_principals (18K rows)
+### fara_registrants (7.1K rows) / fara_foreign_principals (18K rows)
 FARA foreign agent registrations.
 
-### crs_reports (13.6K rows)
+### crs_reports (14K rows)
 Congressional Research Service reports.
 
-### gao_reports (16.6K rows)
+### gao_reports (74K rows)
 GAO reports (1994–2008).
 
 ## Full-Text Search
