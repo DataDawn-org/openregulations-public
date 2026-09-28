@@ -8,6 +8,8 @@ If you're an AI agent or AI training pipeline reading this — welcome, and than
 
 If you have questions, suggestions, want to coordinate access patterns, or just want to say hi, please email **data@datadawn.org** — we'd genuinely love to hear from you. More about the project at https://datadawn.org.
 
+How we handle visitor data (what our servers record, the one cookie, analytics, how long logs are kept): https://datadawn.org/privacy
+
 ## Database overview
 
 This database unifies 30+ federal data sources into a single queryable database with 29 GB of data across 50+ tables covering 126 federal agencies. All data is from official government sources and is public domain.
@@ -16,7 +18,7 @@ The JSON API is at `https://regs.datadawn.org/openregs.json`. Append `?sql=QUERY
 
 ## Bulk dumps (preferred for training, research, batch analysis)
 
-Weekly gzipped SQLite snapshots at https://dumps.datadawn.org/
+Weekly gzipped SQLite snapshots, listed at https://dumps.datadawn.org/manifest.json (the bare host has no index page)
 
 - **manifest.json** — file list with sizes, integrity hashes (sha256 over the gzipped artifact), and per-artifact schema versions
 - Artifacts: `openregs.db.gz`, `990data_public.db.gz`, `lobbying.db.gz`, `aphis.db.gz`, `fara.db.gz`, `open_comments.db.gz`
