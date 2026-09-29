@@ -101,7 +101,8 @@ Whatever the database held at build time — no additional filtering beyond what
 surfaces already apply. Two artifacts carry documented divergences from the served copy:
 `lobbying.db.gz` withholds entity-attribution columns, and `open_comments.db.gz` carries a
 `grain_note` in the manifest describing a mid-correction column. Read the manifest entry for the
-artifact you are using.
+artifact you are using. If your copy predates 2026-W37, read the 2026-W37 entry in the
+[dumps changelog](https://dumps.datadawn.org/CHANGELOG.md) before using `documents.comment_end_date`.
 
 `build_metadata` inside each database records when that database was built. Where a source has
 its own vintage (the IRS Business Master File, for instance), that vintage is recorded in its own
