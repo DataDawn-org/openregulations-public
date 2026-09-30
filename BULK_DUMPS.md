@@ -108,3 +108,8 @@ artifact you are using. If your copy predates 2026-W37, read the 2026-W37 entry 
 its own vintage (the IRS Business Master File, for instance), that vintage is recorded in its own
 table — `bmf_source_meta` — because a corpus build date and a source as-of date are different
 facts and conflating them is how a stale figure gets cited as current.
+
+`dump_uptake.jsonl`, in this repository, holds a weekly count of dump downloads (each row's
+`method` says what was counted). A week whose `qualifying_downloads` is `null`, marked
+`"measured": false`, was not measured — our counter failed that week — so leave it out of any
+total or average rather than reading it as zero.
