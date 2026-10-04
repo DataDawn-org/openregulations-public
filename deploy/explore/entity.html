@@ -358,10 +358,21 @@
             resultsDiv.innerHTML = '<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
             statusDiv.textContent = 'Searching across all datasets...';
 
+            // Each arm settles on its own (relay datadawn pink #1 item 4; search-surface inbox 2026-10-03, fix 1). With
+            // one Promise.all, a single arm cut by the 2 s page-SQL limit (decisions_log §286 (a)) rejected all nine,
+            // and the catch below blanked the page with err.message: Datasette's error HTML, the SQL included. A
+            // failed arm now yields no rows and is listed in armErrors; every section that answered still renders, and
+            // the failed ones get one plain sentence each. err.message is never shown.
+            const armErrors = [];
+            const settle = (label, p) => Promise.resolve(p).catch(e => {
+                armErrors.push({ label, tooSlow: /took too long/i.test(String((e && e.message) || '')) });
+                return [];
+            });
+
             try {
                 // Fire all queries in parallel — using FTS indexes for speed
                 const [lobbyingRaw, spendingRaw, trades, dockets, legislation, revdoor, orgComments, fecData, faraData] = await Promise.all([
-                    query(`
+                    settle('lobbying', query(`
                         WITH matched_filings AS (
                             SELECT DISTINCT la.filing_uuid
                             FROM lobbying_activities la
@@ -387,8 +398,8 @@
                         GROUP BY f.client_name
                         ORDER BY total_income DESC
                         LIMIT 25
-                    `),
-                    query(`
+                    `)),
+                    settle('federal spending', query(`
                         SELECT agency, recipient_name, award_category,
                             COUNT(*) AS award_count,
                             SUM(award_amount) AS total_amount,
@@ -399,8 +410,8 @@
                         GROUP BY agency, recipient_name, award_category
                         ORDER BY total_amount DESC
                         LIMIT 25
-                    `),
-                    query(`
+                    `)),
+                    settle('stock trades', query(`
                         SELECT st.ticker, st.bioguide_id, cm.full_name, cm.party,
                             st.transaction_date, st.transaction_type, st.amount_range,
                             st.asset_description, st.source_url
@@ -409,8 +420,8 @@
                         WHERE st.asset_description LIKE '%${qSafe}%' OR st.ticker LIKE '%${qSafe}%'
                         ORDER BY st.transaction_date DESC
                         LIMIT 50
-                    `),
-                    query(`
+                    `)),
+                    settle('regulations and dockets', query(`
                         SELECT d.id, d.agency_id, d.title, d.docket_type,
                             (SELECT COUNT(*) FROM comments WHERE docket_id = d.id) AS comment_count,
                             (SELECT COUNT(*) FROM documents WHERE docket_id = d.id) AS doc_count
@@ -426,8 +437,8 @@
                         )${dkArm})
                         ORDER BY ${dkRank}doc_count DESC
                         LIMIT 20
-                    `),
-                    query(`
+                    `)),
+                    settle('legislation', query(`
                         SELECT l.bill_id, l.congress, l.bill_type, l.bill_number, l.title,
                             l.policy_area, l.introduced_date, l.cosponsor_count,
                             cm.full_name AS sponsor_name, cm.party AS sponsor_party
@@ -436,8 +447,8 @@
                         WHERE l.rowid IN (SELECT rowid FROM legislation_fts WHERE legislation_fts MATCH '"${qFTS}"')
                         ORDER BY l.introduced_date DESC
                         LIMIT 20
-                    `),
-                    query(`
+                    `)),
+                    settle('revolving door', query(`
                         SELECT ll.lobbyist_name, ll.covered_position,
                             la.client_name, la.registrant_name, la.filing_year
                         FROM lobbying_lobbyists ll
@@ -446,8 +457,8 @@
                             AND la.rowid IN (SELECT rowid FROM lobbying_fts WHERE lobbying_fts MATCH '"${qFTS}"')
                         ORDER BY la.filing_year DESC
                         LIMIT 25
-                    `),
-                    (async () => {   // A.6 (§129/§130): either DB state, API text preferred, source labelled
+                    `)),
+                    settle('public comments', (async () => {   // A.6 (§129/§130): either DB state, API text preferred, source labelled
                         const T = textShape(await bulkTextAvailable());
                         return query(`
                         SELECT c.id, c.title, c.submitter_name, c.agency_id, c.docket_id, c.posted_date,
@@ -458,8 +469,8 @@
                           AND ${T.present}
                         ORDER BY ${T.text} IS NOT NULL DESC, c.posted_date DESC
                         LIMIT 15
-                    `); })(),
-                    query(`
+                    `); })()),
+                    settle('campaign finance', query(`
                         -- Employer-aggregate lookup offline until the FEC employer
                         -- rebuild ships (2026-07 data-quality + privacy pass).
                         -- Restore: replace WHERE 0 with the employer name lookup.
@@ -472,8 +483,8 @@
                         FROM fec_employer_totals
                         WHERE 0
                         LIMIT 15
-                    `),
-                    query(`
+                    `)),
+                    settle('foreign agents (FARA)', query(`
                         SELECT r.registration_number, r.name, r.termination_date,
                             (SELECT GROUP_CONCAT(DISTINCT fp.country) FROM fara_foreign_principals fp WHERE fp.registration_number = r.registration_number) AS countries,
                             (SELECT COUNT(*) FROM fara_foreign_principals fp WHERE fp.registration_number = r.registration_number) AS principal_count,
@@ -482,7 +493,7 @@
                         WHERE r.rowid IN (SELECT rowid FROM fara_registrants_fts WHERE fara_registrants_fts MATCH '"${qFTS}"')
                         ORDER BY r.termination_date IS NOT NULL, principal_count DESC
                         LIMIT 15
-                    `)
+                    `))
                 ]);
 
                 const lobbying = mergeLobbying(lobbyingRaw);
@@ -491,8 +502,22 @@
                 const totalHits = lobbying.length + spending.length + trades.length + dockets.length + legislation.length + revdoor.length + orgComments.length + fecData.length + faraData.length;
                 statusDiv.innerHTML = `Found data in <span style="color:var(--dawn-gold);">${[lobbying.length && 'lobbying', spending.length && 'spending', fecData.length && 'campaign finance', faraData.length && 'foreign agents', trades.length && 'trades', dockets.length && 'regulations', orgComments.length && 'comments', legislation.length && 'legislation', revdoor.length && 'revolving door'].filter(Boolean).join(', ')}</span>`;
 
+                // One plain sentence per kind of failure (fix 1). A section cut by the time limit says the search was
+                // too broad; any other failure says it could not load. Never err.message (Datasette's error carries
+                // HTML and the SQL).
+                const tooSlow = armErrors.filter(a => a.tooSlow).map(a => a.label);
+                const otherFail = armErrors.filter(a => !a.tooSlow).map(a => a.label);
+                let failNote = '';
+                if (tooSlow.length) failNote += `<div class="hint">This search was too broad to finish in time for ${esc(tooSlow.join(', '))} — add another word to narrow it.</div>`;
+                if (otherFail.length) failNote += `<div class="hint">Results for ${esc(otherFail.join(', '))} could not load right now — try again in a moment.</div>`;
+
                 if (totalHits === 0) {
-                    resultsDiv.innerHTML = `
+                    // A search whose sections failed is not an empty search: say what failed, not "No records found".
+                    resultsDiv.innerHTML = armErrors.length ? `
+                        <div class="empty-state">
+                            <div class="empty-icon">&#9888;</div>
+                            ${failNote}
+                        </div>` : `
                         <div class="empty-state">
                             <div class="empty-icon">&empty;</div>
                             <p>No records found for "${esc(q)}"</p>
@@ -501,7 +526,7 @@
                     return;
                 }
 
-                let html = '';
+                let html = failNote ? `<div class="empty-state" role="status" style="padding:0.5rem 0 1rem;">${failNote}</div>` : '';
 
                 // === LOBBYING ===
                 if (lobbying.length > 0) {
@@ -753,11 +778,14 @@
                 resultsDiv.innerHTML = html;
 
             } catch (err) {
+                // Each arm settles on its own (above), so this is reached only by a fault in rendering. Plain text;
+                // the detail goes to the console, never to the page.
+                console.error(err);
                 resultsDiv.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-icon">&#9888;</div>
                         <p>Error searching</p>
-                        <div class="hint">${esc(err.message)}</div>
+                        <div class="hint">Something went wrong while showing these results — try again in a moment.</div>
                     </div>`;
             }
         }

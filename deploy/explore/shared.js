@@ -123,8 +123,13 @@ async function query(sql, retries = 2) {
         return data.rows || [];
     } catch (e) {
         clearTimeout(timeoutId);
-        if (retries > 0 && (e.name === 'AbortError' || e.message.includes('SQL query took too long'))) {
-            console.log('Query timed out, retrying (cache should be warm now)...');
+        // A query cut by the time limit is NOT re-sent (relay datadawn pink #1 item 4; search-surface inbox
+        // 2026-10-03, fix 2). Page SQL from non-exempt clients stops at a forced 2 s (decisions_log §286 (a)), so the
+        // same query stops again, and each retry holds one of the host's two page-SQL slots (§288) for another 2 s
+        // while the page's other queries, and other readers', wait. The AbortError retry stays: it covers this
+        // helper's own 15 s client-side abort.
+        if (retries > 0 && e.name === 'AbortError') {
+            console.log('Query aborted after 15 s, retrying...');
             return query(sql, retries - 1);
         }
         throw e;
