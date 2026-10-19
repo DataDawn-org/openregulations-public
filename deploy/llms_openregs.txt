@@ -63,7 +63,7 @@ Federal Register documents (1994–present). Rules, proposed rules, notices, pre
 
 Key columns: `document_number` (PK), `title`, `type` (Rule/Proposed Rule/Notice/Presidential Document), `abstract`, `publication_date`, `agency_names`, `html_url`, `pdf_url`
 
-### dockets (278K rows)
+### dockets (279K rows)
 Regulations.gov dockets.
 
 Key columns: `id` (PK, e.g. "EPA-HQ-OAR-2021-0208"), `agency_id`, `title`, `docket_type` (Rulemaking/Nonrulemaking)
@@ -80,7 +80,7 @@ Public comments from regulations.gov.
 
 Key columns: `id` (PK), `agency_id`, `docket_id`, `title`, `submitter_name`, `submitter_type`, `posted_date`
 
-### legislation (381K rows)
+### legislation (382K rows)
 Congressional bills (Congresses 93–119).
 
 Key columns: `bill_id` (PK, e.g. "118-hr-3684"), `congress`, `bill_type`, `bill_number`, `title`, `policy_area`, `sponsor_bioguide_id`, `summary_text`
