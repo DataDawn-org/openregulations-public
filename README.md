@@ -14,63 +14,63 @@ Built by a human, [Claude](https://www.anthropic.com/claude) (Anthropic), and DJ
 <!-- COUNTS-START -->
 | Dataset | Records | Source |
 |---------|---------|--------|
-| Federal Register documents | 1,008,344 | Federal Register API |
-| Regulatory dockets | 277,751 | Regulations.gov API + derived from documents/comments |
-| Regulatory documents | 1,728,051 | Regulations.gov API |
-| Public comment headers | 10,398,253 | Regulations.gov API |
-| Comment full details | 492,695 | Regulations.gov API (4.7% of headers, in progress) |
-| Presidential documents | 5,996 | Federal Register API |
-| Congressional legislation | 380,808 | GovInfo BILLSTATUS + Congress.gov API |
-| Legislation actions | 2,328,275 | GovInfo BILLSTATUS |
-| Legislation subjects | 3,036,974 | GovInfo BILLSTATUS |
-| Legislation cosponsors | 4,090,025 | GovInfo BILLSTATUS |
-| CFR regulatory sections | 123,399 | GovInfo eCFR bulk XML |
-| Congressional Record entries | 894,631 | GovInfo CREC packages |
-| CREC speakers (bioguide-linked) | 956,466 | Derived from MODS XML |
-| CREC bill references | 1,596,176 | Derived from MODS XML |
-| Roll call votes | 26,874 | Congress.gov API |
-| Member vote records | 8,472,598 | Congress.gov API |
+| Federal Register documents | 1,010,458 | Federal Register API |
+| Regulatory dockets | 278,626 | Regulations.gov API + derived from documents/comments |
+| Regulatory documents | 1,731,639 | Regulations.gov API |
+| Public comment headers | 26,311,679 | Regulations.gov API |
+| Comment full details | 497,695 | Regulations.gov API (in progress) |
+| Presidential documents | 6,011 | Federal Register API |
+| Congressional legislation | 381,542 | GovInfo BILLSTATUS + Congress.gov API |
+| Legislation actions | 2,330,290 | GovInfo BILLSTATUS |
+| Legislation subjects | 3,036,983 | GovInfo BILLSTATUS |
+| Legislation cosponsors | 4,092,630 | GovInfo BILLSTATUS |
+| CFR regulatory sections | 123,369 | GovInfo eCFR bulk XML |
+| Congressional Record entries | 896,182 | GovInfo CREC packages |
+| CREC speakers (bioguide-linked) | 957,387 | Derived from MODS XML |
+| CREC bill references | 1,599,955 | Derived from MODS XML |
+| Roll call votes | 26,892 | Congress.gov API |
+| Member vote records | 8,474,398 | Congress.gov API |
 | Congressional committees | 233 | congress-legislators GitHub |
 | Committee memberships | 3,908 | congress-legislators GitHub |
 | Congress members | 12,770 | congress-legislators GitHub |
-| Stock trading disclosures | 64,842 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
-| Lobbying filings | 1,964,121 | Senate LDA API |
-| Lobbying lobbyists | 5,196,011 | Senate LDA API |
-| Lobbying activities | 4,180,456 | Senate LDA API |
-| Lobbying contributions | 3,882,882 | Senate LDA API |
-| FARA registrants | 7,086 | FARA.gov |
-| FARA foreign principals | 17,738 | FARA.gov |
-| FARA registrant documents | 153,954 | FARA.gov |
-| FARA short forms | 44,642 | FARA.gov |
-| FEC candidates | 65,792 | FEC bulk data |
-| FEC committees | 156,883 | FEC bulk data |
-| FEC contributions | 4,489,134 | FEC bulk data |
-| FEC operating expenditures | 16,027,005 | FEC bulk data |
-| FEC independent expenditures | 678,750 | FEC bulk data |
-| FEC PAC summary | 99,676 | FEC bulk data |
-| Federal spending awards | 1,075,484 | USAspending.gov API |
+| Stock trading disclosures | 65,194 | Senate eFD + House FD PTR PDFs (gov). PTR transactions only |
+| Lobbying filings | 1,970,293 | Senate LDA API |
+| Lobbying lobbyists | 5,336,827 | Senate LDA API |
+| Lobbying activities | 4,294,346 | Senate LDA API |
+| Lobbying contributions | 3,986,538 | Senate LDA API |
+| FARA registrants | 7,092 | FARA.gov |
+| FARA foreign principals | 17,754 | FARA.gov |
+| FARA registrant documents | 154,407 | FARA.gov |
+| FARA short forms | 44,708 | FARA.gov |
+| FEC candidates | 65,978 | FEC bulk data |
+| FEC committees | 157,082 | FEC bulk data |
+| FEC contributions | 4,499,096 | FEC bulk data |
+| FEC operating expenditures | 16,061,206 | FEC bulk data |
+| FEC independent expenditures | 693,142 | FEC bulk data |
+| FEC PAC summary | 99,865 | FEC bulk data |
+| Federal spending awards | 1,104,565 | USAspending.gov API |
 | FR agencies | 448 | Federal Register API |
 | APHIS facilities | 15,119 | APHIS Salesforce API |
 | APHIS inspections | 110,400 | APHIS Salesforce API |
 | Committee hearings | 46,177 | GovInfo CHRG collection |
 | Hearing witnesses | 109,242 | GovInfo CHRG collection |
 | Hearing member attendance | 1,244,920 | GovInfo CHRG collection |
-| CRS reports | 14,130 | Congress.gov API |
-| CRS report–bill cross-references | 139,611 | Congress.gov API |
-| Executive nominations | 40,797 | Congress.gov API |
-| Nomination actions | 190,897 | Congress.gov API |
+| CRS reports | 14,188 | Congress.gov API |
+| CRS report–bill cross-references | 139,940 | Congress.gov API |
+| Executive nominations | 40,876 | Congress.gov API |
+| Nomination actions | 190,986 | Congress.gov API |
 | Treaties | 778 | Congress.gov API |
 | Treaty actions | 4,287 | Congress.gov API |
-| GAO reports | 73,914 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
-| OIRA regulatory reviews | 48,916 | Reginfo.gov |
-| OIRA review meetings | 9,203 | Reginfo.gov |
-| OIRA meeting attendees | 93,233 | Reginfo.gov |
-| IG reports | 35,918 | oversight.gov |
-| IG recommendations | 13,101 | oversight.gov |
+| GAO reports | 73,991 | GovInfo GAOREPORTS + gao.gov direct (1989–present) |
+| OIRA regulatory reviews | 49,021 | Reginfo.gov |
+| OIRA review meetings | 9,307 | Reginfo.gov |
+| OIRA meeting attendees | 93,573 | Reginfo.gov |
+| IG reports | 36,160 | oversight.gov |
+| IG recommendations | 13,540 | oversight.gov |
 | Earmarks | 70,826 | House/Senate Appropriations |
 | Lobbying bills (parsed) | 3,483,171 | Derived from lobbying specific_issues text |
 | CBO cost estimates | ~17,200 | Congress.gov API (from bill data) |
-| FR ↔ Regs.gov cross-references | 397,435 | Derived |
+| FR ↔ Regs.gov cross-references | 397,613 | Derived |
 <!-- COUNTS-END -->
 
 **Total**: ~120 million rows across 188 tables.
