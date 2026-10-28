@@ -17,18 +17,28 @@ Source: GovInfo API (api.govinfo.gov)
   - Collection listing: /collections/CHRG
   - Per-package MODS: /packages/{packageId}/mods
 
-No API key required (DEMO_KEY works). ~46,000 hearings total.
+API key: GOVINFO_API_KEY from the environment, else govinfo_api_key in scripts/config.json, sent only in the
+X-Api-Key header. With neither, the script refuses before sending anything: no DEMO_KEY fallback (owner queue
+298; decisions_log §699). ~46,000 hearings total.
+
+Default runs list EVERY package (about 490 listing requests) and download only those not on disk. govinfo's
+/published/{date} listing filters by ISSUE date, and govinfo publishes old hearings late, often decades after
+issue, so no issue-date window is complete: on 2026-10-26 a full listing found 2,537 packages missing from disk,
+most published Sept-Oct 2026 (owner queue 808; the drafter's call B, relay datadawn green #3). Before 2026-10-26
+the run passed the newest lastModified TIME as the issue date and skipped even recent packages. The state keeps
+max_date_issued as a record only. Test: selftest_16_hearings_key_watermark.py.
 
 Usage:
-    python3 16_committee_hearings.py                    # incremental (new since last run)
-    python3 16_committee_hearings.py --full             # download all ~46K hearings
-    python3 16_committee_hearings.py --since 2020-01-01 # from a specific date
+    python3 16_committee_hearings.py                    # list everything, download what is missing
+    python3 16_committee_hearings.py --full             # the same listing (kept for existing callers)
+    python3 16_committee_hearings.py --since 2020-01-01 # issued on or after a specific date
     python3 16_committee_hearings.py --congress 118     # specific congress only
 """
 
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -39,14 +49,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import feed_hc  # noqa: E402  (the feed's health check: decisions_log §591, §699)
+
 # === Configuration ===
 GOVINFO_API = "https://api.govinfo.gov"
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = PROJECT_DIR / "scripts" / "config.json"
 
-# Load API key from config
-_config = json.loads(CONFIG_FILE.read_text())
-API_KEY = _config.get("govinfo_api_key", "DEMO_KEY")
 OUTPUT_DIR = PROJECT_DIR / "hearings"
 LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "hearings_state.json"
@@ -73,9 +83,26 @@ except Exception:
     pass
 
 
+# === API key ===
+def load_api_key():
+    """GOVINFO_API_KEY from the environment, else govinfo_api_key in config.json. Neither (or the literal
+    DEMO_KEY): refuse with exit 2 before any request is sent (owner queue 298; decisions_log §699)."""
+    key = os.environ.get("GOVINFO_API_KEY", "").strip()
+    if not key and CONFIG_FILE.exists():
+        try:
+            key = (json.loads(CONFIG_FILE.read_text()).get("govinfo_api_key") or "").strip()
+        except (OSError, ValueError) as e:
+            log.error(f"cannot read {CONFIG_FILE}: {type(e).__name__}")
+    if not key or key == "DEMO_KEY":
+        log.error("REFUSED: no govinfo API key (GOVINFO_API_KEY in the environment, or govinfo_api_key in "
+                  "scripts/config.json); nothing sent. DEMO_KEY is not a fallback (owner queue 298).")
+        sys.exit(2)
+    return key
+
+
 # === HTTP Session ===
-def create_session():
-    """Create requests session with retry logic."""
+def create_session(api_key):
+    """Create requests session with retry logic; the key travels only in the X-Api-Key header."""
     session = requests.Session()
     retries = Retry(
         total=5, backoff_factor=2,
@@ -83,7 +110,8 @@ def create_session():
         respect_retry_after_header=True,
     )
     session.mount("https://", HTTPAdapter(max_retries=retries, pool_maxsize=4))
-    session.headers.update({"User-Agent": "OpenRegs/1.0 (committee hearings project)"})
+    session.headers.update({"User-Agent": "OpenRegs/1.0 (committee hearings project)",
+                            "X-Api-Key": api_key})
     return session
 
 
@@ -98,6 +126,19 @@ def save_state(state):
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
+def newest_issued_on_disk():
+    """Newest date_issued among the hearing files already downloaded ('' if none)."""
+    newest = ""
+    for f in OUTPUT_DIR.glob("*.json"):
+        try:
+            d = (json.loads(f.read_text()).get("date_issued") or "")[:10]
+        except (OSError, ValueError):
+            continue
+        if d > newest:
+            newest = d
+    return newest
+
+
 # === GovInfo API ===
 def fetch_package_ids(session, since_dt, limit=None):
     """Fetch all CHRG package IDs using the published endpoint.
@@ -108,13 +149,13 @@ def fetch_package_ids(session, since_dt, limit=None):
     package_ids = []
     seen_ids = set()
 
-    # Convert since_dt to date for the published endpoint
+    # Convert since_dt to date for the published endpoint (which filters by dateIssued)
     since_date = since_dt.split("T")[0]
-    log.info(f"Fetching CHRG package list (published since {since_date})...")
+    log.info(f"Fetching CHRG package list (issued since {since_date})...")
 
     url = (
         f"{GOVINFO_API}/published/{since_date}"
-        f"?collection=CHRG&pageSize={PAGE_SIZE}&offsetMark=*&api_key={API_KEY}"
+        f"?collection=CHRG&pageSize={PAGE_SIZE}&offsetMark=*"
     )
 
     while url:
@@ -146,7 +187,7 @@ def fetch_package_ids(session, since_dt, limit=None):
         # Cursor-based pagination — nextPage URL includes the offsetMark
         next_page = data.get("nextPage")
         if next_page:
-            url = f"{next_page}&api_key={API_KEY}"
+            url = next_page
         else:
             url = None
 
@@ -278,7 +319,7 @@ def parse_mods(xml_text):
 
 def download_hearing(session, package_id):
     """Download and parse MODS XML for a single hearing."""
-    url = f"{GOVINFO_API}/packages/{package_id}/mods?api_key={API_KEY}"
+    url = f"{GOVINFO_API}/packages/{package_id}/mods"
     resp = session.get(url, timeout=30)
     resp.raise_for_status()
 
@@ -373,22 +414,34 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="List packages without downloading")
     args = parser.parse_args()
 
+    session = create_session(load_api_key())
     state = load_state()
-    session = create_session()
 
-    # Determine start date
-    if args.full:
-        since_dt = "1900-01-01T00:00:00Z"
-    elif args.since:
+    # Newest issue date held: a record only (the state's, or on the first run after 2026-10-26, the newest on disk).
+    watermark = state.get("max_date_issued") or newest_issued_on_disk()
+
+    # Start date (an ISSUE date: /published/ filters by dateIssued). The default lists everything, because old
+    # hearings are published late; --since narrows a hand run.
+    if args.since and not args.full:
         since_dt = f"{args.since}T00:00:00Z"
     else:
-        since_dt = state["last_modified"]
+        since_dt = "1900-01-01T00:00:00Z"
 
     log.info(f"=== Committee Hearings Download ===")
     log.info(f"Since: {since_dt}")
 
+    # The feed's health check (feed_hc.py; decisions_log §591, §699): only a complete run speaks for the feed, so a
+    # hand run narrowed by --since, --limit or --congress, or a dry run, does not ping.
+    scheduled = not (args.dry_run or args.limit or args.congress or (args.since and not args.full))
+
     # Fetch package list
-    package_ids = fetch_package_ids(session, since_dt, limit=args.limit)
+    try:
+        package_ids = fetch_package_ids(session, since_dt, limit=args.limit)
+    except Exception:
+        if scheduled:
+            feed_hc.report("hearings", {"listed": None, "errors": 1, "note": "the govinfo listing raised"},
+                           log=log.info)
+        raise
 
     if args.congress:
         # Filter by congress — package IDs contain congress number (e.g., CHRG-118shrg12345)
@@ -448,13 +501,18 @@ def main():
 
             downloaded += 1
 
-            # Track latest modification time
+            # Track latest modification time (a record only; the listing never starts from it)
             if pkg["lastModified"] > max_modified:
                 max_modified = pkg["lastModified"]
+            # ... and the newest issue date, the listing's watermark
+            issued = (hearing.get("date_issued") or "")[:10]
+            if issued > watermark:
+                watermark = issued
 
             if downloaded % 50 == 0:
                 log.info(f"  Progress: {downloaded}/{len(to_download)} downloaded, {errors} errors")
                 state["last_modified"] = max_modified
+                state["max_date_issued"] = watermark
                 state["packages_downloaded"] = len(existing) + downloaded
                 save_state(state)
 
@@ -472,6 +530,7 @@ def main():
 
     # Final state save
     state["last_modified"] = max_modified
+    state["max_date_issued"] = watermark
     state["packages_downloaded"] = len(existing) + downloaded
     save_state(state)
 
@@ -479,6 +538,12 @@ def main():
     log.info(f"Downloaded: {downloaded}")
     log.info(f"Errors: {errors}")
     log.info(f"Total on disk: {len(existing) + downloaded}")
+
+    if scheduled:
+        feed_hc.report("hearings", {"listed": len(package_ids), "errors": errors, "added": downloaded,
+                                    "note": f"{len(existing) + downloaded} on disk"}, log=log.info)
+    else:
+        log.info("feed_hc: not pinged (a hand run narrowed by --since, --limit or --congress)")
 
 
 if __name__ == "__main__":
