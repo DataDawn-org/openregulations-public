@@ -9,7 +9,9 @@ Extracts: title, date, report number, abstract, subjects, document type,
 legal references (USC, public laws, statutes at large), PDF/HTML URLs.
 
 Source: GovInfo API (api.govinfo.gov), collection GAOREPORTS
-Auth: GovInfo API key (in config.json), or DEMO_KEY
+Auth: GOVINFO_API_KEY from the environment, else govinfo_api_key in scripts/config.json, sent only in the
+X-Api-Key header. With neither, the script refuses before sending anything: no DEMO_KEY fallback (owner queue
+298, 809; 16_committee_hearings.py's pattern). Test: selftest_19_gao_key.py.
 
 Usage:
     python3 19_gao_reports.py                    # incremental
@@ -21,6 +23,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 import xml.etree.ElementTree as ET
@@ -35,8 +38,6 @@ GOVINFO_API = "https://api.govinfo.gov"
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 CONFIG_FILE = PROJECT_DIR / "scripts" / "config.json"
 
-_config = json.loads(CONFIG_FILE.read_text())
-API_KEY = _config.get("govinfo_api_key", "DEMO_KEY")
 OUTPUT_DIR = PROJECT_DIR / "gao_reports"
 LOG_DIR = PROJECT_DIR / "logs"
 STATE_FILE = LOG_DIR / "gao_state.json"
@@ -63,8 +64,26 @@ except Exception:
     pass
 
 
+# === API key ===
+def load_api_key():
+    """GOVINFO_API_KEY from the environment, else govinfo_api_key in config.json. Neither (or the literal
+    DEMO_KEY): refuse with exit 2 before any request is sent (owner queue 298, 809)."""
+    key = os.environ.get("GOVINFO_API_KEY", "").strip()
+    if not key and CONFIG_FILE.exists():
+        try:
+            key = (json.loads(CONFIG_FILE.read_text()).get("govinfo_api_key") or "").strip()
+        except (OSError, ValueError) as e:
+            log.error(f"cannot read {CONFIG_FILE}: {type(e).__name__}")
+    if not key or key == "DEMO_KEY":
+        log.error("REFUSED: no govinfo API key (GOVINFO_API_KEY in the environment, or govinfo_api_key in "
+                  "scripts/config.json); nothing sent. DEMO_KEY is not a fallback (owner queue 298).")
+        sys.exit(2)
+    return key
+
+
 # === HTTP Session ===
-def create_session():
+def create_session(api_key):
+    """Requests session with retry logic; the key travels only in the X-Api-Key header."""
     session = requests.Session()
     retries = Retry(
         total=5, backoff_factor=2,
@@ -72,7 +91,7 @@ def create_session():
         respect_retry_after_header=True,
     )
     session.mount("https://", HTTPAdapter(max_retries=retries, pool_maxsize=4))
-    session.headers.update({"User-Agent": "OpenRegs/1.0 (GAO reports)"})
+    session.headers.update({"User-Agent": "OpenRegs/1.0 (GAO reports)", "X-Api-Key": api_key})
     return session
 
 
@@ -97,7 +116,7 @@ def fetch_package_ids(session, since_date, limit=None):
 
     url = (
         f"{GOVINFO_API}/published/{since_date}"
-        f"?collection=GAOREPORTS&pageSize={PAGE_SIZE}&offsetMark=*&api_key={API_KEY}"
+        f"?collection=GAOREPORTS&pageSize={PAGE_SIZE}&offsetMark=*"
     )
 
     while url:
@@ -128,7 +147,7 @@ def fetch_package_ids(session, since_date, limit=None):
 
         next_page = data.get("nextPage")
         if next_page:
-            url = f"{next_page}&api_key={API_KEY}"
+            url = next_page
         else:
             url = None
 
@@ -264,7 +283,7 @@ def parse_mods(xml_text):
 
 def download_report(session, package_id):
     """Download and parse MODS XML for a single GAO report."""
-    url = f"{GOVINFO_API}/packages/{package_id}/mods?api_key={API_KEY}"
+    url = f"{GOVINFO_API}/packages/{package_id}/mods"
     resp = session.get(url, timeout=30)
     resp.raise_for_status()
 
@@ -281,8 +300,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="List without downloading")
     args = parser.parse_args()
 
+    session = create_session(load_api_key())
     state = load_state()
-    session = create_session()
 
     since_date = "1900-01-01" if args.full else state["last_modified"].split("T")[0]
 
