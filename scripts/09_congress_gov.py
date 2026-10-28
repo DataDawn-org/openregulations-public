@@ -23,6 +23,7 @@ run with --reset to re-download bills that were previously skipped.
 
 import argparse
 import json
+import os
 import logging
 import sys
 import time
@@ -34,6 +35,9 @@ from pathlib import Path
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import feed_hc  # noqa: E402  (the bills feed's health check: decisions_log §591, §699)
 
 # === Configuration ===
 API_BASE = "https://api.congress.gov/v3"
@@ -53,6 +57,10 @@ BILL_TYPES = ["hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", "sres"]
 
 # Current congress number (119th: 2025-2027)
 CURRENT_CONGRESS = 119
+
+# The bills feed's health check tolerates this many fetch failures a run: Congress.gov lists a few current-Congress
+# bills that have no BILLSTATUS file on govinfo, and they fail every run (6 on 2026-10-27: 119-hr-6, 9, 11, 13, 16, 19).
+BILLS_ALLOWED_ERRORS = 25
 
 # GovInfo BILLSTATUS XML only available from congress 108+
 # Older congresses use Congress.gov API v3 JSON (rate-limited)
@@ -118,8 +126,28 @@ def load_state():
 
 def save_state(state):
     """Save download progress state."""
-    with open(STATE_FILE, "w") as f:
+    # Atomic (queue #403): plain "w" truncates in place, so a crash mid-write
+    # leaves partial JSON and the unguarded json.load() above then raises on
+    # EVERY subsequent run -- the script dies, and per the pipeline contract a
+    # download-script failure logs without aborting, so this source silently
+    # stops updating. That is the decisions_log §23 staleness shape. tmp+replace
+    # matches the pattern already used by 03_regs_gov_comments and the 990
+    # backfills; this file was simply inconsistent with it.
+    _tmp = str(STATE_FILE) + ".tmp"
+    with open(_tmp, "w") as f:
         json.dump(state, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(_tmp, STATE_FILE)
+
+
+def held_update_date(detail_file):
+    """updateDate (YYYY-MM-DD) of a bill's detail file on disk; '' if missing or unreadable."""
+    try:
+        with open(detail_file) as f:
+            return (json.load(f).get("updateDate") or "")[:10]
+    except (OSError, ValueError):
+        return ""
 
 
 def api_get(session, url, params=None):
@@ -311,7 +339,10 @@ def download_single_billstatus(bulk_session, congress, bill_type, number):
         if resp.status_code == 404:
             return None
         resp.raise_for_status()
-        return parse_billstatus_xml(resp.text)
+        # Parse from bytes: govinfo serves text/xml without charset, so
+        # resp.text decodes ISO-8859-1 and a BOM'd document mojibakes into
+        # ParseError (#253/#256). ET handles BOM + encoding decl on bytes.
+        return parse_billstatus_xml(resp.content)
     except Exception as e:
         log.error(f"Failed to download BILLSTATUS-{congress}{bill_type}{number}: {e}")
         return None
@@ -486,13 +517,29 @@ def download_bill_via_api(api_session, congress, bill_type, number):
 
 # === Phase 3: Orchestrate download ===
 
-def download_congress(api_session, bulk_session, congress, state):
-    """Download all bills for a congress."""
+def download_congress(api_session, bulk_session, congress, state, facts=None):
+    """Download all bills for a congress. FACTS (a dict, current Congress only) collects the run's own counts for
+    the bills feed's health check: listed, errors, behind (feed_hc.py; decisions_log §591, §699)."""
     congress_dir = OUTPUT_DIR / f"congress_{congress}"
     congress_dir.mkdir(parents=True, exist_ok=True)
 
+    # Bills are introduced continuously within the current Congress, and
+    # BILLSTATUS XML for existing bills back-fills as actions are recorded.
+    # Skip at congress-level only for prior Congresses (immutable once the
+    # session ends); for the current Congress always re-discover bills —
+    # the per-bill completed_bills set still prevents re-downloading data
+    # we already have.
+    #
+    # Bug history: prior to 2026-05-02 the congress-level skip fired for the
+    # current Congress as soon as the first run marked it complete, and every
+    # subsequent Saturday skipped Congress.gov entirely. Congress 119 got
+    # marked complete on March 3 and legislation accumulated 60 days of
+    # staleness with zero pulled. Same root cause as the 2026-04-25 FR
+    # staleness incident — see bestpractices/incident_log.md.
+    is_current_congress = (congress == CURRENT_CONGRESS)
+
     congress_key = str(congress)
-    if congress_key in state.get("completed_congresses", []):
+    if congress_key in state.get("completed_congresses", []) and not is_current_congress:
         log.info(f"Congress {congress} already completed, skipping")
         return 0
 
@@ -501,14 +548,21 @@ def download_congress(api_session, bulk_session, congress, state):
 
     total_relevant = 0
     total_checked = 0
+    # Fetch failures this run (any class: 404/5xx/timeout/parse/degenerate).
+    # Nonzero blocks the congress-complete marking below — an unmarked bill
+    # behind a completed-congress skip would never be retried (#257).
+    fetch_failures = 0
     _congress_start = time.time()
 
     for bill_type in BILL_TYPES:
         log.info(f"Processing {bill_type.upper()} bills for Congress {congress}...")
 
-        # Phase 1: Get bill listing from Congress.gov API (or use cached)
+        # Phase 1: Get bill listing from Congress.gov API (or use cached).
+        # For the current Congress, always refresh the list — new bills are
+        # introduced continuously and a stale cached list would silently miss
+        # them. For prior Congresses the list is immutable, so reuse the cache.
         list_file = congress_dir / f"{bill_type}_list.json"
-        if list_file.exists():
+        if list_file.exists() and not is_current_congress:
             with open(list_file) as f:
                 bills = json.load(f)
             log.info(f"  Loaded cached list: {len(bills)} {bill_type.upper()} bills")
@@ -518,19 +572,36 @@ def download_congress(api_session, bulk_session, congress, state):
                 with open(list_file, "w") as f:
                     json.dump(bills, f, indent=2)
             log.info(f"  Listed {len(bills)} {bill_type.upper()} bills from API")
+        if facts is not None:
+            facts["listed"] = facts.get("listed", 0) + len(bills)
 
         if not bills:
             continue
 
         # Phase 2: Download bill details
-        # Filter to bills not yet completed
+        # Bills not yet completed, plus (current Congress) completed bills whose Congress.gov
+        # list updateDate is newer than the copy held: the re-fetch rule (owner queue 311/328,
+        # decisions_log §699). Without it a bill was downloaded once, so its later actions and
+        # CBO estimates never arrived (10-27: 1,902 of 19,764 119th bills served stale).
+        # bill_update_dates holds each copy's own updateDate, seeded once from the files on
+        # disk; a re-fetched copy still older than the list (govinfo's BILLSTATUS lags for
+        # some bills) is simply retried next run. Test: selftest_09_bill_refetch.py.
         completed = set(state["completed_bills"][congress_key])
+        held_dates = state.setdefault("bill_update_dates", {}).setdefault(congress_key, {})
+        listed_dates = {}
         pending = []
         for bill in bills:
             number = bill.get("number")
             bill_id = f"{congress}-{bill_type}-{number}"
             if bill_id not in completed:
                 pending.append((bill_type, number, bill_id))
+            elif is_current_congress:
+                listed = (bill.get("updateDate") or "")[:10]
+                if bill_id not in held_dates:
+                    held_dates[bill_id] = held_update_date(congress_dir / f"{bill_type}_{number}.json")
+                if listed and listed > held_dates[bill_id]:
+                    pending.append((bill_type, number, bill_id))
+                    listed_dates[bill_id] = listed
 
         if not pending:
             log.info(f"  All {len(bills)} {bill_type.upper()} bills already processed")
@@ -538,7 +609,9 @@ def download_congress(api_session, bulk_session, congress, state):
 
         use_api = congress < MIN_BILLSTATUS_CONGRESS
         method = "Congress.gov API" if use_api else "BILLSTATUS XML"
-        log.info(f"  Downloading {len(pending)} bills via {method} ({len(bills) - len(pending)} cached)...")
+        log.info(f"  Downloading {len(pending)} bills via {method} ({len(bills) - len(pending)} cached; "
+                 f"{len(listed_dates)} of them re-fetched as updated on Congress.gov)...")
+        still_behind = 0
 
         type_relevant = 0
         batch_completed = []
@@ -550,18 +623,27 @@ def download_congress(api_session, bulk_session, congress, state):
                     parsed = download_bill_via_api(api_session, congress, bt, num)
                 except Exception as e:
                     log.error(f"  Error processing {bid}: {e}")
-                    batch_completed.append(bid)
+                    fetch_failures += 1
                     total_checked += 1
                     continue
 
-                if parsed:
+                # Never mark a bill complete on a failed or degenerate fetch —
+                # marked-complete is never retried, so a transient 404 (the
+                # govinfo publish lag) or an empty-<bill/> serve would be a
+                # permanent silent loss (#257). Storage and marking gate
+                # together: a rejected fetch leaves no file.
+                if parsed and parsed.get("number"):
                     detail_file = congress_dir / f"{bt}_{num}.json"
                     with open(detail_file, "w") as f:
                         json.dump(parsed, f, indent=2)
                     type_relevant += 1
                     total_relevant += 1
-
-                batch_completed.append(bid)
+                    held_dates[bid] = (parsed.get("updateDate") or "")[:10]
+                    if bid not in completed:
+                        batch_completed.append(bid)
+                else:
+                    fetch_failures += 1
+                    log.warning(f"  {bid}: fetch failed or degenerate — not marked, will retry")
                 total_checked += 1
 
                 if (i + 1) % 100 == 0:
@@ -586,17 +668,25 @@ def download_congress(api_session, bulk_session, congress, state):
                         parsed = future.result()
                     except Exception as e:
                         log.error(f"  Error processing {bid}: {e}")
-                        batch_completed.append(bid)
+                        fetch_failures += 1
                         continue
 
-                    if parsed:
+                    # Same gate as the API path: never mark on a failed or
+                    # degenerate fetch; storage and marking gate together (#257).
+                    if parsed and parsed.get("number"):
                         detail_file = congress_dir / f"{bt}_{num}.json"
                         with open(detail_file, "w") as f:
                             json.dump(parsed, f, indent=2)
                         type_relevant += 1
                         total_relevant += 1
-
-                    batch_completed.append(bid)
+                        held_dates[bid] = (parsed.get("updateDate") or "")[:10]
+                        if held_dates[bid] < listed_dates.get(bid, ""):
+                            still_behind += 1
+                        if bid not in completed:
+                            batch_completed.append(bid)
+                    else:
+                        fetch_failures += 1
+                        log.warning(f"  {bid}: fetch failed or degenerate — not marked, will retry")
                     total_checked += 1
 
                     if (i + 1) % 500 == 0:
@@ -609,13 +699,26 @@ def download_congress(api_session, bulk_session, congress, state):
         state["completed_bills"][congress_key].extend(batch_completed)
         save_state(state)
         log.info(f"  {bill_type.upper()}: {type_relevant} saved out of {len(bills)} total")
+        if still_behind:
+            log.info(f"  {bill_type.upper()}: {still_behind} re-fetched copies still older than Congress.gov's "
+                     f"list (govinfo BILLSTATUS lag); retried next run")
+        if facts is not None:
+            facts["behind"] = facts.get("behind", 0) + still_behind
 
-    # Mark congress as completed
-    if congress_key not in state["completed_congresses"]:
-        state["completed_congresses"].append(congress_key)
+    # Mark congress as completed — only after a failure-free run. An unmarked
+    # (failed/pending) bill behind a completed-congress skip would never be
+    # retried (#257). Reserved bill numbers keep a congress pending until the
+    # end-of-congress adjudication pass (#257 rollover member).
+    if fetch_failures == 0:
+        if congress_key not in state["completed_congresses"]:
+            state["completed_congresses"].append(congress_key)
+    else:
+        log.warning(f"Congress {congress}: {fetch_failures} fetch failure(s) — NOT marking congress complete")
     save_state(state)
 
     log.info(f"Congress {congress} complete: {total_relevant} bills saved from {total_checked} checked")
+    if facts is not None:
+        facts["errors"] = facts.get("errors", 0) + fetch_failures
     return total_relevant
 
 
@@ -656,10 +759,17 @@ def main():
     log.info(f"Parallel workers: {BULK_WORKERS}")
     log.info(f"{'=' * 60}")
 
+    # The bills feed's health check (feed_hc.py; decisions_log §591, §699): a default or --full run speaks for the
+    # feed; a hand run naming --congress does not.
+    scheduled = CURRENT_CONGRESS in congresses and not args.congress
+
     # Test API connection
     test = api_get(api_session, f"{API_BASE}/bill/{CURRENT_CONGRESS}")
     if not test:
         log.error("Failed to connect to Congress.gov API. Check your API key.")
+        if scheduled:
+            feed_hc.report("bills", {"listed": None, "errors": 1, "note": "the Congress.gov API connection test failed"},
+                           log=log.info)
         sys.exit(1)
     log.info("API connection verified")
 
@@ -676,11 +786,27 @@ def main():
 
     grand_total = 0
     start_time = time.time()
+    facts = {"listed": 0, "errors": 0}
 
     for congress in congresses:
         log.info(f"\n--- Congress {congress} ---")
-        count = download_congress(api_session, bulk_session, congress, state)
+        count = download_congress(api_session, bulk_session, congress, state,
+                                  facts=facts if congress == CURRENT_CONGRESS else None)
         grand_total += count
+
+    if scheduled:
+        key = str(CURRENT_CONGRESS)
+        prev = state.get("bills_listed", {}).get(key)
+        if prev:
+            facts["min_listed"] = prev          # a Congress's bill list only grows: fewer = a listing failed part way
+        facts["allowed_errors"] = BILLS_ALLOWED_ERRORS
+        facts["added"] = grand_total
+        facts["note"] = (f"{facts.pop('behind', 0)} re-fetched copies still older than Congress.gov's list (govinfo "
+                         f"lag, retried next run); errors allowed: bills Congress.gov lists with no BILLSTATUS file")
+        feed_hc.report("bills", facts, log=log.info)
+        if facts["listed"] >= (prev or 0):
+            state.setdefault("bills_listed", {})[key] = facts["listed"]
+            save_state(state)
 
     elapsed = time.time() - start_time
     log.info(f"\n{'=' * 60}")
@@ -689,6 +815,16 @@ def main():
     log.info(f"  Elapsed: {elapsed / 60:.1f} minutes")
     log.info(f"  Output: {OUTPUT_DIR}")
     log.info(f"{'=' * 60}")
+
+    # Acquisition counter (followup_queue #92, OBSERVE-ONLY). grand_total =
+    # Σ download_congress() = pre-dedup bills saved this run. SESSION-GATED
+    # (recess/new-congress gaps → legitimately low); observe feeds the wave-2
+    # staleness primitive. Never breaches.
+    try:
+        from acquisition_floor import record_acquisition
+        record_acquisition("legislation", grand_total, mode="observe")
+    except ImportError:
+        log.error("acquisition_floor module missing — #92 observe counter not recorded")
 
 
 if __name__ == "__main__":
