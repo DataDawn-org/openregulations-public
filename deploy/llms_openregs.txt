@@ -97,7 +97,7 @@ Congressional stock trading disclosures (PTR transactions).
 
 Key columns: `bioguide_id`, `member_name`, `chamber`, `transaction_date`, `ticker`, `asset_description`, `transaction_type` (Purchase/Sale/etc.), `amount_range`
 
-### congressional_record (896K rows)
+### congressional_record (897K rows)
 Floor proceedings from Congressional Record (1994–present).
 
 Key columns: `granule_id` (PK), `date`, `congress`, `chamber`, `title`, `full_text`
@@ -134,7 +134,7 @@ Congressional voting records.
 ### fec_contributions (4.5M rows)
 FEC campaign contributions to candidates from committees.
 
-### hearings (46K rows)
+### hearings (49K rows)
 Committee hearing transcripts from GovInfo.
 
 ### nominations (41K rows)
