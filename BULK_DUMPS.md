@@ -13,6 +13,11 @@ later and get **the same bytes**. Below is exactly which parts of that promise w
 > dated archive is left as a record of what the corpus looked like on its date. Prefer a recent
 > archive if you need the current picture.
 
+> *October 2026 archive replaced.* Our practice is not to reissue archives, but we replaced `monthly/2026-10/openregs.db.gz` to correct a suppression defect: the original file still showed some withdrawn public comments, by their ID, a link or their title, in places where DataDawn hides them. The replacement is built from the 31 October 2026 weekly, so it also carries that week's newer data. The replaced file is no longer published; both files' SHA-256 checksums are listed in BULK_DUMPS.md.
+>
+>     replaced file   sha256 (gzipped): 2c3574e80099fedfe4c6b1f246e786fc30c90df576dbd8e96b7db8d4e5d85cd1
+>     replacement     sha256 (gzipped): b2d79307f4b2be9176d23bb90c4719dbc39f5b354f68de32d59ed24012c3b07b
+
 ## The two retention tiers, and why they differ
 
 | tier | prefix | retained | citable? |
