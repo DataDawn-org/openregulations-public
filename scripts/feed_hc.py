@@ -13,6 +13,10 @@ Facts (a dict). FAIL on any of:
                   failed. 0: an empty success, which is not an absence.
   min_listed      int (optional). FAIL when listed is below it, e.g. last run's count for a list that only grows
                   (a type whose listing failed part way).
+  incomplete      list of str (optional). FAIL when non-empty: each names a listing whose page still failed after its
+                  retries, so the run held only part of it (owner queue 792; relay datadawn green #2 item 1). Absent
+                  or empty changes nothing, so feeds that never send it are judged as before; anything but a list of
+                  strings is a FAIL.
   errors          int >= 0, required (absent is a FAIL). FAIL above allowed_errors.
   allowed_errors  int >= 0 (default 0). Known persistent failures, named in `note`.
   source_newest, local_newest   strings compared as text (ISO dates, or quarters like 2026Q2). When source_newest
@@ -74,6 +78,12 @@ def verdict(facts):
                 reasons.append(f"listed {listed} is below {facts['min_listed']} (a listing that failed part way)")
         except ValueError:
             reasons.append("min_listed is not a count")
+    incomplete = facts.get("incomplete")
+    if incomplete is not None:
+        if not isinstance(incomplete, (list, tuple)) or not all(isinstance(x, str) for x in incomplete):
+            reasons.append("incomplete is not a list of listings: nothing can be judged from it")
+        elif incomplete:
+            reasons.append("listing incomplete, the saved list kept: " + "; ".join(incomplete))
     try:
         errors = _int(facts, "errors")
         allowed = _int(facts, "allowed_errors", 0)
@@ -97,7 +107,8 @@ def body(feed, facts, ok, reasons):
     lines = [f"feed: {feed}", f"verdict: {'SUCCESS' if ok else 'FAIL'}"]
     lines += [f"  - {r}" for r in reasons]
     if isinstance(facts, dict):
-        for k in ("listed", "min_listed", "errors", "allowed_errors", "source_newest", "local_newest", "added", "note"):
+        for k in ("listed", "min_listed", "incomplete", "errors", "allowed_errors", "source_newest", "local_newest",
+                  "added", "note"):
             if k in facts:
                 lines.append(f"{k}: {facts[k]}")
     return "\n".join(lines) + "\n"
