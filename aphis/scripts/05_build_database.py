@@ -237,6 +237,14 @@ class DatabaseBuilder:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         if self.db_path.exists():
             self.db_path.unlink()
+        # Side files go with the database (decisions_log §847 A1; relay datadawn green #3 item 3; the same lines as
+        # white's fix for builders 05, 11 and 22, which have no shared helper). Measured 2026-11-05 on SQLite 3.45.1:
+        # while another process still holds the old aphis.db open, its -wal and -shm stay behind, and the new file's
+        # first statement fails with "disk I/O error" (the file stays unreadable after that reader closes); removed
+        # first, the new file builds normally. Unconditional: side files can outlive their database, and SQLite
+        # discards them beside a new, empty file anyway, so nothing it would have kept is lost here.
+        for _side in ("-wal", "-shm", "-journal"):
+            self.db_path.with_name(self.db_path.name + _side).unlink(missing_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
