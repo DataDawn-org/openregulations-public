@@ -62,6 +62,28 @@ CURRENT_CONGRESS = 119
 # bills that have no BILLSTATUS file on govinfo, and they fail every run (6 on 2026-10-27: 119-hr-6, 9, 11, 13, 16, 19).
 BILLS_ALLOWED_ERRORS = 25
 
+# A Congress.gov listing page that fails is tried again after each of these waits (seconds). One that still fails
+# makes the listing incomplete: the saved list is kept, the bills check FAILs naming it, and the run exits 1
+# (owner queue 792; decisions_log §827; relay datadawn green #2 item 1). On 2026-10-31 one H.Res. page failed
+# ("Response ended prematurely"), the 250 resolutions before it overwrote hres_list.json, the run exited 0, and the
+# check stored the short count as its baseline. Test: selftest_09_bill_listing.py.
+LIST_RETRY_WAITS = (15, 60)
+LISTING_FAILURES = []   # this run's incomplete listings, "<congress> <type>: ..."; read by main()
+
+
+class ListingIncomplete(Exception):
+    """A listing page failed after its retries. Carries the bills listed before it and where it stopped."""
+
+    def __init__(self, bills, offset, total=None):
+        if total is None:
+            msg = f"listing page at offset {offset} failed after {len(LIST_RETRY_WAITS) + 1} tries"
+        else:
+            msg = (f"listing ended at {len({b.get('number') for b in bills})} distinct bills, short of Congress.gov's "
+                   f"count of {total}")
+        super().__init__(msg)
+        self.bills = bills
+        self.offset = offset
+
 # GovInfo BILLSTATUS XML only available from congress 108+
 # Older congresses use Congress.gov API v3 JSON (rate-limited)
 MIN_BILLSTATUS_CONGRESS = 108
@@ -170,25 +192,51 @@ def api_get(session, url, params=None):
 # === Phase 1: Get bill number listings from Congress.gov API ===
 
 def download_bills_list(session, congress, bill_type):
-    """Download bill number listing for a congress+type from Congress.gov API."""
+    """Download bill number listing for a congress+type from Congress.gov API. Raises ListingIncomplete when a page
+    still fails after LIST_RETRY_WAITS, or when the listing ends short of Congress.gov's own count for it (an answered
+    page with no bills, or a last page, before the count is reached: purple 56fbf00a's N2, relay datadawn green #3
+    item 3). A partial list is never returned as if it were whole."""
     bills = []
     offset = 0
+    total = None
+    url = f"{API_BASE}/bill/{congress}/{bill_type}"
+
+    def short(data):
+        # no answer, or an answer with no bills while the listing's own count says more remain
+        if not data:
+            return True
+        n = data.get("pagination", {}).get("count")
+        return not data.get("bills") and isinstance(n, int) and len(bills) < n
+
     while True:
-        url = f"{API_BASE}/bill/{congress}/{bill_type}"
         params = {"limit": PAGE_SIZE, "offset": offset}
         data = api_get(session, url, params)
+        for wait in LIST_RETRY_WAITS:
+            if not short(data):
+                break
+            log.warning(f"{bill_type} list at offset {offset} failed or came back empty short of its count; "
+                        f"trying again in {wait}s")
+            time.sleep(wait)
+            data = api_get(session, url, params)
         if not data:
-            log.error(f"Failed to fetch {bill_type} list at offset {offset}")
-            break
+            log.error(f"Failed to fetch {bill_type} list at offset {offset} after {len(LIST_RETRY_WAITS) + 1} tries")
+            raise ListingIncomplete(bills, offset)
+        n = data.get("pagination", {}).get("count")
+        if isinstance(n, int) and not isinstance(n, bool):
+            total = n
         batch = data.get("bills", [])
         if not batch:
             break
         bills.extend(batch)
         offset += PAGE_SIZE
-        total = data.get("pagination", {}).get("count", "?")
-        log.info(f"  {bill_type.upper()} {congress}: {len(bills)}/{total} listed")
+        log.info(f"  {bill_type.upper()} {congress}: {len(bills)}/{total if total is not None else '?'} listed")
         if "next" not in data.get("pagination", {}):
             break
+    listed = len({b.get("number") for b in bills})
+    if total is not None and listed < total:
+        log.error(f"{bill_type} list for Congress {congress} ended at {listed} distinct bills, short of Congress.gov's "
+                  f"count of {total}")
+        raise ListingIncomplete(bills, offset, total=total)
     return bills
 
 
@@ -552,6 +600,9 @@ def download_congress(api_session, bulk_session, congress, state, facts=None):
     # Nonzero blocks the congress-complete marking below — an unmarked bill
     # behind a completed-congress skip would never be retried (#257).
     fetch_failures = 0
+    # A failed listing also blocks the marking (purple 56fbf00a's N1): marked complete, a prior Congress would never
+    # be listed again, and the bills its listing missed would never be fetched.
+    listing_failed = False
     _congress_start = time.time()
 
     for bill_type in BILL_TYPES:
@@ -567,11 +618,22 @@ def download_congress(api_session, bulk_session, congress, state, facts=None):
                 bills = json.load(f)
             log.info(f"  Loaded cached list: {len(bills)} {bill_type.upper()} bills")
         else:
-            bills = download_bills_list(api_session, congress, bill_type)
-            if bills:
+            try:
+                bills = download_bills_list(api_session, congress, bill_type)
+                listing_whole = True
+            except ListingIncomplete as e:
+                # Never save a partial list (owner queue 792): the bills listed before the failed page are still
+                # processed below, but the saved list stays as it was and the run fails (main()).
+                bills, listing_whole = e.bills, False
+                listing_failed = True
+                LISTING_FAILURES.append(f"{congress} {bill_type}: {e} ({len(bills)} listed before it)")
+                log.error(f"  {bill_type.upper()} {congress}: listing INCOMPLETE ({e}); {list_file.name} kept as it "
+                          f"was; this run will exit 1")
+            if bills and listing_whole:
                 with open(list_file, "w") as f:
                     json.dump(bills, f, indent=2)
-            log.info(f"  Listed {len(bills)} {bill_type.upper()} bills from API")
+            log.info(f"  Listed {len(bills)} {bill_type.upper()} bills from API"
+                     + ("" if listing_whole else " (INCOMPLETE)"))
         if facts is not None:
             facts["listed"] = facts.get("listed", 0) + len(bills)
 
@@ -709,11 +771,13 @@ def download_congress(api_session, bulk_session, congress, state, facts=None):
     # (failed/pending) bill behind a completed-congress skip would never be
     # retried (#257). Reserved bill numbers keep a congress pending until the
     # end-of-congress adjudication pass (#257 rollover member).
-    if fetch_failures == 0:
+    if fetch_failures == 0 and not listing_failed:
         if congress_key not in state["completed_congresses"]:
             state["completed_congresses"].append(congress_key)
     else:
-        log.warning(f"Congress {congress}: {fetch_failures} fetch failure(s) — NOT marking congress complete")
+        log.warning(f"Congress {congress}: {fetch_failures} fetch failure(s)"
+                    + (", and a listing that failed part way" if listing_failed else "")
+                    + " — NOT marking congress complete")
     save_state(state)
 
     log.info(f"Congress {congress} complete: {total_relevant} bills saved from {total_checked} checked")
@@ -803,8 +867,12 @@ def main():
         facts["added"] = grand_total
         facts["note"] = (f"{facts.pop('behind', 0)} re-fetched copies still older than Congress.gov's list (govinfo "
                          f"lag, retried next run); errors allowed: bills Congress.gov lists with no BILLSTATUS file")
+        if LISTING_FAILURES:
+            facts["incomplete"] = list(LISTING_FAILURES)
         feed_hc.report("bills", facts, log=log.info)
-        if facts["listed"] >= (prev or 0):
+        # The baseline comes only from a full fetch (owner queue 792): a partial count never becomes it, and the next
+        # full fetch replaces a short one. It still only grows, so a full fetch below it keeps failing the check.
+        if not LISTING_FAILURES and facts["listed"] >= (prev or 0):
             state.setdefault("bills_listed", {})[key] = facts["listed"]
             save_state(state)
 
@@ -825,6 +893,11 @@ def main():
         record_acquisition("legislation", grand_total, mode="observe")
     except ImportError:
         log.error("acquisition_floor module missing — #92 observe counter not recorded")
+
+    # A listing that failed part way fails the run (owner queue 792): the weekly counts it as a failed download.
+    if LISTING_FAILURES:
+        log.error(f"{len(LISTING_FAILURES)} listing(s) incomplete: {'; '.join(LISTING_FAILURES)}; exit 1")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
