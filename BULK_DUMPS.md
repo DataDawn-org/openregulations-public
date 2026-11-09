@@ -18,6 +18,17 @@ later and get **the same bytes**. Below is exactly which parts of that promise w
 >     replaced file   sha256 (gzipped): 2c3574e80099fedfe4c6b1f246e786fc30c90df576dbd8e96b7db8d4e5d85cd1
 >     replacement     sha256 (gzipped): b2d79307f4b2be9176d23bb90c4719dbc39f5b354f68de32d59ed24012c3b07b
 
+> **White House visitor names withheld from 2026-11-07** *(note dated 2026-11-07)*
+>
+> From the weekly published on 2026-11-07 (2026-W45) on, openregs.db withholds seven columns of the White House visitor table, wh_visits: the visitor's name, the name fingerprint, the link to a visitor's record elsewhere in the database, the match confidence, two name flags, and the visitee link. Its search index, wh_visits_fts, no longer holds visitor names. Visitor names inside the free-text description field are removed in a follow-up, planned for the 2026-11-14 weekly.
+>
+> Archives published before 2026-11-07 are not reissued for this change. They stay exactly as published, so a citation to one keeps resolving to the same bytes. These still carry those columns:
+> - monthly/2026-09/ and monthly/2026-10/ (monthly archives, retained);
+> - the legacy weeklies 2026-W34/, 2026-W35/ and 2026-W36/ (kept, not citable);
+> - weekly/2026-W42/ to weekly/2026-W44/, until each is deleted 28 days after upload.
+>
+> Why: the White House visitor records are public, and going forward DataDawn limits what it republishes about private individuals where it can.
+
 ## The two retention tiers, and why they differ
 
 | tier | prefix | retained | citable? |
@@ -58,6 +69,14 @@ layout, not a promise — do not build a citation on one.
 Cite the **month**, the **filename**, and the **sha256 of the gzipped artifact**. The sha256 is
 what makes the citation checkable: it is stable, it is in the manifest, and it is the identifier
 that survives a download.
+
+## Downloading the large files
+
+The largest files are big (`openregs.db.gz` is about 22 GB), and a long download can be cut off part-way. The server answers HTTP range requests, so you can resume an interrupted download instead of starting again:
+
+    curl -C - -O https://dumps.datadawn.org/monthly/2026-11/openregs.db.gz
+
+(`wget -c <url>` does the same.) A resumed file is only as good as its checksum, so check it against the manifest before you use it, as in the next section.
 
 ## Verifying a copy you already have
 
