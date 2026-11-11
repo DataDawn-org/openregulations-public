@@ -128,6 +128,8 @@ surfaces already apply. Two artifacts carry documented divergences from the serv
 artifact you are using. If your copy predates 2026-W37, read the 2026-W37 entry in the
 [dumps changelog](https://dumps.datadawn.org/CHANGELOG.md) before using `documents.comment_end_date`.
 
+`lobbying.db.gz` holds lobbying registrations and reports from LDA.gov. As [LDA.gov’s terms of use](https://lda.gov/api/tos/) require: “Senate Office of Public Records cannot vouch for the data or analyses derived from these data after the data have been retrieved from LDA.gov.” Its four `lobbying_*_summary` tables are computed by DataDawn from the quarterly reports; no one files them.
+
 `build_metadata` inside each database records when that database was built. Where a source has
 its own vintage (the IRS Business Master File, for instance), that vintage is recorded in its own
 table — `bmf_source_meta` — because a corpus build date and a source as-of date are different
