@@ -76,7 +76,7 @@ The largest files are big (`openregs.db.gz` is about 22 GB), and a long download
 
     curl -C - -O https://dumps.datadawn.org/monthly/2026-11/openregs.db.gz
 
-If curl stops at once with "Cannot resume", run the same command again: the first request for one of these files can send back the whole file instead of the missing part, and the next one resumes. Your partial file is kept. (`wget -c <url>` also resumes, but when that happens it quietly starts the whole download again, so use curl for the largest files.) A resumed file is only as good as its checksum, so check it against the manifest before you use it, as in the next section.
+If curl ever stops at once with "Cannot resume", run the same command again; your partial file is kept. (`wget -c <url>` also resumes, but if the server ever ignores the range it restarts the whole download, so curl is the safer choice for the largest files.) A resumed file is only as good as its checksum, so check it against the manifest before you use it, as in the next section.
 
 ## Verifying a copy you already have
 
