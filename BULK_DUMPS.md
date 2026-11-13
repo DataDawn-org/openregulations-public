@@ -29,6 +29,14 @@ later and get **the same bytes**. Below is exactly which parts of that promise w
 >
 > Why: the White House visitor records are public, and going forward DataDawn limits what it republishes about private individuals where it can.
 
+> **Lobbying rows counted more than once: correction under way** *(note dated 2026-11-13)*
+>
+> Every `lobbying.db.gz` and `openregs.db.gz` published so far carries a loading error that counted some lobbying
+> filings' rows more than once, in `lobbying_activities`, `lobbying_lobbyists` and `lobbying_contributions`, and in
+> `openregs.db.gz`'s `lobbying_bills`. Totals and row counts taken from those tables are overstated. LDA.gov's own
+> filing pages show the correct figures. These archives will not be reissued. When the first corrected archive is
+> published, this note will say which archives carry the extra rows and how to check a copy.
+
 ## The two retention tiers, and why they differ
 
 | tier | prefix | retained | citable? |
