@@ -134,9 +134,103 @@ sys.exit(0 if ok == "ok" else 1)
 PY
 }
 
+# Before 05: the build about to be replaced is kept byte for byte under a dated name, read-only, never overwritten
+# (user-level rule 16; green's 11-16 row; bestpractices/queue_inbox/2026-11-11_green_run_aphis_keep_dated_builds.md).
+# Name: aphis.db.build-<UTC date of build_metadata's build_completed, else of the file's mtime>-<first 8 of its sha256>,
+# the hand copies' form; a -wal holding frames goes with it as <name>-wal. The same bytes already kept are not copied
+# again; a name taken by other bytes gets the next free suffix (-2, -3 ...). A copy that cannot be made or does not
+# match stops the run here, before 05 has touched aphis.db, with a NOT KEPT line; a partial copy is moved aside as
+# <name>.short-copy-<pid>. .prev stays the put-back source. To read a kept set, copy the main file and its -wal
+# together into a writable folder and open the copy there (immutable=1 ignores the -wal and reads the older state).
+# Test: selftest_aphis_dated_builds.py.
+same_set() {   # same_set NAME MAIN_SHA WAL_SHA: NAME already holds these bytes, and this -wal (none if WAL_SHA is "")
+    [[ -f "$1" && "$(sha256sum "$1" | cut -d' ' -f1)" == "$2" ]] || return 1
+    [[ -n "$3" ]] || [[ ! -s "$1-wal" ]] || return 1
+    if [[ -n "$3" ]]; then
+        [[ -f "$1-wal" && "$(sha256sum "$1-wal" | cut -d' ' -f1)" == "$3" ]] || return 1
+    fi
+    return 0
+}
+not_kept() {   # not_kept WHY [CAND]: move a partial CAND (and CAND-wal) aside, log NOT KEPT, stop before 05
+    local why="$1" cand="${2:-}" s moved="" left=""
+    if [[ -n "$cand" ]]; then
+        for s in "" "-wal"; do
+            if [[ -e "$cand$s" ]]; then
+                mv -n "$cand$s" "$cand$s.short-copy-$$" 2>/dev/null || true
+                if [[ -e "$cand$s" ]]; then
+                    left="$left $(basename "$cand$s")"
+                else
+                    moved="$moved $(basename "$cand$s").short-copy-$$"
+                fi
+            fi
+        done
+        if [[ -n "$left" ]]; then
+            why="$why (could NOT be moved aside:$left; check it by hand)"
+        elif [[ -n "$moved" ]]; then
+            why="$why (moved aside as$moved)"
+        fi
+    fi
+    log "NOT KEPT: $why; stopping before the rebuild (aphis.db untouched)"
+    exit 1
+}
+keep_dated_build() {
+    # Each step that can fail calls not_kept explicitly: set -e alone would stop here without a word.
+    local src_sha wal_sha="" day name cand n=1
+    src_sha="$(sha256sum "$DB_FILE" | cut -d' ' -f1)" || not_kept "aphis.db's sha256 could not be read"
+    [[ "$src_sha" =~ ^[0-9a-f]{64}$ ]] || not_kept "aphis.db's sha256 could not be read"
+    if [[ -s "$DB_FILE-wal" ]]; then
+        wal_sha="$(sha256sum "$DB_FILE-wal" | cut -d' ' -f1)" || not_kept "aphis.db-wal's sha256 could not be read"
+        [[ "$wal_sha" =~ ^[0-9a-f]{64}$ ]] || not_kept "aphis.db-wal's sha256 could not be read"
+    fi
+    if ! day="$(python3 - "$DB_FILE" <<'PY'
+import datetime, os, sqlite3, sys
+p, d = sys.argv[1], None
+try:
+    c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    r = c.execute("SELECT value FROM build_metadata WHERE key = 'build_completed'").fetchone()
+    c.close()
+    if r and r[0]:
+        d = datetime.datetime.strptime(r[0][:10], "%Y-%m-%d")
+except (sqlite3.Error, ValueError):
+    d = None
+if d is None:
+    d = datetime.datetime.fromtimestamp(os.stat(p).st_mtime, datetime.timezone.utc)
+print(d.strftime("%Y%m%d"))
+PY
+)"; then
+        not_kept "aphis.db's build date could not be read"
+    fi
+    name="$DB_FILE.build-$day-${src_sha:0:8}"
+    cand="$name"
+    while [[ -e "$cand" || -e "$cand-wal" ]]; do
+        if same_set "$cand" "$src_sha" "$wal_sha"; then
+            log "Earlier build already kept byte for byte: $(basename "$cand")"
+            return 0
+        fi
+        n=$((n + 1))
+        if (( n > 99 )); then
+            not_kept "no free dated name after 99 tries"
+        fi
+        cand="$name-$n"
+    done
+    cp -n --preserve=timestamps "$DB_FILE" "$cand" || not_kept "the dated copy could not be made" "$cand"
+    if [[ -n "$wal_sha" ]]; then
+        cp -n --preserve=timestamps "$DB_FILE-wal" "$cand-wal" || not_kept "the dated copy's -wal could not be made" "$cand"
+    fi
+    if ! same_set "$cand" "$src_sha" "$wal_sha"; then
+        not_kept "the dated copy did not match aphis.db's bytes" "$cand"
+    fi
+    chmod a-w "$cand" || not_kept "the dated copy could not be made read-only" "$cand"
+    if [[ -n "$wal_sha" ]]; then
+        chmod a-w "$cand-wal" || not_kept "the dated copy's -wal could not be made read-only" "$cand"
+    fi
+    log "Kept the earlier build byte for byte: $(basename "$cand") (sha256 $src_sha)"
+}
+
 rebuild_database() {
     local kept="" want=""
     if [[ -f "$DB_FILE" ]]; then
+        keep_dated_build
         # sqlite's backup API: a consistent copy even with a WAL beside the file
         python3 - "$DB_FILE" "$DB_FILE.prev" <<'PY'
 import sqlite3, sys

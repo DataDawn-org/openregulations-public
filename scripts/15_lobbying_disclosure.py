@@ -296,6 +296,8 @@ def create_database():
         "CREATE INDEX IF NOT EXISTS idx_contrib_lobbyist ON lobbying_contributions(lobbyist_name COLLATE NOCASE)",
         "CREATE INDEX IF NOT EXISTS idx_contrib_recipient ON lobbying_contributions(recipient_name COLLATE NOCASE)",
         "CREATE INDEX IF NOT EXISTS idx_contrib_year ON lobbying_contributions(filing_year)",
+        # parse_contribution() removes a report's earlier rows by filing_uuid before writing it again (selftest_15_lda_reparse.py R8)
+        "CREATE INDEX IF NOT EXISTS idx_contrib_filing_uuid ON lobbying_contributions(filing_uuid)",
     ]
     for idx_sql in indexes:
         conn.execute(idx_sql)
@@ -422,6 +424,29 @@ def get_filing_type_name(filing):
     return safe_str(ft)
 
 
+def _one_version(parse):
+    """Make a parse write exactly one copy of a filing's rows, as one unit (cyan ae74aef4, relay datadawn cyan #2 item 1;
+    selftest_15_lda_reparse.py). Every run that fetches a filing year again parses its filings again, and the posted-date
+    pull overlaps the last one by a day, so a parse must replace the filing's rows, not add to them: each parse function
+    removes the filing's earlier child rows before writing. Run inside a savepoint, nested in the page's transaction
+    (opened here if none is), so a parse that fails part-way leaves the earlier version's rows exactly as they were, and
+    the page's single commit still covers every filing on it."""
+    def wrapped(filing, conn):
+        if not conn.in_transaction:
+            conn.execute("BEGIN")
+        conn.execute("SAVEPOINT one_filing")
+        try:
+            parse(filing, conn)
+        except BaseException:
+            conn.execute("ROLLBACK TO one_filing")
+            conn.execute("RELEASE one_filing")
+            raise
+        conn.execute("RELEASE one_filing")
+    wrapped.__name__, wrapped.__doc__ = parse.__name__, parse.__doc__
+    return wrapped
+
+
+@_one_version
 def parse_filing(filing, conn):
     """Parse a single filing JSON object and insert into appropriate tables."""
     filing_uuid = safe_str(filing.get("filing_uuid"))
@@ -437,7 +462,12 @@ def parse_filing(filing, conn):
     registrant_id = extract_nested_id(registrant) or safe_int(registrant.get("id"))
     registrant_name = safe_str(registrant.get("name")) or safe_str(registrant.get("registrant_name")) or ""
     registrant_desc = safe_str(registrant.get("description"))
-    registrant_address = safe_str(registrant.get("address"))
+    # No bare "address" key exists in the registrant object (raw audit 500/500,
+    # #316) -- compose from the component fields the API actually sends.
+    _addr_parts = [safe_str(registrant.get(k)) for k in
+                   ("address_1", "address_2", "address_3", "address_4",
+                    "city", "state", "zip", "country")]
+    registrant_address = ", ".join(p for p in _addr_parts if p) or None
     registrant_state = safe_str(registrant.get("state"))
     registrant_country = safe_str(registrant.get("country"))
     registrant_ppb_country = safe_str(registrant.get("ppb_country"))
@@ -476,7 +506,14 @@ def parse_filing(filing, conn):
     # More precise: LD-1A, LD-2A are amendments
     if filing_type and filing_type.upper().endswith("A"):
         is_amendment = 1
-    is_no_activity = 1 if filing.get("is_no_activity") else 0
+    # The LDA API sends no is_no_activity key (0 of 1,050 raw filings, no
+    # variant spelling -- #316). The signal is the filing-type code: the
+    # Y-suffixed twins are the "(No Activity)" filings, EXCEPT the code YY,
+    # which is the Year-End BASE type (its no-activity twin is YYY).
+    # Exhaustive (code, display) pass 2026-07-10: exactly 50 codes, and the
+    # no-activity set is exactly the 24 Y-suffix codes under this rule.
+    _ft = (filing_type or "").upper()
+    is_no_activity = 1 if (_ft.endswith("Y") and _ft != "YY") else 0
     is_termination = 1 if filing.get("is_termination") or termination_date else 0
 
     # Insert into lobbying_filings_raw
@@ -507,6 +544,10 @@ def parse_filing(filing, conn):
 
     # Affiliated organizations (one row per)
     conn.execute("DELETE FROM lobbying_affiliated_orgs WHERE filing_uuid=?", (filing_uuid,))
+    # The filing's activity and lobbyist rows from an earlier parse go too, so this parse writes the only copy
+    # (_one_version above; before this, every re-fetch appended another copy).
+    conn.execute("DELETE FROM lobbying_activities WHERE filing_uuid=?", (filing_uuid,))
+    conn.execute("DELETE FROM lobbying_lobbyists WHERE filing_uuid=?", (filing_uuid,))
     if isinstance(affiliated, list):
         for a in affiliated:
             if isinstance(a, dict):
@@ -716,6 +757,8 @@ def pull_filings(session):
         log.info(f"  Pulling filings for year {year}...")
         page = 1
         year_fetched = 0
+        year_count = None    # the API's own count for the year, from its first page
+        year_failed = False  # a page fetch failed (api_get returned None)
         year_dir = FILINGS_RAW_DIR / str(year)
         year_dir.mkdir(parents=True, exist_ok=True)
 
@@ -730,10 +773,13 @@ def pull_filings(session):
             data = api_get(session, f"{BASE_URL}/filings/", params=params)
             if data is None:
                 log.error(f"Failed to fetch filings year {year} page {page}, stopping")
+                year_failed = True
                 break
 
             results = data.get("results", [])
             total_count = data.get("count", 0)
+            if year_count is None:
+                year_count = total_count
             next_url = data.get("next")
 
             # Save raw JSON to disk
@@ -772,13 +818,18 @@ def pull_filings(session):
 
             page += 1
 
-        # Mark year as complete
-        if not _shutdown:
+        # Mark the year complete only when every page arrived and the API's own count for the year was reached
+        # (relay datadawn cyan #9 item 4a; selftest_15_lda_completeness.py). A failed page, or pages that stop short
+        # of the count, leave the year open, so the next run fetches it again instead of skipping it for good.
+        if not _shutdown and not year_failed and year_fetched >= (year_count or 0):
             completed.add(str(year))
             state["completed_years"] = sorted(completed)
             tmp = state_file.with_suffix(".tmp")
             tmp.write_text(json.dumps(state, indent=2))
             tmp.rename(state_file)
+        elif not _shutdown:
+            why = "a page failed" if year_failed else f"fetched {year_fetched:,} of the API's {year_count or 0:,}"
+            log.error(f"  Year {year}: NOT marked complete ({why}); the next run fetches it again")
 
         log.info(f"  Year {year}: {year_fetched:,} filings in {page} pages")
         progress(f"Lobbying filings: year {year} done — {year_fetched:,} filings, "
@@ -797,11 +848,14 @@ def pull_filings(session):
 
 
 # === Contributions pull ===
+@_one_version
 def parse_contribution(filing, conn):
     """Parse a single LD-203 contribution filing and insert rows."""
     filing_uuid = safe_str(filing.get("filing_uuid"))
     if not filing_uuid:
         return
+    # The report's rows from an earlier parse go first, so this parse writes the only copy (_one_version above).
+    conn.execute("DELETE FROM lobbying_contributions WHERE filing_uuid=?", (filing_uuid,))
 
     registrant = filing.get("registrant", {}) or {}
     registrant_name = safe_str(registrant.get("name")) or ""
@@ -921,6 +975,8 @@ def pull_contributions(session):
         log.info(f"  Pulling contributions for year {year}...")
         page = 1
         year_fetched = 0
+        year_count = None    # the API's own count for the year, from its first page
+        year_failed = False  # a page fetch failed (api_get returned None)
         year_dir = CONTRIBUTIONS_RAW_DIR / str(year)
         year_dir.mkdir(parents=True, exist_ok=True)
 
@@ -935,10 +991,13 @@ def pull_contributions(session):
             data = api_get(session, f"{BASE_URL}/contributions/", params=params)
             if data is None:
                 log.error(f"Failed to fetch contributions year {year} page {page}, stopping")
+                year_failed = True
                 break
 
             results = data.get("results", [])
             total_count = data.get("count", 0)
+            if year_count is None:
+                year_count = total_count
             next_url = data.get("next")
 
             raw_file = year_dir / f"page_{page:04d}.json"
@@ -969,12 +1028,16 @@ def pull_contributions(session):
 
             page += 1
 
-        if not _shutdown:
+        # Complete only when every page arrived and the API's count was reached (relay datadawn cyan #9 item 4a).
+        if not _shutdown and not year_failed and year_fetched >= (year_count or 0):
             completed.add(str(year))
             state["completed_years"] = sorted(completed)
             tmp = state_file.with_suffix(".tmp")
             tmp.write_text(json.dumps(state, indent=2))
             tmp.rename(state_file)
+        elif not _shutdown:
+            why = "a page failed" if year_failed else f"fetched {year_fetched:,} of the API's {year_count or 0:,}"
+            log.error(f"  Contributions year {year}: NOT marked complete ({why}); the next run fetches it again")
 
         log.info(f"  Contributions year {year}: {year_fetched:,} in {page} pages")
         progress(f"Lobbying contributions: year {year} done — {year_fetched:,}, "
@@ -1180,6 +1243,14 @@ def print_summary():
 
 # === Main ===
 def main():
+    # Corpus write-lock seam gate (completeness spec §0.12, wave 1): delegated
+    # under monthly_update.sh's lock via CORPUS_LOCK_TOKEN_LOBBYING; standalone
+    # runs acquire (auto-release at exit); any other holder = hard stop.
+    import sys
+    sys.path.insert(0, "/mnt/data/datadawn/tools")
+    from corpus_lock import gate as _corpus_gate
+    _corpus_gate("lobbying", intent="15_lobbying_disclosure.py (LDA filings)")
+
     import argparse
 
     parser = argparse.ArgumentParser(description="Download lobbying disclosure data from Senate LDA API")
@@ -1240,6 +1311,40 @@ def main():
     elapsed = time.time() - start_time
     log.info(f"Elapsed: {elapsed / 60:.1f} minutes")
     print_summary()
+
+    # NEVER stamp an interrupted run: this script can finish INTERRUPTED, and a stamp a
+    # partial run could write would lie about the artifact's completeness.
+    # In-file build stamp (data-history audit 2026-09-06): a published dump is a bare SQLite
+    # file and the R2 manifest does not survive a download, so build_metadata is the only
+    # vintage a consumer retains. Shared helper — one implementation, three callers.
+    # Non-gating: warns and proceeds. Reached ONLY on a genuinely successful build.
+    if not _shutdown:
+        sys.path.insert(0, "/mnt/data/datadawn/tools")
+        from stamp_db import stamp_build_metadata
+        # Decision 74 (decisions_log §916): LDA.gov's terms ask users to cite the date the data were retrieved. The
+        # loader saves each API page as it fetches it, so the raw pages' times give each filing year's retrieval dates
+        # (lda_retrieval.py); this run's own window is stamped beside them. Non-gating, like the stamp: if the dates
+        # can't be read, the stamp goes on without them and says so in the log.
+        extras = None
+        try:
+            import lda_retrieval
+            _utc = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+            extras = lda_retrieval.stamp_extras(str(RAW_DIR), _utc(start_time), _utc(time.time()))
+        except Exception as e:
+            log.warning(f"retrieval dates not stamped ({type(e).__name__}: {e})")
+        # A run's dates replace the last run's: every lda_ key is cleared first, so a failed or partial date read never
+        # leaves an older run's dates beside this run's build stamp (stamp_db only inserts or replaces; purple 608824a2's
+        # B1-C1). Its own try: a database with no build_metadata yet has nothing to clear.
+        try:
+            _con = sqlite3.connect(str(DB_PATH))
+            try:
+                _con.execute("DELETE FROM build_metadata WHERE key LIKE 'lda\\_%' ESCAPE '\\'")
+                _con.commit()
+            finally:
+                _con.close()
+        except sqlite3.Error as e:
+            log.warning(f"old retrieval dates not cleared ({e})")
+        stamp_build_metadata(DB_PATH, extras=extras, log=log.info)
 
     status = "INTERRUPTED" if _shutdown else "COMPLETE"
     progress(f"Lobbying disclosure: {status} in {elapsed / 60:.1f} minutes")

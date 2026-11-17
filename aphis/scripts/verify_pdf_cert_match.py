@@ -39,13 +39,22 @@ def main():
     meta = {r[0]: (r[1], r[2]) for r in c.execute(
         "SELECT id,cert_number,inspection_date FROM inspections")}
 
-    done = set()
+    # id -> the certificate its LAST verdict line was worked out against (populate_pdf_paths.py keeps the last line
+    # per id, so an appended re-check is the verdict served). A report is checked when it has no verdict, or when its
+    # row's certificate now differs from that one: a rebuild from a newer extract can change a row's certificate,
+    # and a verdict against the old one would be served as if it were current (relay datadawn green #1 item 2;
+    # decisions_log §898 A3). Test: selftest_aphis_cert_packet.py, CHANGED.
+    held = {}
     if OUT.exists():
         for l in open(OUT):
-            try: done.add(json.loads(l)["id"])
+            try:
+                v = json.loads(l)
+                held[v["id"]] = v.get("db_cert")
             except Exception: pass
-    todo = [i for i in byid if i not in done]
-    print(f"total={len(byid)} done={len(done)} todo={len(todo)}", flush=True)
+    todo = [i for i in byid if i not in held or held[i] != meta.get(i, (None, None))[0]]
+    recheck = sum(1 for i in todo if i in held)
+    print(f"total={len(byid)} done={len(held)} todo={len(todo)} (re-checked: certificate changed {recheck})",
+          flush=True)
 
     failed = []
     with open(OUT, "a") as fh:

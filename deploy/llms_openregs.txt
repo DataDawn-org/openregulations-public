@@ -134,8 +134,8 @@ Congressional voting records.
 ### fec_contributions (4.5M rows)
 FEC campaign contributions to candidates from committees.
 
-### hearings (49K rows)
-Committee hearing transcripts from GovInfo.
+### hearings (50K rows)
+Committee hearing transcripts from GovInfo. `source_status` is empty while govinfo.gov lists a hearing; otherwise "No longer posted on govinfo.gov" or "No longer posted on govinfo.gov; DataDawn matched it to <ID>".
 
 ### nominations (41K rows)
 Executive nominations (Congresses 100–119).

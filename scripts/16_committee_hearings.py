@@ -28,6 +28,14 @@ most published Sept-Oct 2026 (owner queue 808; the drafter's call B, relay datad
 the run passed the newest lastModified TIME as the issue date and skipped even recent packages. The state keeps
 max_date_issued as a record only. Test: selftest_16_hearings_key_watermark.py.
 
+Hearings the source removed (decisions_log §844, owner queue 997): after a complete scheduled listing,
+a hearing on disk that govinfo no longer lists is a candidate only (§144, §499 (3): listing absence is not evidence).
+It is confirmed removed only by two per-ID summary lookups, at least a minute apart, that both answer 404, with both
+gate arms passing before and after (a listed hearing answers 200; an impossible ID answers 404). Confirmations go to
+hearing_source_confirmations.json, which 05_build_database.py reads to mark those hearings (kept up, the note in source_status: decisions_log §844 A1,
+§862); nothing local is deleted.
+Test: selftest_16_hearings_source_removed.py.
+
 Usage:
     python3 16_committee_hearings.py                    # list everything, download what is missing
     python3 16_committee_hearings.py --full             # the same listing (kept for existing callers)
@@ -64,6 +72,20 @@ STATE_FILE = LOG_DIR / "hearings_state.json"
 PAGE_SIZE = 100  # max per GovInfo API page
 REQUEST_DELAY = 0.5  # seconds between API calls (be polite)
 MODS_NS = {"m": "http://www.loc.gov/mods/v3"}
+
+# Hearings the source removed (decisions_log §844). The registry sits beside hearings/, never inside it: 05 imports
+# every *.json under hearings/ as a hearing.
+REMOVED_REGISTRY = PROJECT_DIR / "hearing_source_confirmations.json"
+SUMMARY_URL = GOVINFO_API + "/packages/{}/summary"
+IMPOSSIBLE_ID = "CHRG-999hhrg99999999"  # well-formed, cannot exist: govinfo answers 404 (measured 2026-11-05)
+MAX_NEW_CANDIDATES = 1000   # more unlisted hearings needing a lookup than this means a short listing: refuse, look up none
+CONFIRM_SPACING_S = 60      # at least this long between an ID's two lookups
+NEW_REGISTRY_MAX_AGE_DAYS = 120  # §151 R5's ruled value, written into a NEW registry; an existing file keeps its own
+REGISTRY_DOC = ("§844 hearings govinfo no longer posts: per-ID confirmations. Written by "
+                "scripts/16_committee_hearings.py on its scheduled run, READ by 05_build_database.py "
+                "(mark_source_removed_hearings), which reads `confirmations` only. `relisted` keeps the record of "
+                "each confirmation cleared because govinfo posted the hearing again. decisions_log §844, §144, "
+                "§146, §151 R5.")
 
 # === Logging ===
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -404,6 +426,175 @@ def parse_witness(raw):
     }
 
 
+# === Hearings the source removed (decisions_log §844; owner queue 997) ===
+def _now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _summary_status(session, package_id):
+    """HTTP status of govinfo's per-package summary, or None when the lookup itself failed (never a 404)."""
+    try:
+        return session.get(SUMMARY_URL.format(package_id), timeout=30).status_code
+    except Exception as e:
+        log.warning(f"  removed-check: lookup of {package_id} failed ({type(e).__name__}); not confirmable this run")
+        return None
+
+
+def _write_registry(reg):
+    """Write the registry whole (temp file, fsync, rename), then re-read it: the file is the record, not this call."""
+    tmp = REMOVED_REGISTRY.with_name(REMOVED_REGISTRY.name + ".tmp")
+    with open(tmp, "w") as f:
+        f.write(json.dumps(reg, indent=1) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, REMOVED_REGISTRY)
+    back = json.loads(REMOVED_REGISTRY.read_text())
+    if ([e["id"] for e in back["confirmations"]] != [e["id"] for e in reg["confirmations"]]
+            or [r["id"] for r in back.get("relisted", [])] != [r["id"] for r in reg.get("relisted", [])]):
+        raise RuntimeError(f"{REMOVED_REGISTRY.name} re-read does not match what was written")
+
+
+def confirm_removed(session, listed_ids, on_disk_ids):
+    """Confirm, by ID, which hearings on disk govinfo has removed, and record them for 05 to mark (§844, §844 A1).
+
+    Called only after a COMPLETE scheduled listing. A hearing on disk that the listing lacks is a candidate; it is
+    recorded as not_posted only when two summary lookups at least CONFIRM_SPACING_S apart both answer 404 and the
+    gate passes before and after (a listed hearing answers 200, an impossible ID 404). §146: the build applies
+    what this writes with no approval step. §151 R5: an entry older than the file's max_age_days is looked up again
+    while its hearing stays unlisted; only a fresh 404 pair renews it, and anything else leaves it as it was (the
+    hearing stays marked: staleness fails toward marking). A confirmed hearing govinfo lists again (HEARING_RELISTED)
+    is looked up the same way: two 200s at least CONFIRM_SPACING_S apart, gate passing before and after, move its
+    record from `confirmations` to `relisted` (kept, never deleted), so the next build serves it again, as §144's
+    comment path does on a confirmed lookup (relay datadawn green #3 item 2); anything else keeps it marked, and the
+    next scheduled run looks again. The gate's live control is never a hearing the registry holds. Each ID's second
+    lookup waits until CONFIRM_SPACING_S after its own first. Returns counts for the health check's note; writes
+    nothing on any refusal."""
+    res = {"unlisted": 0, "looked_up": 0, "confirmed_new": 0, "renewed": 0, "unconfirmed": 0, "relisted": 0,
+           "relisted_cleared": 0, "relisted_held": 0, "entries": 0, "written": False, "refused": None,
+           "needs_person": False}
+    listed, on_disk = set(listed_ids), set(on_disk_ids)
+    reg = {"_doc": REGISTRY_DOC, "max_age_days": NEW_REGISTRY_MAX_AGE_DAYS, "confirmations": [], "relisted": []}
+    if REMOVED_REGISTRY.exists():
+        try:
+            reg = json.loads(REMOVED_REGISTRY.read_text())
+            if not (isinstance(reg, dict) and isinstance(reg.get("confirmations"), list)
+                    and isinstance(reg.get("max_age_days"), int) and not isinstance(reg.get("max_age_days"), bool)
+                    and reg["max_age_days"] > 0
+                    and all(isinstance(e, dict) and e.get("id") for e in reg["confirmations"])
+                    and isinstance(reg.get("relisted", []), list)
+                    and all(isinstance(r, dict) and r.get("id") for r in reg.get("relisted", []))):
+                raise ValueError("unexpected shape")
+        except (OSError, ValueError) as e:
+            log.error(f"removed-check REFUSED: {REMOVED_REGISTRY.name} is unreadable or malformed "
+                      f"({type(e).__name__}); left as it is, nothing looked up")
+            res["refused"] = "registry unreadable"
+            # Only a person can repair the file, so this refusal turns the health check red (main() counts it as an
+            # error); the source's refusals below (the cap, the gate) stay notes (relay datadawn green #1 item 3, N2).
+            res["needs_person"] = True
+            return res
+    by_id = {e["id"]: e for e in reg["confirmations"]}
+    relisted_log = list(reg.get("relisted", []))
+    res["entries"] = len(by_id)
+    max_age = reg["max_age_days"]
+    now = datetime.now(timezone.utc)
+
+    def stale(e):
+        try:
+            return (now - datetime.fromisoformat(str(e.get("probed")).replace("Z", "+00:00"))).days > max_age
+        except (TypeError, ValueError):
+            return True
+
+    relist = sorted(i for i in by_id if i in listed)
+    res["relisted"] = len(relist)
+    unlisted = sorted(on_disk - listed)
+    res["unlisted"] = len(unlisted)
+    to_check = [p for p in unlisted if p not in by_id or stale(by_id[p])]
+    if not to_check and not relist:
+        log.info(f"removed-check: {len(unlisted)} on disk but unlisted, all already confirmed; nothing to look up")
+        return res
+    if len(to_check) + len(relist) > MAX_NEW_CANDIDATES:
+        log.error(f"removed-check REFUSED: {len(to_check):,} unlisted and {len(relist):,} re-listed hearings need a "
+                  f"lookup (cap {MAX_NEW_CANDIDATES:,}); a listing that short is more likely broken than that many "
+                  f"changes. Nothing looked up, registry unchanged")
+        res["refused"] = f"{len(to_check) + len(relist)} candidates over the cap"
+        return res
+    # The live control must be a hearing nothing here would mark: never one the registry holds.
+    held_ids = set(by_id)
+    live_pool = sorted((listed & on_disk) - held_ids) or sorted(listed - held_ids)
+    if not live_pool:
+        res["refused"] = "no listed hearing for the live control"
+        log.error("removed-check REFUSED: no listed hearing to use as the live control")
+        return res
+    live_id = live_pool[0]
+
+    def gate():
+        return {"live_id": live_id, "live_http": _summary_status(session, live_id),
+                "impossible_id": IMPOSSIBLE_ID, "impossible_http": _summary_status(session, IMPOSSIBLE_ID)}
+
+    def gate_ok(g):
+        return g["live_http"] == 200 and g["impossible_http"] == 404
+
+    g_before = gate()
+    if not gate_ok(g_before):
+        log.error(f"removed-check REFUSED: the gate failed before the lookups ({g_before}); nothing written")
+        res["refused"] = "gate failed before"
+        return res
+    first, second, first_t = {}, {}, {}
+    relist_set = set(relist)
+    probe = to_check + relist          # disjoint: to_check is unlisted, relist is listed
+    for pid in probe:
+        first_t[pid] = time.monotonic()
+        first[pid] = {"at": _now_iso(), "http": _summary_status(session, pid)}
+        time.sleep(REQUEST_DELAY)
+    for pid in probe:
+        if first[pid]["http"] == (200 if pid in relist_set else 404):
+            wait = first_t[pid] + CONFIRM_SPACING_S - time.monotonic()   # per ID: never less than the spacing
+            if wait > 0:
+                time.sleep(wait)
+            second[pid] = {"at": _now_iso(), "http": _summary_status(session, pid)}
+            time.sleep(REQUEST_DELAY)
+    g_after = gate()
+    if not gate_ok(g_after):
+        log.error(f"removed-check REFUSED: the gate failed after the lookups ({g_after}); nothing written")
+        res["refused"] = "gate failed after"
+        return res
+    res["looked_up"] = len(to_check)
+    for pid in to_check:
+        a, b = first[pid], second.get(pid)
+        if a["http"] == 404 and b is not None and b["http"] == 404:
+            res["renewed" if pid in by_id else "confirmed_new"] += 1
+            by_id[pid] = {"id": pid, "verdict": "not_posted", "probed": b["at"], "gets": [a, b],
+                          "gate": g_after, "gate_before": g_before}
+        else:
+            res["unconfirmed"] += 1
+            log.info(f"  removed-check: {pid} is unlisted but not confirmed removed (lookups {a['http']}, "
+                     f"{b['http'] if b else '-'}){'; its earlier confirmation is kept' if pid in by_id else ''}")
+    for pid in relist:
+        a, b = first[pid], second.get(pid)
+        if a["http"] == 200 and b is not None and b["http"] == 200:
+            res["relisted_cleared"] += 1
+            relisted_log.append({"id": pid, "verdict": "posted_again", "probed": b["at"], "gets": [a, b],
+                                 "gate": g_after, "gate_before": g_before, "was": by_id.pop(pid)})
+            log.warning(f"HEARING_RELISTED id={pid} CLEARED: govinfo lists it again and two lookups at least "
+                        f"{CONFIRM_SPACING_S}s apart answered 200; its record moves to `relisted`, so the next build "
+                        f"serves it unmarked")
+        else:
+            res["relisted_held"] += 1
+            log.warning(f"HEARING_RELISTED id={pid} HELD: govinfo lists it again, but its lookups answered "
+                        f"{a['http']}, {b['http'] if b else '-'}; its confirmation is kept (still marked), and the "
+                        f"next scheduled run looks again")
+    reg["confirmations"] = [by_id[k] for k in sorted(by_id)]
+    reg["relisted"] = relisted_log
+    _write_registry(reg)
+    res["written"] = True
+    res["entries"] = len(by_id)
+    log.info(f"removed-check: {len(unlisted)} unlisted; looked up {len(to_check)}; {res['confirmed_new']} newly "
+             f"confirmed, {res['renewed']} renewed, {res['unconfirmed']} not confirmed; registry holds "
+             f"{len(by_id)}; {res['relisted']} listed again ({res['relisted_cleared']} unmarked again, "
+             f"{res['relisted_held']} still marked)")
+    return res
+
+
 # === Main ===
 def main():
     parser = argparse.ArgumentParser(description="Download committee hearing metadata from GovInfo")
@@ -534,6 +725,23 @@ def main():
     state["packages_downloaded"] = len(existing) + downloaded
     save_state(state)
 
+    # Hearings the source removed (§844): only a complete scheduled listing can show a drop.
+    removed_note = ""
+    if scheduled:
+        try:
+            rc = confirm_removed(session, {p["packageId"] for p in package_ids}, existing)
+            removed_note = (f"; removed-check: {rc['unlisted']} unlisted, {rc['confirmed_new']} newly confirmed, "
+                            f"{rc['entries']} in registry, {rc['relisted']} listed again "
+                            f"({rc['relisted_cleared']} unmarked again, {rc['relisted_held']} still marked)"
+                            + (f", REFUSED ({rc['refused']})" if rc["refused"] else ""))
+            if rc.get("needs_person"):
+                errors += 1
+                removed_note += "; a person must repair the registry"
+        except Exception as e:
+            log.error(f"removed-check raised {type(e).__name__}: {e}; the registry is as the last good run left it")
+            removed_note = f"; removed-check raised {type(e).__name__}"
+            errors += 1
+
     log.info(f"=== Complete ===")
     log.info(f"Downloaded: {downloaded}")
     log.info(f"Errors: {errors}")
@@ -541,7 +749,7 @@ def main():
 
     if scheduled:
         feed_hc.report("hearings", {"listed": len(package_ids), "errors": errors, "added": downloaded,
-                                    "note": f"{len(existing) + downloaded} on disk"}, log=log.info)
+                                    "note": f"{len(existing) + downloaded} on disk{removed_note}"}, log=log.info)
     else:
         log.info("feed_hc: not pinged (a hand run narrowed by --since, --limit or --congress)")
 
