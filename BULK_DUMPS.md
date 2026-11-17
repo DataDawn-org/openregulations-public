@@ -4,6 +4,8 @@
 because a bulk artifact makes a promise the serving layer does not: that someone can come back
 later and get **the same bytes**. Below is exactly which parts of that promise we keep.
 
+DataDawn is still being built. We're finding and fixing problems in the data as we go, so some of what you see here will change. Our downloads are dated snapshots: a fix reaches only downloads made after it.
+
 > **Every archive is a snapshot as of its build date, and our practice is not to reissue it.** If a
 > comment is withdrawn or removed at regulations.gov *after* an archive was built, that archive
 > still contains it. On the live site, its Datasette and API, and the MCP, we hide a comment once
