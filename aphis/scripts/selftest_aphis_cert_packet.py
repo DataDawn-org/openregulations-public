@@ -11,6 +11,11 @@ The defects (M: working-docs/receipts/2026-11-01_orange_5117a9c2/item3_pdf_cert_
 The rule (the drafter's call, relay #2 item 6): on a pdftotext failure the checker and the populate step refuse and
 keep the values already served; no new served value. The PDFs stay byte for byte under their nocert_ names.
 
+A later defect (relay datadawn green #1 item 2; decisions_log §898 A3): the checker skipped every report already in its
+verdict file, so a verdict worked out against a certificate a rebuild has since changed was kept and served. The rule
+now: a report is re-checked whenever its row's certificate differs from the one its LAST verdict line was worked out
+against (populate keeps the last line). Legs: CHANGED, two real reports whose certificate went 43-C-0410 -> 43-C-0427.
+
 Fixtures are seven real archived APHIS PDFs (copied into a scratch tree; the originals are only read), one per
 verdict and rename state, with today's manifest, verdict and database values as the expected answers, plus a
 missing file and an unreadable one. --real adds the populate step over the whole real archive (read-only) into a
@@ -50,6 +55,59 @@ FIX = {
     "0385e6eb6eb727a9": "no_cert_ok",     # renamed
 }
 MISSING, BROKEN = "ffffffffffff0001", "ffffffffffff0002"
+# Relay datadawn green #1 item 2 (decisions_log §898 A3): two real reports whose certificate changed in the 11-09
+# rebuild (the 08-27 extract) while their verdict line still carries the certificate it was worked out against.
+# id -> (the certificate the held verdict was worked out against, the row's certificate now, the right verdict now).
+# Pinned, so the legs keep their meaning after the real verdict file gains the re-checked lines.
+CHANGED = {
+    "3d09d7c56a0d925d": ("43-C-0410", "43-C-0427", "mismatch"),
+    "816222ebb7805db5": ("43-C-0410", "43-C-0427", "mismatch"),
+}
+
+
+def changed_tree():
+    """A scratch tree for CHANGED: the two real PDFs (copied; the originals are only read), their manifest lines,
+    each one's FIRST real verdict line with db_cert pinned to the old certificate (verdict 'match', as served), and
+    db/aphis.db as 05 leaves it, carrying the new certificate."""
+    man, first = {}, {}
+    for line in open(REAL / "pdf_archive_manifest.jsonl"):
+        r = json.loads(line)
+        if r.get("ok") and r["id"] in CHANGED:
+            man[r["id"]] = r
+    for line in open(REAL / "pdf_cert_verdicts.jsonl"):
+        v = json.loads(line)
+        if v["id"] in CHANGED and v["id"] not in first:
+            first[v["id"]] = v
+    t = Path(tempfile.mkdtemp(prefix="staphisx_"))
+    (t / "pdfs").mkdir()
+    (t / "db").mkdir()
+    for i in CHANGED:
+        shutil.copy2(REAL / man[i]["path"], t / man[i]["path"])
+    (t / "pdf_archive_manifest.jsonl").write_text("".join(json.dumps(man[i]) + "\n" for i in CHANGED))
+    held = []
+    for i, (old, _new, _want) in CHANGED.items():
+        v = dict(first[i])
+        v["db_cert"] = old
+        v["verdict"] = "match"
+        held.append(json.dumps(v))
+    (t / "pdf_cert_verdicts.jsonl").write_text("".join(x + "\n" for x in held))
+    c = sqlite3.connect(t / "db" / "aphis.db")
+    c.execute("CREATE TABLE inspections (id TEXT, cert_number TEXT, inspection_date TEXT, pdf_local_path TEXT)")
+    c.executemany("INSERT INTO inspections VALUES (?,?,?,?)",
+                  [(i, CHANGED[i][1], first[i].get("db_date"), man[i]["path"]) for i in CHANGED])
+    c.commit()
+    c.close()
+    return t
+
+
+def last_lines(tree):
+    """id -> the LAST verdict line for it (the line populate_pdf_paths.py keeps)."""
+    out = {}
+    for x in (tree / "pdf_cert_verdicts.jsonl").read_text().split("\n"):
+        if x:
+            v = json.loads(x)
+            out[v["id"]] = v
+    return out
 
 
 def real_rows():
@@ -358,6 +416,25 @@ def main():
     code, text = call(load(d / "verify_pdf_cert_match.py", t, "chk2"))
     case("CLEAN checker: verdicts already held are kept as they are, and a run with nothing to do exits 0",
          code in (0, None) and (t / "pdf_cert_verdicts.jsonl").read_bytes() == before, f"exit {code}")
+    shutil.rmtree(t, ignore_errors=True)
+
+    # ---- the checker: a certificate changed since its verdict (relay datadawn green #1 item 2) ----
+    t = changed_tree()
+    code, text = call(load(d / "verify_pdf_cert_match.py", t, "chk3"))
+    last = last_lines(t)
+    got = {i: (last.get(i, {}).get("db_cert"), last.get(i, {}).get("verdict")) for i in CHANGED}
+    want = {i: (CHANGED[i][1], CHANGED[i][2]) for i in CHANGED}
+    case("REFUSE checker: a verdict worked out against an older certificate is not kept; the two real reports whose "
+         "certificate changed (43-C-0410 -> 43-C-0427) are re-checked against the certificate they carry now",
+         code in (0, None) and got == want, f"exit {code}; last lines (db_cert, verdict) {got}; want {want}")
+    after_first = (t / "pdf_cert_verdicts.jsonl").read_bytes()
+    code2, _ = call(load(d / "verify_pdf_cert_match.py", t, "chk4"))
+    case("CLEAN checker: once re-checked, a second run re-checks nothing (it compares against the LAST line)",
+         code2 in (0, None) and (t / "pdf_cert_verdicts.jsonl").read_bytes() == after_first, f"exit {code2}")
+    code3, _ = call(load(d / "populate_pdf_paths.py", t, "pop4"))
+    served = {i: r[2] for i, r in db_rows(t / "db" / "aphis.db").items()}
+    case("REFUSE populate after the checker: the re-checked verdict is the one served, never the stale 'match'",
+         code3 in (0, None) and served == {i: CHANGED[i][2] for i in CHANGED}, f"exit {code3}; served {served}")
     shutil.rmtree(t, ignore_errors=True)
 
     # ---- the populate step ----
