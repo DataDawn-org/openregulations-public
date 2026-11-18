@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """feed_hc.py — the restarted feeds' health checks: a verdict from a run's own facts, and the ping
-(decisions_log §591, §699 step 3; relays datadawn green #1 to #3).
+(decisions_log §591, §699 step 3; relays datadawn green #1 to #3; the aphis feed, owner queue 1016).
 
 Why a verdict and not an exit code: under decisions_log §22 a failed download inside the weekly or monthly exits 0,
 so a stopped feed is silent. Each restarted feed's loader calls report() at the end of a scheduled run with the facts
@@ -50,6 +50,9 @@ FEEDS = {
             "DataDawn feed: OGE PAS index (monthly)", 31 * DAY, 7 * DAY),
     "wh_personnel": ("HC_DATADAWN_FEED_WH_PERSONNEL", "hc_feed_wh_personnel.secrets.manifest",
                      "DataDawn feed: White House personnel (33_wh_personnel_reports.py, monthly)", 31 * DAY, 7 * DAY),
+    "aphis": ("HC_DATADAWN_FEED_APHIS", "hc_feed_aphis.secrets.manifest",
+              "DataDawn feed: APHIS inspections (run_aphis.sh --skip-pdfs + PDF fetch, monthly)", 31 * DAY,
+              7 * DAY),
 }
 
 
