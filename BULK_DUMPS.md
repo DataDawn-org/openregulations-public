@@ -140,6 +140,10 @@ artifact you are using. If your copy predates 2026-W37, read the 2026-W37 entry 
 
 `lobbying.db.gz` holds lobbying registrations and reports from LDA.gov. As [LDA.gov’s terms of use](https://lda.gov/api/tos/) require: “Senate Office of Public Records cannot vouch for the data or analyses derived from these data after the data have been retrieved from LDA.gov.” Its four `lobbying_*_summary` tables are computed by DataDawn from the quarterly reports; no one files them.
 
+`openregs.db.gz`:
+- `fec_employer_totals`, `fec_employer_to_candidate`, `fec_employer_to_party` and `fec_top_occupations`: By federal law, information about individual campaign donors taken from FEC reports may not be used to ask for donations or for commercial purposes. Details: https://datadawn.org/terms#licensing
+- `stock_trades`, `oge_pas_filings` and `oge_pas_transactions`: By federal law, these financial disclosure reports may not be used for commercial purposes (news reporting excepted), to decide anyone's credit, or to ask for money. Details: https://datadawn.org/terms#licensing
+
 `build_metadata` inside each database records when that database was built. Where a source has
 its own vintage (the IRS Business Master File, for instance), that vintage is recorded in its own
 table — `bmf_source_meta` — because a corpus build date and a source as-of date are different
