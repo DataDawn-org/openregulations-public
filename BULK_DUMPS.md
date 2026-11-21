@@ -31,13 +31,27 @@ DataDawn is still being built. We're finding and fixing problems in the data as 
 >
 > Why: the White House visitor records are public, and going forward DataDawn limits what it republishes about private individuals where it can.
 
-> **Lobbying rows counted more than once: correction under way** *(note dated 2026-11-13)*
+> **Lobbying rows counted more than once in archives published before 2026-11-21** *(note dated 2026-11-21)*
 >
-> Every `lobbying.db.gz` and `openregs.db.gz` published so far carries a loading error that counted some lobbying
-> filings' rows more than once, in `lobbying_activities`, `lobbying_lobbyists` and `lobbying_contributions`, and in
-> `openregs.db.gz`'s `lobbying_bills`. Totals and row counts taken from those tables are overstated. LDA.gov's own
-> filing pages show the correct figures. These archives will not be reissued. When the first corrected archive is
-> published, this note will say which archives carry the extra rows and how to check a copy.
+> In every `lobbying.db.gz` and `openregs.db.gz` published before 2026-11-21, a loading error counted some lobbying
+> filings' rows more than once. The extra rows are in `lobbying_activities`, `lobbying_lobbyists` and
+> `lobbying_contributions`, in both files, and in `openregs.db.gz`'s `lobbying_bills`, which has one row per activity
+> row. Totals and row counts taken from those tables are overstated: one 2025 contributions report, for example,
+> lists 60 contributions totalling $5,142,500 on LDA.gov, and these archives hold 120 rows totalling $10,285,000 for
+> it. The same error dropped the cents from contribution amounts.
+>
+> These archives are not reissued for this change. They stay exactly as published, so a citation to one keeps
+> resolving to the same bytes. These carry the extra rows:
+> - `monthly/2026-09/`, `monthly/2026-10/` and `monthly/2026-11/` (monthly archives, retained);
+> - the legacy weeklies `2026-W34/`, `2026-W35/` and `2026-W36/` (kept, not citable);
+> - the first `2026-W47` weekly, kept at `weekly/2026-W47_20261116T221744Z/` when that week was published a second time, until it is deleted 28 days after it was kept;
+> - the weeklies up to `weekly/2026-W46/`, until each is deleted 28 days after upload.
+>
+> To check a copy you hold, run
+> `SELECT COUNT(*) FROM lobbying_contributions WHERE filing_uuid = '418db336-e7e4-4128-944d-56adaf821f5f';`
+> It returns 120 in a copy with the extra rows, and 60 in a corrected one.
+>
+> LDA.gov's own filing pages show the correct figures, and so do our archives published from 2026-11-21 on.
 
 ## The two retention tiers, and why they differ
 
