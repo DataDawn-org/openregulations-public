@@ -588,6 +588,7 @@
                                 <div class="section-subtitle">${formatNumber(fecData.length)} employers &middot; ${formatMoney(fecTotal)} total contributions</div>
                             </div>
                         </div>
+                        <div class="hint dd-notice" style="margin:0 0 0.8rem;color:var(--text-secondary);">By federal law, information about individual campaign donors taken from FEC reports may not be used to ask for donations or for commercial purposes. Details: <a href="https://datadawn.org/terms#licensing" style="color:var(--dawn-gold);">https://datadawn.org/terms#licensing</a></div>
                         <table class="data-table">
                             <thead><tr><th>Employer</th><th>Total Given</th><th>Donations</th><th>States</th><th>Cycles</th></tr></thead>
                             <tbody>${fecData.map(r => `<tr>
@@ -642,6 +643,7 @@
                             </div>
                             <a class="section-link" href="/explore/member.html?q=${encodeURIComponent(q)}&filter=all">View members &rarr;</a>
                         </div>
+                        <div class="hint dd-notice" style="margin:0 0 0.8rem;color:var(--text-secondary);">By federal law, these financial disclosure reports may not be used for commercial purposes (news reporting excepted), to decide anyone's credit, or to ask for money. Details: <a href="https://datadawn.org/terms#licensing" style="color:var(--dawn-gold);">https://datadawn.org/terms#licensing</a></div>
                         <table class="data-table">
                             <thead><tr><th>Date</th><th>Member</th><th>Ticker</th><th>Type</th><th>Amount</th><th>Asset</th><th></th></tr></thead>
                             <tbody>${trades.map(r => {
