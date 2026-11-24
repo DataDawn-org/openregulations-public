@@ -12,6 +12,7 @@ Parses raw JSON from all categories and builds:
 - All indexes for efficient querying
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -21,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.aura_client import BASE_DIR, RAW_DIR
+from lib.aura_client import BASE_DIR, RAW_DIR, hash_id_from_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +32,34 @@ logger = logging.getLogger(__name__)
 
 DB_DIR = BASE_DIR / "db"
 DB_PATH = DB_DIR / "aphis.db"
+
+# Inspection IDs (owner queue 1015; decisions_log §856, the ruling on followup #672: each report is its own row,
+# keyed on its USDA document link; relay datadawn green #5 item 1, the drafting chat's option B). The 110,400 IDs
+# served before this change stay as they are: inspection_id_pin.tsv maps each served report's link (sha256, first 32
+# hex characters) to its served ID, with "nolink" rows for the served reports that have no link. A report whose link
+# is not pinned gets an ID from its link (hash_id_from_url). The build refuses, before it removes the old aphis.db,
+# when the pin is missing or differs from PIN_SHA256 (selftest_aphis_inspection_ids.py, legs R1 and R2). The pin is
+# written once by make_inspection_id_pin.py from the served aphis.db and never regenerated.
+PIN_PATH = Path(__file__).resolve().parent / "inspection_id_pin.tsv"
+PIN_SHA256 = "da4578394612ac08aab33d672a071ee081b433a7c619c334a30626becbfb5117"
+PIN_REFUSED_EXIT = 3
+# The previous build (decisions_log §898 item 2, option (a), the drafting chat's call; relay datadawn green #2 item 1).
+# A served report the extract no longer carries (USDA took it down, or now lists it under a new link) stays served:
+# its row is copied, every column unchanged, from the aphis.db this build replaces, with its facility row when this
+# build has none for its certificate. The monthly refresh (owner queue 1016) marks such reports later, under §859. The
+# build refuses, before it removes the old aphis.db, when that file is missing, can't be read as a database, lacks a
+# table or column the carry reads, or lacks a pinned served ID (selftest_aphis_inspection_ids.py, legs P1-P4):
+# building without it would drop served reports.
+PREVIOUS_REFUSED_EXIT = 4
+INSPECTION_COLUMNS = ("id", "cert_number", "inspection_date", "inspection_type", "critical_count",
+                      "noncritical_count", "direct_count", "teachable_moment_count", "pdf_url", "pdf_local_path")
+FACILITY_COLUMNS = ("cert_number", "customer_number", "legal_name", "dba_name", "site_name", "site_address",
+                    "site_city", "site_state", "site_zip", "license_type", "status", "first_seen_date",
+                    "last_seen_date")
+LINK_FIELDS = ("reportUrl", "reportLink", "pdfUrl", "documentUrl", "web_reportUrl")
+CERT_FIELDS = ("web_certNumber", "certNumber", "cert_number")
+DATE_FIELDS = ("web_inspectionDate", "inspectionDate", "inspection_date")
+CUSTOMER_FIELDS = ("web_customerNumber", "customerNumber", "customer_number")
 
 SCHEMA = """
 -- Central entity: every AWA-regulated facility
@@ -113,7 +142,7 @@ CREATE INDEX IF NOT EXISTS idx_teachable_cert ON teachable_moments(cert_number);
 FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS facilities_fts USING fts5(
     legal_name, dba_name, site_name, site_city, site_state,
-    content='facilities', content_rowid='rowid'
+    content="facilities", content_rowid='rowid'
 );
 """
 
@@ -193,6 +222,77 @@ def generate_id(record: dict, *field_groups) -> str:
     return hashlib.sha1("|".join(parts).encode()).hexdigest()[:16]
 
 
+def link_key(url: str) -> str:
+    """The pin's key for a report link: its sha256, first 32 hex characters."""
+    return hashlib.sha256(url.encode()).hexdigest()[:32]
+
+
+def load_pin(path: Path, expected_sha256: str):
+    """Read the pinned served IDs. Returns (link key -> ID, every pinned ID).
+
+    Refuses (SystemExit PIN_REFUSED_EXIT, the reason on stderr) when the file is missing or unreadable, or when its
+    sha256 is not expected_sha256. Called before the old aphis.db is removed, so a refusal leaves it in place.
+    """
+    try:
+        data = Path(path).read_bytes()
+    except OSError as e:
+        print(f"REFUSED: the inspection ID pin {path} can't be read ({e.__class__.__name__}); aphis.db is left as it "
+              f"was. Restore the file from the orchestrators repository.", file=sys.stderr)
+        raise SystemExit(PIN_REFUSED_EXIT)
+    got = hashlib.sha256(data).hexdigest()
+    if got != expected_sha256:
+        print(f"REFUSED: the inspection ID pin {path} has sha256 {got[:16]}…, not the pinned {expected_sha256[:16]}…; "
+              f"aphis.db is left as it was. Restore the file from the orchestrators repository.", file=sys.stderr)
+        raise SystemExit(PIN_REFUSED_EXIT)
+    by_link = {}
+    pinned = set()
+    for line in data.decode().splitlines()[1:]:
+        key, rec_id = line.split("\t")
+        pinned.add(rec_id)
+        if key != "nolink":
+            by_link[key] = rec_id
+    logger.info(f"Inspection ID pin: {len(pinned):,} served IDs, {len(by_link):,} with a link")
+    return by_link, pinned
+
+
+def load_previous_build(path: Path, pinned: set):
+    """Read, from the aphis.db this build replaces, the row of every pinned served ID and every facility row.
+    Returns (id -> inspection row, certificate -> facility row), in INSPECTION_COLUMNS / FACILITY_COLUMNS order.
+
+    Refuses (SystemExit PREVIOUS_REFUSED_EXIT, the reason on stderr) when the file is missing, can't be read as a
+    database (SQLite's quick_check included), lacks a table or column the carry reads, or lacks a pinned ID. Called
+    before connect() removes the old aphis.db, so a refusal leaves it in place.
+    """
+    def refuse(why):
+        print(f"REFUSED: the previous build {path} {why}, so served reports the extract no longer carries would be "
+              f"dropped (decisions_log §859, §898 item 2); aphis.db is left as it was. Put the served aphis.db back "
+              f"(run_aphis.sh keeps a copy before each rebuild; the server holds the served file) and run the build "
+              f"again.", file=sys.stderr)
+        raise SystemExit(PREVIOUS_REFUSED_EXIT)
+
+    path = Path(path)
+    if not path.is_file():
+        refuse("is missing")
+    try:
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            check = conn.execute("PRAGMA quick_check").fetchone()[0]
+            if check != "ok":
+                refuse(f"fails SQLite's quick_check ({str(check)[:80]})")
+            insp = {r[0]: r for r in conn.execute(f"SELECT {', '.join(INSPECTION_COLUMNS)} FROM inspections")
+                    if r[0] in pinned}
+            fac = {r[0]: r for r in conn.execute(f"SELECT {', '.join(FACILITY_COLUMNS)} FROM facilities")}
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        refuse(f"can't be read as a build ({e.__class__.__name__}: {str(e)[:80]})")
+    missing = pinned - set(insp)
+    if missing:
+        refuse(f"lacks {len(missing):,} pinned served ID(s), for example {sorted(missing)[0]}")
+    logger.info(f"Previous build: {len(insp):,} pinned served reports and {len(fac):,} facility rows read from {path}")
+    return insp, fac
+
+
 def load_results(category: str) -> list[dict]:
     """Load results for a category from all_results.json or prefix files."""
     cat_dir = RAW_DIR / category
@@ -228,10 +328,11 @@ def load_results(category: str) -> list[dict]:
 
 
 class DatabaseBuilder:
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, pin=None):
         self.db_path = db_path
         self.conn = None
         self.facilities_seen = set()
+        self.pin = pin if pin is not None else ({}, set())
 
     def connect(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -300,24 +401,39 @@ class DatabaseBuilder:
         ))
 
     def import_inspections(self, records: list[dict]):
-        """Import inspection report records."""
-        logger.info(f"Importing {len(records)} inspection records...")
-        count = 0
+        """Import inspection report records, one row per report (owner queue 1015; §856; option B).
 
-        for r in records:
+        Reports with a link go first, each keyed on its link: its pinned ID if the link is pinned, otherwise an ID
+        from the link. Then reports with no link, under the fallback ID (certificate | date | customer) they have
+        always had, unless a report with a link holds that ID already. Nothing is replaced: a row whose ID is taken
+        is not added, and the log counts it.
+        """
+        logger.info(f"Importing {len(records)} inspection records...")
+        by_link, pinned = self.pin
+        linked = [r for r in records if get_field(r, *LINK_FIELDS)]
+        unlinked = [r for r in records if not get_field(r, *LINK_FIELDS)]
+        count = n_pinned = n_from_link = n_fallback = 0
+        not_added = {"same link": 0, "other link, same ID": 0, "no link, ID held by a linked report": 0,
+                     "no link, ID taken": 0}
+        link_of = {}
+        used = set()
+
+        for r in linked + unlinked:
             self.upsert_facility(r)
 
-            cert = get_field(r, "web_certNumber", "certNumber", "cert_number")
-            date = normalize_date(get_field(r, "web_inspectionDate", "inspectionDate", "inspection_date"))
-
-            rec_id = r.get("hash_id") or generate_id(r,
-                ("web_certNumber", "certNumber", "cert_number"),
-                ("web_inspectionDate", "inspectionDate", "inspection_date"),
-                ("web_customerNumber", "customerNumber", "customer_number"),
-            )
+            cert = get_field(r, *CERT_FIELDS)
+            date = normalize_date(get_field(r, *DATE_FIELDS))
 
             # Find PDF URL
-            pdf_url = get_field(r, "reportUrl", "reportLink", "pdfUrl", "documentUrl", "web_reportUrl")
+            pdf_url = get_field(r, *LINK_FIELDS)
+            if pdf_url:
+                rec_id = by_link.get(link_key(pdf_url))
+                is_pinned = rec_id is not None
+                if rec_id is None:
+                    rec_id = hash_id_from_url(pdf_url)
+            else:
+                rec_id = generate_id(r, CERT_FIELDS, DATE_FIELDS, CUSTOMER_FIELDS)
+
             pdf_local = None
             if pdf_url and r.get("hash_id"):
                 pdf_path = BASE_DIR / "pdfs" / "inspections" / f"{r['hash_id']}.pdf"
@@ -326,7 +442,7 @@ class DatabaseBuilder:
 
             try:
                 self.conn.execute("""
-                    INSERT OR REPLACE INTO inspections
+                    INSERT INTO inspections
                     (id, cert_number, inspection_date, inspection_type,
                      critical_count, noncritical_count, direct_count,
                      teachable_moment_count, pdf_url, pdf_local_path)
@@ -344,11 +460,71 @@ class DatabaseBuilder:
                     pdf_local,
                 ))
                 count += 1
-            except sqlite3.IntegrityError as e:
-                logger.debug(f"Duplicate inspection {rec_id}: {e}")
+                used.add(rec_id)
+                if pdf_url:
+                    link_of[rec_id] = pdf_url
+                    if is_pinned:
+                        n_pinned += 1
+                    else:
+                        n_from_link += 1
+                else:
+                    n_fallback += 1
+            except sqlite3.IntegrityError:
+                if pdf_url and link_of.get(rec_id) == pdf_url:
+                    not_added["same link"] += 1
+                elif pdf_url:
+                    not_added["other link, same ID"] += 1
+                elif rec_id in link_of:
+                    not_added["no link, ID held by a linked report"] += 1
+                else:
+                    not_added["no link, ID taken"] += 1
+                logger.warning(f"Inspection not added, ID {rec_id} already in this build "
+                               f"({'link' if pdf_url else 'no link'}, cert {cert or '-'}, date {date or '-'})")
 
         self.conn.commit()
-        logger.info(f"  Inserted {count} inspection records")
+        logger.info(f"  Inserted {count} inspection records: {n_pinned:,} under a pinned served ID, "
+                    f"{n_from_link:,} under an ID from their link, {n_fallback:,} with no link under their fallback ID")
+        logger.info(f"  {not_added['same link']} report(s) not added: same link as a report already in this build")
+        logger.info(f"  {not_added['other link, same ID']} report(s) not added: a different link gave the same ID")
+        logger.info(f"  {not_added['no link, ID held by a linked report']} report(s) with no link not added: "
+                    f"their fallback ID belongs to a linked report")
+        logger.info(f"  {not_added['no link, ID taken']} report(s) with no link not added: their fallback ID is "
+                    f"another such report's")
+        logger.info(f"  {len(pinned - used):,} pinned served ID(s) carried by no report in this extract")
+
+    def carry_forward_absent_reports(self, previous):
+        """Carry forward, unchanged, every pinned served report that no report in this extract carries (decisions_log
+        §898 item 2, option (a)), with its facility row when this build has none for its certificate. Reads the built
+        tables, not the import's own counts, and re-reads them after: a pinned ID still absent stops the build."""
+        prev_insp, prev_fac = previous
+        _by_link, pinned = self.pin
+        present = {r[0] for r in self.conn.execute("SELECT id FROM inspections")}
+        absent = sorted(pinned - present)
+        have_fac = {r[0] for r in self.conn.execute("SELECT cert_number FROM facilities")}
+        n_fac = n_no_fac = 0
+        for rec_id in absent:
+            row = prev_insp[rec_id]
+            self.conn.execute(f"INSERT INTO inspections ({', '.join(INSPECTION_COLUMNS)}) "
+                              f"VALUES ({', '.join('?' * len(INSPECTION_COLUMNS))})", row)
+            cert = row[1]
+            if cert and cert not in have_fac:
+                if cert in prev_fac:
+                    self.conn.execute(f"INSERT INTO facilities ({', '.join(FACILITY_COLUMNS)}) "
+                                      f"VALUES ({', '.join('?' * len(FACILITY_COLUMNS))})", prev_fac[cert])
+                    have_fac.add(cert)
+                    n_fac += 1
+                else:
+                    n_no_fac += 1
+        self.conn.commit()
+        still = pinned - {r[0] for r in self.conn.execute("SELECT id FROM inspections")}
+        if still:
+            raise RuntimeError(f"carry-forward post-state: {len(still):,} pinned served ID(s) still absent, for "
+                               f"example {sorted(still)[0]}")
+        logger.info(f"  {len(absent):,} pinned served report(s) carried forward unchanged from the previous build "
+                    f"(absent from this extract; decisions_log §898 item 2), with {n_fac:,} facility row(s) this build "
+                    f"had none for")
+        if n_no_fac:
+            logger.warning(f"  {n_no_fac:,} carried report(s) have a certificate with no facility row in either build")
 
     def import_enforcement(self, records: list[dict]):
         """Import enforcement action records."""
@@ -543,12 +719,18 @@ def main():
 
     DB_DIR.mkdir(parents=True, exist_ok=True)
 
-    builder = DatabaseBuilder(DB_PATH)
+    # Before connect(), which removes the old aphis.db: a refusal here leaves it in place.
+    pin = load_pin(PIN_PATH, PIN_SHA256)
+    # Also before connect(): the previous build's pinned reports, for the carry-forward (refuses when it can't
+    # supply them).
+    previous = load_previous_build(DB_PATH, pin[1])
+
+    builder = DatabaseBuilder(DB_PATH, pin=pin)
     builder.connect()
 
     try:
         # Import in order: licensees first (establishes facility records),
-        # then inspections, enforcement, teachable moments, annual reports
+        # then inspections, enforcement, teachable moments (annual reports are skipped, below)
         licensee_records = load_results("licensees")
         if licensee_records:
             builder.import_licensees(licensee_records)
@@ -565,9 +747,18 @@ def main():
         if tm_records:
             builder.import_teachable_moments(tm_records)
 
+        # Annual reports are NOT imported (relay datadawn green #3 item 2, the drafter's call; the importer's fix is
+        # its own item). import_annual_reports reads field names the extract (pulled 2026-03-03 UTC) doesn't have
+        # (it has `year` and a column per species), so every record's ID came from its certificate alone: measured
+        # 11-09, 12,044 records built 1,598 rows (the distinct certificates), every field empty but the certificate,
+        # plus a facility row with no name for each of 196 certificates seen only there. annual_reports stays in the
+        # schema, built empty, as served today.
         ar_records = load_results("annual_reports")
-        if ar_records:
-            builder.import_annual_reports(ar_records)
+        logger.warning(f"Annual reports: {len(ar_records):,} annual-report record(s) in the extract NOT imported "
+                       f"(relay datadawn green #3 item 2); annual_reports is built empty, as served")
+
+        # Served reports the extract no longer carries, carried forward unchanged (decisions_log §898 item 2)
+        builder.carry_forward_absent_reports(previous)
 
         # Build FTS index
         builder.build_fts()

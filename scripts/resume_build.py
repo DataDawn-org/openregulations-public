@@ -298,149 +298,29 @@ def build_remaining_summary_tables(conn):
     log.info("Summary tables complete.")
 
 
-FTS_SCHEMA = """
--- Full-text search on Federal Register
-CREATE VIRTUAL TABLE IF NOT EXISTS federal_register_fts USING fts5(
-    title, abstract, agency_names, excerpts,
-    content='federal_register', content_rowid='rowid'
-);
+# The index definitions are 05's (build_fts below runs 05's own build_fts; relay datadawn green #4 item 4).
+# This file's March copy of FTS_SCHEMA is in pipeline-scripts' history.
 
--- Full-text search on dockets (standalone)
-CREATE VIRTUAL TABLE IF NOT EXISTS dockets_fts USING fts5(
-    title, agency_id, summary
-);
 
--- Full-text search on documents
-CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
-    title, agency_id, document_type,
-    content='documents', content_rowid='rowid'
-);
-
--- Full-text search on comments
-CREATE VIRTUAL TABLE IF NOT EXISTS comments_fts USING fts5(
-    title, submitter_name, agency_id, submitter_type, docket_id,
-    content='comments', content_rowid='rowid'
-);
-
--- Full-text search on eCFR regulatory text
-CREATE VIRTUAL TABLE IF NOT EXISTS cfr_fts USING fts5(
-    section_number, section_heading, part_name, agency, full_text,
-    content='cfr_sections', content_rowid='rowid'
-);
-
--- Full-text search on Congressional Record
-CREATE VIRTUAL TABLE IF NOT EXISTS crec_fts USING fts5(
-    title, chamber, full_text,
-    content='congressional_record', content_rowid='rowid'
-);
-
--- Full-text search on lobbying activities
-CREATE VIRTUAL TABLE IF NOT EXISTS lobbying_fts USING fts5(
-    client_name, registrant_name, specific_issues, government_entities, issue_code,
-    content='lobbying_activities', content_rowid='rowid'
-);
-
--- Full-text search on spending awards
-CREATE VIRTUAL TABLE IF NOT EXISTS spending_awards_fts USING fts5(
-    recipient_name, agency, sub_agency,
-    content='spending_awards', content_rowid='rowid'
-);
-
--- Full-text search on legislation
-CREATE VIRTUAL TABLE IF NOT EXISTS legislation_fts USING fts5(
-    title, policy_area, bill_id,
-    content='legislation', content_rowid='rowid'
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS fara_registrants_fts USING fts5(
-    name, business_name, city, state,
-    content='fara_registrants', content_rowid='rowid'
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS fara_foreign_principals_fts USING fts5(
-    registrant_name, foreign_principal, country,
-    content='fara_foreign_principals', content_rowid='rowid'
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS fec_employer_fts USING fts5(
-    employer,
-    content='fec_employer_totals', content_rowid='rowid'
-);
-
--- Full-text search on hearings
-CREATE VIRTUAL TABLE IF NOT EXISTS hearings_fts USING fts5(
-    title, chamber, committees,
-    content='hearings', content_rowid='rowid'
-);
-
--- Full-text search on CRS reports
-CREATE VIRTUAL TABLE IF NOT EXISTS crs_reports_fts USING fts5(
-    title, authors, topics, summary,
-    content='crs_reports', content_rowid='rowid'
-);
-
--- Full-text search on nominations
-CREATE VIRTUAL TABLE IF NOT EXISTS nominations_fts USING fts5(
-    description, organization, citation, status,
-    content='nominations', content_rowid='rowid'
-);
-
--- Full-text search on GAO reports
-CREATE VIRTUAL TABLE IF NOT EXISTS gao_reports_fts USING fts5(
-    title, abstract, subjects, report_number,
-    content='gao_reports', content_rowid='rowid'
-);
-
--- Full-text search on earmarks
-CREATE VIRTUAL TABLE IF NOT EXISTS earmarks_fts USING fts5(
-    recipient, project_description, member_name, recipient_address,
-    content='earmarks', content_rowid='id'
-);
-"""
+def _load_05():
+    """05_build_database.py from beside this file (its name can't be imported directly)."""
+    import importlib.util
+    import sys
+    here = Path(__file__).resolve().parent
+    if str(here) not in sys.path:
+        sys.path.insert(0, str(here))
+    spec = importlib.util.spec_from_file_location("b05_for_resume", here / "05_build_database.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def build_fts(conn):
-    """Build full-text search indexes."""
-    log.info("Building FTS5 indexes...")
-    conn.executescript(FTS_SCHEMA)
-
-    for table in ["federal_register_fts", "documents_fts", "comments_fts",
-                   "cfr_fts", "crec_fts", "lobbying_fts",
-                   "spending_awards_fts", "legislation_fts",
-                   "fara_registrants_fts", "fara_foreign_principals_fts",
-                   "fec_employer_fts",
-                   "hearings_fts", "crs_reports_fts", "nominations_fts",
-                   "gao_reports_fts", "earmarks_fts"]:
-        try:
-            source_map = {
-                'cfr_fts': 'cfr_sections', 'crec_fts': 'congressional_record',
-                'lobbying_fts': 'lobbying_activities', 'spending_awards_fts': 'spending_awards',
-                'legislation_fts': 'legislation', 'fara_registrants_fts': 'fara_registrants',
-                'fara_foreign_principals_fts': 'fara_foreign_principals',
-                'fec_employer_fts': 'fec_employer_totals', 'hearings_fts': 'hearings',
-                'crs_reports_fts': 'crs_reports', 'nominations_fts': 'nominations',
-                'gao_reports_fts': 'gao_reports', 'earmarks_fts': 'earmarks'
-            }
-            source_table = source_map.get(table, table.replace('_fts', ''))
-            count = conn.execute(f"SELECT COUNT(*) FROM {source_table}").fetchone()[0]
-            if count > 0:
-                log.info(f"  Rebuilding {table}...")
-                conn.execute(f"INSERT INTO {table}({table}) VALUES('rebuild')")
-                conn.commit()
-        except sqlite3.OperationalError as e:
-            log.warning(f"  {table}: skipped ({e})")
-
-    # dockets_fts is standalone — populate with JOIN to docket_summary
-    log.info("  Populating dockets_fts with summaries...")
-    conn.execute("""
-        INSERT INTO dockets_fts(rowid, title, agency_id, summary)
-        SELECT d.rowid, d.title, d.agency_id, COALESCE(ds.summary, '')
-        FROM dockets d
-        LEFT JOIN docket_summary ds ON ds.docket_id = d.id
-    """)
-    conn.commit()
-
-    log.info("  FTS indexes built")
+    """Build full-text search indexes with 05's own step (relay datadawn green #4 item 4), so a recovery build writes
+    the same indexes as a full build: 05's definitions in the form Datasette detects (fts_content_detectable), its
+    eligible-only fec_employer_fts, every linked index rebuilt, dockets_fts populated. Test:
+    selftest_resume_build_fts.py."""
+    _load_05().build_fts(conn)
 
 
 def print_stats(conn):
