@@ -29,30 +29,30 @@
             {"name": "Canned Queries", "url": "https://regs.datadawn.org/openregs/{query_name}.json?{params}", "method": "GET"}
         ],
         "datasets": [
-            {"name": "federal_register", "description": "Federal Register documents (1994-present)", "rows": 993703, "key": "document_number"},
-            {"name": "dockets", "description": "Regulatory dockets from Regulations.gov", "rows": 86706, "key": "id"},
-            {"name": "documents", "description": "Regulatory documents within dockets", "rows": 727510, "key": "id", "foreignKeys": ["docket_id → dockets.id", "agency_id → agency_map.regs_code"]},
-            {"name": "comments", "description": "Public comments on regulatory documents", "rows": 3181491, "key": "id", "foreignKeys": ["docket_id → dockets.id"]},
-            {"name": "congress_members", "description": "Current and historical Congress members", "rows": 12763, "key": "bioguide_id"},
-            {"name": "stock_trades", "description": "Congressional stock trading disclosures", "rows": 95621, "foreignKeys": ["bioguide_id → congress_members.bioguide_id"]},
-            {"name": "congressional_record", "description": "Floor speeches and proceedings", "rows": 878583, "key": "granule_id"},
-            {"name": "crec_speakers", "description": "Speaker-to-speech mapping", "rows": 944216, "foreignKeys": ["granule_id → congressional_record.granule_id", "bioguide_id → congress_members.bioguide_id"]},
-            {"name": "crec_bills", "description": "Links between floor speeches and legislation", "rows": 1561719, "foreignKeys": ["granule_id → congressional_record.granule_id", "bill_id → legislation.bill_id"]},
-            {"name": "legislation", "description": "Bills and resolutions", "rows": 144471, "key": "bill_id", "foreignKeys": ["sponsor_bioguide_id → congress_members.bioguide_id"]},
-            {"name": "legislation_cosponsors", "description": "Bill cosponsors", "rows": 1739284, "foreignKeys": ["bill_id → legislation.bill_id", "bioguide_id → congress_members.bioguide_id"]},
-            {"name": "legislation_subjects", "description": "Policy subjects tagged to bills", "rows": 1376600, "foreignKeys": ["bill_id → legislation.bill_id"]},
-            {"name": "legislation_actions", "description": "Legislative action history", "rows": 983114, "foreignKeys": ["bill_id → legislation.bill_id"]},
-            {"name": "committees", "description": "Congressional committees", "rows": 233, "key": "committee_id"},
-            {"name": "committee_memberships", "description": "Committee member assignments", "rows": 3908, "foreignKeys": ["committee_id → committees.committee_id", "bioguide_id → congress_members.bioguide_id"]},
-            {"name": "lobbying_activities", "description": "Lobbying activity records with issue codes; income/expense live on lobbying_filings (filing-level)", "rows": 115246, "foreignKeys": ["filing_uuid → lobbying_filings.filing_uuid"]},
-            {"name": "lobbying_lobbyists", "description": "Individual lobbyists with covered government positions", "rows": 194151, "foreignKeys": ["filing_uuid → lobbying_activities.filing_uuid"]},
-            {"name": "lobbying_filings", "description": "Filing metadata with income_amount + expense_amount (filing-level, XOR-populated). For lobbying spending, filter to LD-2 quarterly: filing_type GLOB '[1234Q]*'", "rows": 71064, "key": "filing_uuid"},
-            {"name": "lobbying_issue_codes", "description": "32 lobbying issue area codes", "rows": 32, "key": "code"},
-            {"name": "spending_awards", "description": "Federal grants and contracts from ~20 civilian/regulatory agencies (excludes Dept. of Defense and indefinite-delivery vehicles), FY2017–present; values are awarded/obligated amounts, not outlays. PARTIAL COVERAGE — not a comprehensive federal-spending dataset; do not present aggregates as complete. (Contract displays were removed from DataDawn's curated hubs/explore views; the raw table remains queryable with this scope in mind.)", "rows": 987895},
-            {"name": "presidential_documents", "description": "Executive Orders and Proclamations", "rows": 5904, "key": "document_number"},
-            {"name": "fr_regs_crossref", "description": "Cross-references between Federal Register and Regulations.gov documents", "rows": 70030},
-            {"name": "member_stats", "description": "Pre-computed member activity counts (trades, speeches, bills)", "rows": 12763, "key": "bioguide_id"},
-            {"name": "cfr_sections", "description": "Code of Federal Regulations sections", "rows": 55000}
+            {"name": "federal_register", "description": "Federal Register documents (1994-present)", "key": "document_number"},
+            {"name": "dockets", "description": "Regulatory dockets from Regulations.gov", "key": "id"},
+            {"name": "documents", "description": "Regulatory documents within dockets", "key": "id", "foreignKeys": ["docket_id → dockets.id", "agency_id → agency_map.regs_code"]},
+            {"name": "comments", "description": "Public comments on regulatory documents", "key": "id", "foreignKeys": ["docket_id → dockets.id"]},
+            {"name": "congress_members", "description": "Current and historical Congress members", "key": "bioguide_id"},
+            {"name": "stock_trades", "description": "Congressional stock trading disclosures", "foreignKeys": ["bioguide_id → congress_members.bioguide_id"]},
+            {"name": "congressional_record", "description": "Floor speeches and proceedings", "key": "granule_id"},
+            {"name": "crec_speakers", "description": "Speaker-to-speech mapping", "foreignKeys": ["granule_id → congressional_record.granule_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "crec_bills", "description": "Links between floor speeches and legislation", "foreignKeys": ["granule_id → congressional_record.granule_id", "bill_id → legislation.bill_id"]},
+            {"name": "legislation", "description": "Bills and resolutions", "key": "bill_id", "foreignKeys": ["sponsor_bioguide_id → congress_members.bioguide_id"]},
+            {"name": "legislation_cosponsors", "description": "Bill cosponsors", "foreignKeys": ["bill_id → legislation.bill_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "legislation_subjects", "description": "Policy subjects tagged to bills", "foreignKeys": ["bill_id → legislation.bill_id"]},
+            {"name": "legislation_actions", "description": "Legislative action history", "foreignKeys": ["bill_id → legislation.bill_id"]},
+            {"name": "committees", "description": "Congressional committees", "key": "committee_id"},
+            {"name": "committee_memberships", "description": "Committee member assignments", "foreignKeys": ["committee_id → committees.committee_id", "bioguide_id → congress_members.bioguide_id"]},
+            {"name": "lobbying_activities", "description": "Lobbying activity records with issue codes; income/expense live on lobbying_filings (filing-level)", "foreignKeys": ["filing_uuid → lobbying_filings.filing_uuid"]},
+            {"name": "lobbying_lobbyists", "description": "Individual lobbyists with covered government positions", "foreignKeys": ["filing_uuid → lobbying_activities.filing_uuid"]},
+            {"name": "lobbying_filings", "description": "Filing metadata with income_amount + expense_amount (filing-level, XOR-populated). For lobbying spending, filter to LD-2 quarterly: filing_type GLOB '[1234Q]*'", "key": "filing_uuid"},
+            {"name": "lobbying_issue_codes", "description": "32 lobbying issue area codes", "key": "code"},
+            {"name": "spending_awards", "description": "Federal grants and contracts from ~20 civilian/regulatory agencies (excludes Dept. of Defense and indefinite-delivery vehicles), FY2017–present; values are awarded/obligated amounts, not outlays. PARTIAL COVERAGE — not a comprehensive federal-spending dataset; do not present aggregates as complete. (Contract displays were removed from DataDawn's curated hubs/explore views; the raw table remains queryable with this scope in mind.)"},
+            {"name": "presidential_documents", "description": "Executive Orders and Proclamations", "key": "document_number"},
+            {"name": "fr_regs_crossref", "description": "Cross-references between Federal Register and Regulations.gov documents"},
+            {"name": "member_stats", "description": "Pre-computed member activity counts (trades, speeches, bills)", "key": "bioguide_id"},
+            {"name": "cfr_sections", "description": "Code of Federal Regulations sections"}
         ],
         "ftsIndexes": [
             {"name": "federal_register_fts", "source": "federal_register", "columns": "title, abstract, agency_names"},
@@ -537,18 +537,18 @@
             <table class="schema-table">
                 <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
                 <tbody>
-                    <tr><td>congress_members</td><td>Current and historical Congress members</td><td class="count" id="schMembers">12,763</td><td>bioguide_id, full_name, party, state, chamber, is_current</td></tr>
-                    <tr><td>member_stats</td><td>Pre-computed activity counts per member</td><td class="count">12,763</td><td>bioguide_id, trade_count, speech_count, bills_sponsored</td></tr>
-                    <tr><td>stock_trades</td><td>Congressional stock trading disclosures</td><td class="count" id="schTrades">95,621</td><td>bioguide_id, ticker, transaction_date, transaction_type, amount_range</td></tr>
-                    <tr><td>congressional_record</td><td>Floor speeches and proceedings</td><td class="count" id="schCREC">878,583</td><td>granule_id, date, title, chamber, full_text</td></tr>
-                    <tr><td>crec_speakers</td><td>Speaker-to-speech mapping</td><td class="count">944,216</td><td>granule_id, bioguide_id, speaker_name, party, state</td></tr>
-                    <tr><td>crec_bills</td><td>Links speeches to legislation discussed</td><td class="count">1,561,719</td><td>granule_id, bill_id, bill_type, bill_number</td></tr>
-                    <tr><td>legislation</td><td>Bills and resolutions</td><td class="count" id="schLeg">144,471</td><td>bill_id, title, sponsor_bioguide_id, policy_area, cosponsor_count</td></tr>
-                    <tr><td>legislation_cosponsors</td><td>Bill cosponsors</td><td class="count">1,739,284</td><td>bill_id, bioguide_id, is_original_cosponsor</td></tr>
-                    <tr><td>legislation_subjects</td><td>Policy subjects tagged to bills</td><td class="count">1,376,600</td><td>bill_id, subject</td></tr>
-                    <tr><td>legislation_actions</td><td>Legislative action timeline</td><td class="count">983,114</td><td>bill_id, action_date, text, action_type</td></tr>
-                    <tr><td>committees</td><td>Congressional committees</td><td class="count">233</td><td>committee_id, name, chamber, url</td></tr>
-                    <tr><td>committee_memberships</td><td>Committee member assignments</td><td class="count">3,908</td><td>bioguide_id, committee_id, title, rank</td></tr>
+                    <tr><td>congress_members</td><td>Current and historical Congress members</td><td class="count" data-count="congress_members" id="schMembers">—</td><td>bioguide_id, full_name, party, state, chamber, is_current</td></tr>
+                    <tr><td>member_stats</td><td>Pre-computed activity counts per member</td><td class="count" data-count="member_stats">—</td><td>bioguide_id, trade_count, speech_count, bills_sponsored</td></tr>
+                    <tr><td>stock_trades</td><td>Congressional stock trading disclosures</td><td class="count" data-count="stock_trades" id="schTrades">—</td><td>bioguide_id, ticker, transaction_date, transaction_type, amount_range</td></tr>
+                    <tr><td>congressional_record</td><td>Floor speeches and proceedings</td><td class="count" data-count="congressional_record" id="schCREC">—</td><td>granule_id, date, title, chamber, full_text</td></tr>
+                    <tr><td>crec_speakers</td><td>Speaker-to-speech mapping</td><td class="count" data-count="crec_speakers">—</td><td>granule_id, bioguide_id, speaker_name, party, state</td></tr>
+                    <tr><td>crec_bills</td><td>Links speeches to legislation discussed</td><td class="count" data-count="crec_bills">—</td><td>granule_id, bill_id, bill_type, bill_number</td></tr>
+                    <tr><td>legislation</td><td>Bills and resolutions</td><td class="count" data-count="legislation" id="schLeg">—</td><td>bill_id, title, sponsor_bioguide_id, policy_area, cosponsor_count</td></tr>
+                    <tr><td>legislation_cosponsors</td><td>Bill cosponsors</td><td class="count" data-count="legislation_cosponsors">—</td><td>bill_id, bioguide_id, is_original_cosponsor</td></tr>
+                    <tr><td>legislation_subjects</td><td>Policy subjects tagged to bills</td><td class="count" data-count="legislation_subjects">—</td><td>bill_id, subject</td></tr>
+                    <tr><td>legislation_actions</td><td>Legislative action timeline</td><td class="count" data-count="legislation_actions">—</td><td>bill_id, action_date, text, action_type</td></tr>
+                    <tr><td>committees</td><td>Congressional committees</td><td class="count" data-count="committees">—</td><td>committee_id, name, chamber, url</td></tr>
+                    <tr><td>committee_memberships</td><td>Committee member assignments</td><td class="count" data-count="committee_memberships">—</td><td>bioguide_id, committee_id, title, rank</td></tr>
                 </tbody>
             </table>
 
@@ -556,16 +556,16 @@
             <table class="schema-table">
                 <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
                 <tbody>
-                    <tr><td>federal_register</td><td>FR documents (1994-present)</td><td class="count" id="schFR">993,703</td><td>document_number, title, type, publication_date, agency_names, html_url</td></tr>
-                    <tr><td>dockets</td><td>Regulatory dockets</td><td class="count" id="schDockets">86,706</td><td>id, agency_id, title, docket_type</td></tr>
-                    <tr><td>docket_summary</td><td>Pre-computed docket stats</td><td class="count">26,195</td><td>docket_id, comment_count, doc_count</td></tr>
-                    <tr><td>documents</td><td>Regulatory documents within dockets</td><td class="count" id="schDocs">727,510</td><td>id, docket_id, agency_id, title, document_type, posted_date, comment_end_date</td></tr>
-                    <tr><td>comments</td><td>Public comments on regulations</td><td class="count" id="schComments">3.2M</td><td>id, docket_id, agency_id, submitter_name, submitter_type, organization, posted_date</td></tr>
-                    <tr><td>fr_regs_crossref</td><td>Links FR documents to Regulations.gov</td><td class="count">70,030</td><td>fr_document_number, regs_document_id</td></tr>
-                    <tr><td>presidential_documents</td><td>Executive Orders &amp; Proclamations</td><td class="count" id="schPresDoc">5,904</td><td>document_number, title, document_type, signing_date, executive_order_number</td></tr>
-                    <tr><td>spending_awards</td><td>Federal contracts &amp; grants &mdash; ~20 civilian/regulatory agencies, FY2017+, awarded value (not outlays); <strong>partial coverage, not comprehensive</strong></td><td class="count" id="schSpending">987,895</td><td>recipient_name, agency, sub_agency, award_amount, award_category, fiscal_year</td></tr>
-                    <tr><td>cfr_sections</td><td>Code of Federal Regulations</td><td class="count">55K+</td><td>title_number, part_number, section_number, heading, content</td></tr>
-                    <tr><td>agency_map</td><td>Maps agency codes across datasets</td><td class="count">5</td><td>regs_code, fr_agency_name</td></tr>
+                    <tr><td>federal_register</td><td>FR documents (1994-present)</td><td class="count" data-count="federal_register" id="schFR">—</td><td>document_number, title, type, publication_date, agency_names, html_url</td></tr>
+                    <tr><td>dockets</td><td>Regulatory dockets</td><td class="count" data-count="dockets" id="schDockets">—</td><td>id, agency_id, title, docket_type</td></tr>
+                    <tr><td>docket_summary</td><td>Pre-computed docket stats</td><td class="count" data-count="docket_summary">—</td><td>docket_id, comment_count, doc_count</td></tr>
+                    <tr><td>documents</td><td>Regulatory documents within dockets</td><td class="count" data-count="documents" id="schDocs">—</td><td>id, docket_id, agency_id, title, document_type, posted_date, comment_end_date</td></tr>
+                    <tr><td>comments</td><td>Public comments on regulations</td><td class="count" data-count="comments" id="schComments">—</td><td>id, docket_id, agency_id, submitter_name, submitter_type, organization, posted_date</td></tr>
+                    <tr><td>fr_regs_crossref</td><td>Links FR documents to Regulations.gov</td><td class="count" data-count="fr_regs_crossref">—</td><td>fr_document_number, regs_document_id</td></tr>
+                    <tr><td>presidential_documents</td><td>Executive Orders &amp; Proclamations</td><td class="count" data-count="presidential_documents" id="schPresDoc">—</td><td>document_number, title, document_type, signing_date, executive_order_number</td></tr>
+                    <tr><td>spending_awards</td><td>Federal contracts &amp; grants &mdash; ~20 civilian/regulatory agencies, FY2017+, awarded value (not outlays); <strong>partial coverage, not comprehensive</strong></td><td class="count" data-count="spending_awards" id="schSpending">—</td><td>recipient_name, agency, sub_agency, award_amount, award_category, fiscal_year</td></tr>
+                    <tr><td>cfr_sections</td><td>Code of Federal Regulations</td><td class="count" data-count="cfr_sections">—</td><td>title_number, part_number, section_number, heading, content</td></tr>
+                    <tr><td>agency_map</td><td>Maps agency codes across datasets</td><td class="count" data-count="agency_map">—</td><td>regs_code, fr_agency_name</td></tr>
                 </tbody>
             </table>
 
@@ -573,10 +573,10 @@
             <table class="schema-table">
                 <thead><tr><th>Table</th><th>Description</th><th>Rows</th><th>Key Columns</th></tr></thead>
                 <tbody>
-                    <tr><td>lobbying_activities</td><td>Lobbying activity records (one row per issue). Income/expense live on lobbying_filings — JOIN by filing_uuid</td><td class="count" id="schLobby">3,860,624</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, specific_issues</td></tr>
-                    <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (incl. self-declared prior covered positions, where held)</td><td class="count">194,151</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
-                    <tr><td>lobbying_filings</td><td>Filing metadata with canonical income_amount + expense_amount (XOR per filing)</td><td class="count">1,934,917</td><td>filing_uuid, registrant_name, client_name, income_amount, expense_amount, filing_year, filing_type</td></tr>
-                    <tr><td>lobbying_issue_codes</td><td>Issue area code reference</td><td class="count">32</td><td>code, description</td></tr>
+                    <tr><td>lobbying_activities</td><td>Lobbying activity records (one row per issue). Income/expense live on lobbying_filings — JOIN by filing_uuid</td><td class="count" data-count="lobbying_activities" id="schLobby">—</td><td>filing_uuid, client_name, registrant_name, filing_year, issue_code, specific_issues</td></tr>
+                    <tr><td>lobbying_lobbyists</td><td>Individual lobbyists (incl. self-declared prior covered positions, where held)</td><td class="count" data-count="lobbying_lobbyists">—</td><td>filing_uuid, lobbyist_name, covered_position</td></tr>
+                    <tr><td>lobbying_filings</td><td>Filing metadata with canonical income_amount + expense_amount (XOR per filing)</td><td class="count" data-count="lobbying_filings">—</td><td>filing_uuid, registrant_name, client_name, income_amount, expense_amount, filing_year, filing_type</td></tr>
+                    <tr><td>lobbying_issue_codes</td><td>Issue area code reference</td><td class="count" data-count="lobbying_issue_codes">—</td><td>code, description</td></tr>
                     <tr><td>lobbying_contributions</td><td>Political contributions by lobbyists</td><td class="count">—</td><td>lobbyist_name, recipient_name, amount, contribution_date</td></tr>
                 </tbody>
             </table>
@@ -864,7 +864,7 @@ Group by client_name for client view, registrant_name for firm view</pre>
                 <div class="qc-params">Params: <span>committee_id</span></div>
             </div>
 
-            <!-- most_commented_dockets removed 2026-09-04 (#706): a ranking by held comment volume is biased against mass-comment dockets while holdings are ~41.5% of upstream -->
+            <!-- most_commented_dockets removed 2026-09-04 (#706): a ranking by held comment volume stays withheld until the missing share is shown unbiased (decisions_log §118); holdings about 97% on 2026-10-09 -->
 
             <div class="query-card">
                 <div class="qc-header"><span class="qc-name">most_cosponsored_bills</span></div>
@@ -1077,7 +1077,7 @@ ORDER BY la.filing_year DESC</pre>
             <p>Queries have a 10-second timeout. Maximum 1000 rows per response. No authentication required.</p>
 
             <h3>For AI Agents</h3>
-            <p>This page includes structured <code>application/ld+json</code> metadata with complete table schemas, row counts, foreign keys, and FTS index descriptions. Recommended approach:</p>
+            <p>This page includes structured <code>application/ld+json</code> metadata with complete table schemas, foreign keys, and FTS index descriptions. Row counts are filled in by this page's script when it loads; without scripts, count with the SQL API (SELECT COUNT(*) FROM &lt;table&gt;). Recommended approach:</p>
             <ul style="list-style:none;margin:0.75rem 0;">
                 <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Start with canned queries (113 pre-built endpoints) before writing raw SQL</li>
                 <li style="padding:0.3rem 0;color:var(--text-secondary);font-weight:300;">&#8226; Use <code>member_stats</code> and <code>docket_summary</code> tables for counts instead of COUNT(*) subqueries</li>
@@ -1159,23 +1159,21 @@ ORDER BY la.filing_year DESC</pre>
             }
         }
 
-        // Load live row counts
+        // Load live row counts. Every count on this page comes from one query to the openregs database, so none is
+        // hard-coded and none goes stale (relay datadawn cyan #2 item 3). Without scripts the cells show a dash and the
+        // JSON-LD block above carries no counts.
         async function loadCounts() {
             try {
-                const sql = `
-                    SELECT
-                        (SELECT COUNT(*) FROM congress_members) AS members,
-                        (SELECT COUNT(*) FROM stock_trades) AS trades,
-                        (SELECT COUNT(*) FROM congressional_record) AS crec,
-                        (SELECT COUNT(*) FROM legislation) AS leg,
-                        (SELECT COUNT(*) FROM federal_register) AS fr,
-                        (SELECT COUNT(*) FROM dockets) AS dockets,
-                        (SELECT COUNT(*) FROM documents) AS docs,
-                        (SELECT COUNT(*) FROM comments) AS comments,
-                        (SELECT COUNT(*) FROM lobbying_activities) AS lobby,
-                        (SELECT COUNT(*) FROM presidential_documents) AS presdoc,
-                        (SELECT COUNT(*) FROM spending_awards) AS spending
-                `;
+                const cells = Array.from(document.querySelectorAll('td.count[data-count]'));
+                const ld = document.querySelector('script[type="application/ld+json"]');
+                let ldData = null;
+                try { ldData = ld ? JSON.parse(ld.textContent) : null; } catch (e) { ldData = null; }
+                const sets = (ldData && Array.isArray(ldData.datasets)) ? ldData.datasets : [];
+                const names = new Set(cells.map(c => c.dataset.count));
+                sets.forEach(d => { if (d && d.name) names.add(d.name); });
+                const list = Array.from(names).filter(n => /^[a-z_][a-z0-9_]*$/.test(n));
+                if (!list.length) return;
+                const sql = 'SELECT ' + list.map(n => `(SELECT COUNT(*) FROM "${n}") AS "${n}"`).join(', ');
                 const url = `${API}.json?sql=${encodeURIComponent(sql)}&_shape=objects`;
                 const resp = await fetch(url);
                 if (!resp.ok) return;
@@ -1184,18 +1182,17 @@ ORDER BY la.filing_year DESC</pre>
                 if (!r) return;
 
                 const fmt = n => Number(n).toLocaleString();
-                const el = id => document.getElementById(id);
-                if (el('schMembers')) el('schMembers').textContent = fmt(r.members);
-                if (el('schTrades')) el('schTrades').textContent = fmt(r.trades);
-                if (el('schCREC')) el('schCREC').textContent = fmt(r.crec);
-                if (el('schLeg')) el('schLeg').textContent = fmt(r.leg);
-                if (el('schFR')) el('schFR').textContent = fmt(r.fr);
-                if (el('schDockets')) el('schDockets').textContent = fmt(r.dockets);
-                if (el('schDocs')) el('schDocs').textContent = fmt(r.docs);
-                if (el('schComments')) el('schComments').textContent = fmt(r.comments);
-                if (el('schLobby')) el('schLobby').textContent = fmt(r.lobby);
-                if (el('schPresDoc')) el('schPresDoc').textContent = fmt(r.presdoc);
-                if (el('schSpending')) el('schSpending').textContent = fmt(r.spending);
+                cells.forEach(c => {
+                    const v = r[c.dataset.count];
+                    if (v !== undefined && v !== null) c.textContent = fmt(v);
+                });
+                if (ld && sets.length) {
+                    sets.forEach(d => {
+                        const v = r[d.name];
+                        if (v !== undefined && v !== null) d.rows = v;
+                    });
+                    ld.textContent = JSON.stringify(ldData, null, 4);
+                }
             } catch (e) {}
         }
 

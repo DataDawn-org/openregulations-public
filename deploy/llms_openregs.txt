@@ -99,7 +99,7 @@ Congressional stock trading disclosures (PTR transactions).
 
 Key columns: `bioguide_id`, `member_name`, `chamber`, `transaction_date`, `ticker`, `asset_description`, `transaction_type` (Purchase/Sale/etc.), `amount_range`
 
-### congressional_record (897K rows)
+### congressional_record (898K rows)
 Floor proceedings from Congressional Record (1994–present).
 
 Key columns: `granule_id` (PK), `date`, `congress`, `chamber`, `title`, `full_text`
